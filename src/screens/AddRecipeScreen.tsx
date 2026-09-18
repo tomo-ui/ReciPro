@@ -19,8 +19,11 @@ interface FormState {
   source_url?: string
   parse_method: RecipeDraft['parse_method']
   image_url?: string
-  /** Tylko do komunikatu w UI — nie zapisujemy w bazie */
+  /** Pola poniżej służą tylko do komunikatów w UI — nie zapisujemy ich w bazie */
   origin?: ParseOrigin
+  /** Wartość porcji podana przez AI; komunikat znika, gdy użytkownik ją zmieni */
+  estimatedServings?: number
+  thumbnailFailed?: boolean
 }
 
 const IMPORT_NOTES: Record<RecipeDraft['parse_method'], string> = {
@@ -107,8 +110,13 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
     setError(null)
     setFetching(true)
     try {
-      const { draft, origin } = await parseRecipeFromUrl(url.trim())
-      setForm({ ...fromDraft({ ...draft, source_url: draft.source_url ?? url.trim() }), origin })
+      const { draft, origin, servingsEstimated, thumbnailFailed } = await parseRecipeFromUrl(url.trim())
+      setForm({
+        ...fromDraft({ ...draft, source_url: draft.source_url ?? url.trim() }),
+        origin,
+        estimatedServings: servingsEstimated ? draft.servings : undefined,
+        thumbnailFailed,
+      })
       setMode('manual') // użytkownik weryfikuje wynik parsowania przed zapisem
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Nie udało się pobrać przepisu.')
@@ -218,11 +226,26 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
             ) : (
               <div className="space-y-5">
                 {form.parse_method !== 'manual' && (
-                  <p className="rounded-[12px] bg-surface px-4 py-3 text-[14px] text-label-2">
-                    {form.origin === 'tiktok-caption'
-                      ? 'Przepis odczytany z opisu filmu na TikToku (samego wideo nie analizujemy). Sprawdź składniki i kroki — bywają niepełne.'
-                      : IMPORT_NOTES[form.parse_method]}
-                  </p>
+                  <div className="space-y-1.5 rounded-[12px] bg-surface px-4 py-3 text-[14px] text-label-2">
+                    <p>
+                      {form.origin === 'tiktok-caption'
+                        ? 'Przepis odczytany z opisu filmu na TikToku (samego wideo nie analizujemy). Sprawdź składniki i kroki — bywają niepełne.'
+                        : IMPORT_NOTES[form.parse_method]}
+                    </p>
+                    {form.estimatedServings !== undefined && form.servings === String(form.estimatedServings) && (
+                      <p>Liczba porcji ({form.estimatedServings}) to szacunek AI — źródło jej nie podawało. Popraw, jeśli się nie zgadza.</p>
+                    )}
+                    {form.thumbnailFailed && <p>Nie udało się zapisać miniaturki filmu — przepis zapiszesz bez zdjęcia.</p>}
+                  </div>
+                )}
+                {form.image_url && (
+                  <img
+                    src={form.image_url}
+                    alt=""
+                    className="h-32 w-full rounded-[14px] object-cover"
+                    draggable={false}
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                  />
                 )}
                 <Group>
                   <Field label="Tytuł">

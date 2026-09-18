@@ -124,7 +124,7 @@ describe('przepis z opisu filmu', () => {
 
   it('zwraca przepis, źródłem jest TikTok, tagi z hasztagów', async () => {
     const fetchImpl = router({ oembed, gemini: () => geminiOk(recipePayload) })
-    const d = await parseTikTokCaption(VIDEO, { geminiApiKey: 'K', fetchImpl, geminiRetryDelayMs: 0 })
+    const { draft: d } = await parseTikTokCaption(VIDEO, { geminiApiKey: 'K', fetchImpl, geminiRetryDelayMs: 0 })
     expect(d.title).toBe('Placki ziemniaczane')
     expect(d.ingredients).toHaveLength(3)
     expect(d.steps).toHaveLength(2)
@@ -146,7 +146,7 @@ describe('przepis z opisu filmu', () => {
 
   it('ogólne tagi zwrócone przez model też są odrzucane', async () => {
     const fetchImpl = router({ oembed, gemini: () => geminiOk({ ...recipePayload, tags: ['fyp', 'Recipe', 'Obiad', 'fypシ'] }) })
-    const d = await parseTikTokCaption(VIDEO, { geminiApiKey: 'K', fetchImpl, geminiRetryDelayMs: 0 })
+    const { draft: d } = await parseTikTokCaption(VIDEO, { geminiApiKey: 'K', fetchImpl, geminiRetryDelayMs: 0 })
     expect(d.tags).toEqual(['placki', 'obiad', 'tanie'])
   })
 
@@ -185,7 +185,7 @@ describe('przepis z opisu filmu', () => {
       oembed,
       gemini: () => geminiOk({ is_recipe: true, title: 'Placki', ingredients: [{ text: 'ziemniaki' }, { text: 'jajka' }], steps: [] }),
     })
-    const d = await parseTikTokCaption(VIDEO, { geminiApiKey: 'K', fetchImpl, geminiRetryDelayMs: 0 })
+    const { draft: d } = await parseTikTokCaption(VIDEO, { geminiApiKey: 'K', fetchImpl, geminiRetryDelayMs: 0 })
     expect(d.ingredients).toHaveLength(2)
     expect(d.steps).toHaveLength(0)
   })
@@ -209,5 +209,47 @@ describe('parseRecipeUrl: rozdzielanie ścieżek', () => {
     expect(out.draft.title).toBe('Zupa')
     const calls = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]))
     expect(calls.some((u) => u.includes('oembed'))).toBe(false)
+  })
+})
+
+describe('dane podane wprost w opisie', () => {
+  it('servingsFromText / totalMinutesFromText', async () => {
+    const { servingsFromText, totalMinutesFromText } = await import('../api/_lib/normalize')
+    expect(servingsFromText('⏰CZAS: 40 MIN 🍽️PORCJE: 6 📌 SKŁADNIKI')).toBe(6)
+    expect(servingsFromText('Wystarczy dla 4 osób')).toBe(4)
+    expect(servingsFromText('Makes 12 servings')).toBe(12)
+    expect(servingsFromText('Serves 4')).toBe(4)
+    expect(servingsFromText('2 porcje')).toBe(2)
+    expect(servingsFromText('1 kg ziemniaków, 2 jajka')).toBeUndefined()
+    expect(totalMinutesFromText('⏰CZAS: 40 MIN 🍽️PORCJE: 6')).toBe(40)
+    expect(totalMinutesFromText('Czas przygotowania: 1 h 20 min')).toBe(80)
+    expect(totalMinutesFromText('Czas: 2 h')).toBe(120)
+    expect(totalMinutesFromText('bez czasu')).toBeUndefined()
+  })
+
+  it('porcje i czas z opisu uzupełniają to, czego model nie odczytał; tytuł awaryjny nie psuje importu', async () => {
+    const caption = '🔥LISTA SKŁADNIKÓW ⤵️ Coś ekstra na obiad, robi się szybko i smakuje wszystkim w domu! ⏰CZAS: 40 MIN 🍽️PORCJE: 6 📌 SKŁADNIKI: 1½ kg ziemniaków 1 duża cebula 3 łyżki oleju #obiad'
+    const fetchImpl = router({
+      oembed: () => new Response(JSON.stringify({ title: caption, author_name: 'foodini' })),
+      gemini: () => geminiOk({ is_recipe: true, title: '', ingredients: [{ text: '1½ kg ziemniaków' }, { text: '1 duża cebula' }], steps: [] }),
+    })
+    const { draft: d } = await parseTikTokCaption(VIDEO, { geminiApiKey: 'K', fetchImpl, geminiRetryDelayMs: 0 })
+    expect(d.title).toBe('Przepis z TikToka (@foodini)')
+    expect(d.servings).toBe(6)
+    expect(d.total_minutes).toBe(40)
+    expect(d.ingredients).toHaveLength(2)
+  })
+
+  it('porcje podane w opisie nie są potem „szacowane” przez AI', async () => {
+    const caption = 'Coś ekstra na obiad, robi się szybko i smakuje wszystkim! PORCJE: 6 SKŁADNIKI: 1 kg ziemniaków, 1 cebula, 3 łyżki oleju #obiad'
+    const fetchImpl = router({
+      oembed: () => new Response(JSON.stringify({ title: caption })),
+      gemini: () => geminiOk({ is_recipe: true, title: 'Placek', ingredients: [{ text: '1 kg ziemniaków' }, { text: '1 cebula' }], steps: [] }),
+    })
+    const out = await parseRecipeUrl(VIDEO, { geminiApiKey: 'K', fetchImpl, geminiRetryDelayMs: 0 })
+    expect(out.draft.servings).toBe(6)
+    expect(out.servingsEstimated).toBe(false)
+    const calls = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes('generativelanguage'))
+    expect(calls).toHaveLength(1) // tylko wyciąganie, bez wywołania szacującego
   })
 })

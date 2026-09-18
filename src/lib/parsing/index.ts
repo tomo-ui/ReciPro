@@ -16,6 +16,10 @@ export function normalizeUrl(raw: string): string {
 export interface ParseResult {
   draft: RecipeDraft
   origin: ParseOrigin
+  /** Liczbę porcji oszacowało AI, bo źródło jej nie podawało */
+  servingsEstimated: boolean
+  /** Film miał miniaturkę, ale nie udało się jej zapisać */
+  thumbnailFailed: boolean
 }
 
 export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
@@ -36,9 +40,20 @@ export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
     throw new Error('Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.')
   }
 
-  const body = (await res.json().catch(() => null)) as { draft?: RecipeDraft; origin?: ParseOrigin; error?: string } | null
+  const body = (await res.json().catch(() => null)) as {
+    draft?: RecipeDraft
+    origin?: ParseOrigin
+    servingsEstimated?: boolean
+    thumbnailFailed?: boolean
+    error?: string
+  } | null
   if (!res.ok || !body?.draft) {
     throw new Error(body?.error ?? 'Nie udało się pobrać przepisu.')
   }
-  return { draft: body.draft, origin: body.origin ?? 'page' }
+  return {
+    draft: body.draft,
+    origin: body.origin ?? 'page',
+    servingsEstimated: body.servingsEstimated ?? false,
+    thumbnailFailed: body.thumbnailFailed ?? false,
+  }
 }

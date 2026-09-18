@@ -24,6 +24,8 @@ export interface TikTokInfo {
   canonicalUrl: string
   caption: string
   author?: string
+  /** Podpisany adres miniaturki — wygasa po ok. 48 h, trzeba go zapisać u siebie (image.ts) */
+  thumbnailUrl?: string
 }
 
 const UA =
@@ -81,7 +83,7 @@ async function fromOEmbed(canonicalUrl: string, fetchImpl: typeof fetch): Promis
     if (!res.ok) return null
     const j = (await res.json()) as Record<string, unknown>
     const caption = str(j.title)
-    return caption ? { caption, author: str(j.author_name) } : null
+    return caption ? { caption, author: str(j.author_name), thumbnailUrl: str(j.thumbnail_url) } : null
   } catch {
     return null
   }
@@ -95,7 +97,13 @@ export function captionFromPageHtml(html: string): Omit<TikTokInfo, 'canonicalUr
     const data = JSON.parse(m[1]) as any
     const item = data?.__DEFAULT_SCOPE__?.['webapp.video-detail']?.itemInfo?.itemStruct
     const caption = str(item?.desc)
-    return caption ? { caption, author: str(item?.author?.uniqueId) } : null
+    return caption
+      ? {
+          caption,
+          author: str(item?.author?.uniqueId),
+          thumbnailUrl: str(item?.video?.originCover) ?? str(item?.video?.cover),
+        }
+      : null
   } catch {
     return null
   }

@@ -1,9 +1,10 @@
 import type { ParseOrigin, RecipeDraft } from '../../src/types/recipe.js'
 import { fetchHtml, type FetchHtmlOptions } from './fetchHtml.js'
-import { extractRecipeFromText, GeminiError, parseWithGemini } from './gemini.js'
+import { estimateServings, extractRecipeFromText, GeminiError, parseWithGemini } from './gemini.js'
 import { parseHeuristic } from './heuristic.js'
 import { parseJsonLd } from './jsonld.js'
-import { hasAnyContent, isComplete } from './normalize.js'
+import { hasAnyContent, isComplete, servingsFromText, totalMinutesFromText } from './normalize.js'
+import { downloadTikTokThumbnail, uploadRecipeImage, type StorageConfig } from './image.js'
 import { fetchTikTokInfo, hashtagsFromCaption, isTikTokUrl, withoutGenericTags } from './tiktok.js'
 
 export type ParseErrorCode =
@@ -28,12 +29,18 @@ export interface PipelineOptions {
   geminiRetryDelayMs?: number
   /** Bezwzględny termin całej operacji (ms od epoki); chroni przed limitem czasu funkcji */
   deadlineAt?: number
+  /** Dane do zapisu miniaturek w Supabase Storage (jako zalogowany użytkownik). Brak = tryb lokalny. */
+  storage?: StorageConfig
   fetchImpl?: typeof fetch
 }
 
 export interface ParseOutcome {
   draft: RecipeDraft
   origin: ParseOrigin
+  /** Liczbę porcji oszacowało AI (w źródle jej nie było) */
+  servingsEstimated: boolean
+  /** Film miał miniaturkę, ale nie udało się jej zapisać */
+  thumbnailFailed: boolean
 }
 
 /**
@@ -100,8 +107,8 @@ const MIN_CAPTION_CHARS = 40
  */
 export async function parseTikTokCaption(
   url: string,
-  { geminiApiKey, geminiModel, geminiRetryDelayMs, deadlineAt, fetchImpl }: PipelineOptions = {},
-): Promise<RecipeDraft> {
+  { geminiApiKey, geminiModel, geminiRetryDelayMs, deadlineAt, storage, fetchImpl }: PipelineOptions = {},
+): Promise<{ draft: RecipeDraft; thumbnailFailed: boolean }> {
   const info = await fetchTikTokInfo(url, fetchImpl)
 
   if (!geminiApiKey) {
@@ -116,7 +123,12 @@ export async function parseTikTokCaption(
     const text = `${info.author ? `Author: @${info.author}\n` : ''}Video caption:\n${info.caption}`
     draft = await extractRecipeFromText(
       text,
-      { pageUrl: info.canonicalUrl, tags: hashtagsFromCaption(info.caption) },
+      {
+        pageUrl: info.canonicalUrl,
+        tags: hashtagsFromCaption(info.caption),
+        // W opisach rzadko jest tytuł; pusty tytuł nie może oznaczać „brak przepisu”
+        fallbackTitle: info.author ? `Przepis z TikToka (@${info.author})` : 'Przepis z TikToka',
+      },
       { apiKey: geminiApiKey, model: geminiModel, retryDelayMs: geminiRetryDelayMs, deadlineAt, fetchImpl },
     )
   } catch (e) {
@@ -130,7 +142,65 @@ export async function parseTikTokCaption(
       'W opisie tego filmu nie ma przepisu (np. jest tylko „przepis w komentarzu”). Dodaj go ręcznie albo wklej link do strony z przepisem.',
     )
   }
-  return { ...draft, tags: withoutGenericTags(draft.tags) }
+  // Miniaturka dopiero po znalezieniu przepisu, żeby nie zostawiać w Storage obrazów bez przepisu
+  let image_url: string | undefined
+  let thumbnailFailed = false
+  if (info.thumbnailUrl) {
+    if (!storage) {
+      // Tryb lokalny bez Supabase: adres tymczasowy (ok. 48 h) — dane i tak żyją tylko w przeglądarce
+      image_url = info.thumbnailUrl
+    } else if (deadlineAt !== undefined && deadlineAt - Date.now() < 6000) {
+      thumbnailFailed = true
+    } else {
+      try {
+        const img = await downloadTikTokThumbnail(info.thumbnailUrl, fetchImpl)
+        if (!img) throw new Error('miniaturka niedostępna lub w nieobsługiwanym formacie')
+        image_url = await uploadRecipeImage(img, storage, fetchImpl)
+      } catch (e) {
+        thumbnailFailed = true
+        console.warn('[parse] miniaturka TikToka:', e instanceof Error ? e.message : e)
+      }
+    }
+  }
+
+  // Siatka bezpieczeństwa: dane podane wprost w opisie („PORCJE: 6”, „CZAS: 40 MIN”) mają pierwszeństwo
+  // przed szacunkiem AI, nawet jeśli model ich nie odczytał
+  const total = draft.total_minutes ?? (draft.prep_minutes || draft.cook_minutes ? undefined : totalMinutesFromText(info.caption))
+  return {
+    draft: {
+      ...draft,
+      servings: draft.servings ?? servingsFromText(info.caption),
+      total_minutes: total,
+      image_url,
+      tags: withoutGenericTags(draft.tags),
+    },
+    thumbnailFailed,
+  }
+}
+
+/**
+ * Gdy źródło nie podaje liczby porcji, prosimy AI o oszacowanie z ilości składników.
+ * Błąd lub brak czasu nie psuje importu — porcje zostają puste.
+ */
+async function withEstimatedServings(
+  draft: RecipeDraft,
+  { geminiApiKey, geminiModel, geminiRetryDelayMs, deadlineAt, fetchImpl }: PipelineOptions,
+): Promise<{ draft: RecipeDraft; estimated: boolean }> {
+  if (draft.servings || !geminiApiKey || draft.ingredients.length < 2) return { draft, estimated: false }
+  if (deadlineAt !== undefined && deadlineAt - Date.now() < 6000) return { draft, estimated: false }
+  try {
+    const servings = await estimateServings(draft, {
+      apiKey: geminiApiKey,
+      model: geminiModel,
+      retryDelayMs: geminiRetryDelayMs,
+      deadlineAt,
+      fetchImpl,
+    })
+    if (servings) return { draft: { ...draft, servings }, estimated: true }
+  } catch (e) {
+    console.warn('[parse] szacowanie porcji:', e instanceof Error ? e.message : e)
+  }
+  return { draft, estimated: false }
 }
 
 /** Czas na całą operację — z zapasem względem `maxDuration` funkcji na Vercelu (60 s) */
@@ -143,9 +213,12 @@ export async function parseRecipeUrl(
   const options = { ...opts, deadlineAt: opts.deadlineAt ?? Date.now() + TOTAL_BUDGET_MS }
 
   if (isTikTokUrl(url)) {
-    return { draft: await parseTikTokCaption(url, options), origin: 'tiktok-caption' }
+    const { draft, thumbnailFailed } = await parseTikTokCaption(url, options)
+    const withServings = await withEstimatedServings(draft, options)
+    return { draft: withServings.draft, origin: 'tiktok-caption', servingsEstimated: withServings.estimated, thumbnailFailed }
   }
 
   const { html, finalUrl } = await fetchHtml(url, { fetchImpl: opts.fetchImpl, ...opts.fetch })
-  return { draft: await parseRecipeHtml(html, finalUrl, options), origin: 'page' }
+  const withServings = await withEstimatedServings(await parseRecipeHtml(html, finalUrl, options), options)
+  return { draft: withServings.draft, origin: 'page', servingsEstimated: withServings.estimated, thumbnailFailed: false }
 }
