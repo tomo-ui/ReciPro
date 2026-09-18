@@ -1,8 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
+import { normalizeFullName, normalizeUsername } from '@/lib/username'
+import { useUsernameCheck } from '@/hooks/useUsernameCheck'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { SpinnerIcon } from '@/components/Icons'
+import { UsernameInput } from '@/components/UsernameInput'
 
 type Mode = 'signin' | 'signup'
 
@@ -55,8 +58,15 @@ export function LoginScreen() {
   const [notice, setNotice] = useState<string | null>(redirectResult.notice ?? null)
   const [unconfirmed, setUnconfirmed] = useState(false)
 
+  const [username, setUsername] = useState('')
+  const [fullName, setFullName] = useState('')
+
   const signup = mode === 'signup'
-  const canSubmit = email.includes('@') && (signup ? password.length >= MIN_PASSWORD : password.length > 0)
+  // Nazwa użytkownika jest sprawdzana (reguły + dostępność) tylko w trybie rejestracji
+  const usernameStatus = useUsernameCheck(signup ? username : '')
+  const canSubmit =
+    email.includes('@') &&
+    (signup ? password.length >= MIN_PASSWORD && usernameStatus.state === 'ok' : password.length > 0)
 
   function switchMode(next: Mode) {
     setMode(next)
@@ -91,8 +101,13 @@ export function LoginScreen() {
     if (signup) {
       const { data, error } = await supabase.auth.signUp({
         ...creds,
-        // Adres musi być na liście Redirect URLs w Supabase (Authentication → URL Configuration)
-        options: { emailRedirectTo: window.location.origin },
+        options: {
+          // Adres musi być na liście Redirect URLs w Supabase (Authentication → URL Configuration)
+          emailRedirectTo: window.location.origin,
+          // Nazwa trafia do metadanych konta; profil powstaje przy pierwszym zalogowaniu (useMe),
+          // bo przy włączonym potwierdzaniu maili nie ma jeszcze sesji, która pozwoliłaby go zapisać
+          data: { username: normalizeUsername(username), full_name: normalizeFullName(fullName) ?? '' },
+        },
       })
       setBusy(false)
       if (error) return setError(friendlyError(error.message, error.status, error.code))
@@ -115,7 +130,8 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center bg-bg px-8 pt-safe-top pb-safe-bottom">
+    <div className="scroll-y fixed inset-0 bg-bg px-8 pt-safe-top pb-safe-bottom">
+      <div className="flex min-h-full flex-col items-center justify-center py-8">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
         <img src="/pwa-192x192.png" alt="" className="mx-auto mb-6 h-20 w-20 rounded-[22px] shadow-lg" />
         <h1 className="text-center text-[28px] font-bold tracking-tight">Przepisy</h1>
@@ -135,6 +151,23 @@ export function LoginScreen() {
         </div>
 
         <form onSubmit={submit} className="space-y-3">
+          {signup && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3 overflow-hidden">
+              <div className="overflow-hidden rounded-[14px] bg-surface">
+                <UsernameInput value={username} onChange={setUsername} status={usernameStatus} />
+              </div>
+              <div className="overflow-hidden rounded-[14px] bg-surface">
+                <input
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="imię i nazwisko (opcjonalnie)"
+                  maxLength={60}
+                  autoComplete="name"
+                  className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
+                />
+              </div>
+            </motion.div>
+          )}
           <div className="divide-y divide-separator overflow-hidden rounded-[14px] bg-surface">
             <input
               type="email"
@@ -193,6 +226,7 @@ export function LoginScreen() {
           </button>
         )}
       </motion.div>
+      </div>
     </div>
   )
 }

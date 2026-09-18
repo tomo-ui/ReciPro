@@ -1,30 +1,15 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { emptyDraft, type ParseOrigin, type RecipeDraft, type ThumbnailInfo } from '@/types/recipe'
+import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '@/types/recipe'
 import { parseRecipeFromUrl } from '@/lib/parsing'
+import { draftToForm, emptyForm } from '@/lib/recipeForm'
+import { useRecipeForm } from '@/hooks/useRecipeForm'
+import { RecipeFields } from '@/components/RecipeFields'
+import { Group } from '@/components/formParts'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { LinkIcon, SpinnerIcon } from '@/components/Icons'
 
 type Mode = 'link' | 'manual'
-
-interface FormState {
-  title: string
-  description: string
-  servings: string
-  prep: string
-  cook: string
-  ingredients: string // jedna linia = jeden składnik
-  steps: string // jedna linia = jeden krok
-  tags: string // po przecinku
-  source_url?: string
-  parse_method: RecipeDraft['parse_method']
-  image_url?: string
-  /** Pola poniżej służą tylko do komunikatów w UI — nie zapisujemy ich w bazie */
-  origin?: ParseOrigin
-  /** Wartość porcji podana przez AI; komunikat znika, gdy użytkownik ją zmieni */
-  estimatedServings?: number
-  thumbnail?: ThumbnailInfo
-}
 
 const IMPORT_NOTES: Record<RecipeDraft['parse_method'], string> = {
   manual: '',
@@ -33,58 +18,13 @@ const IMPORT_NOTES: Record<RecipeDraft['parse_method'], string> = {
   gemini: 'Odczytano przez AI — upewnij się, że wszystko się zgadza.',
 }
 
-const emptyForm = (): FormState => ({
-  title: '',
-  description: '',
-  servings: '',
-  prep: '',
-  cook: '',
-  ingredients: '',
-  steps: '',
-  tags: '',
-  parse_method: 'manual',
-})
-
-const lines = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean)
-const num = (s: string) => {
-  const n = parseInt(s, 10)
-  return Number.isFinite(n) && n > 0 ? n : undefined
-}
-
-function fromDraft(d: RecipeDraft): FormState {
-  return {
-    title: d.title,
-    description: d.description ?? '',
-    servings: d.servings?.toString() ?? '',
-    prep: d.prep_minutes?.toString() ?? '',
-    cook: d.cook_minutes?.toString() ?? '',
-    ingredients: d.ingredients.map((i) => i.text).join('\n'),
-    steps: d.steps.map((s) => s.text).join('\n'),
-    tags: d.tags.join(', '),
-    source_url: d.source_url,
-    image_url: d.image_url,
-    parse_method: d.parse_method,
-  }
-}
-
-function toDraft(f: FormState): RecipeDraft {
-  const prep = num(f.prep)
-  const cook = num(f.cook)
-  return {
-    ...emptyDraft(),
-    title: f.title.trim(),
-    description: f.description.trim() || undefined,
-    servings: num(f.servings),
-    prep_minutes: prep,
-    cook_minutes: cook,
-    total_minutes: prep || cook ? (prep ?? 0) + (cook ?? 0) : undefined,
-    ingredients: lines(f.ingredients).map((text) => ({ text })),
-    steps: lines(f.steps).map((text) => ({ text })),
-    tags: f.tags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
-    source_url: f.source_url,
-    image_url: f.image_url,
-    parse_method: f.parse_method,
-  }
+/** Informacje o imporcie pokazywane nad formularzem (nie trafiają do bazy) */
+interface ImportInfo {
+  origin: ParseOrigin
+  method: RecipeDraft['parse_method']
+  /** Porcje podane przez AI; komunikat znika, gdy użytkownik zmieni wartość */
+  estimatedServings?: number
+  thumbnail: ThumbnailInfo
 }
 
 interface Props {
@@ -93,27 +33,27 @@ interface Props {
 }
 
 export function AddRecipeScreen({ onClose, onSave }: Props) {
+  const rf = useRecipeForm(emptyForm())
+  const { form } = rf
   const [mode, setMode] = useState<Mode>('link')
-  const [form, setForm] = useState<FormState>(emptyForm)
   const [url, setUrl] = useState('')
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<ImportInfo | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((f) => ({ ...f, [key]: value }))
-
-  const canSave = form.title.trim().length > 0 && !saving
+  const canSave = form.title.trim().length > 0 && !saving && !rf.imageBusy
 
   async function fetchRecipe() {
     setError(null)
     setFetching(true)
     try {
       const { draft, origin, servingsEstimated, thumbnail } = await parseRecipeFromUrl(url.trim())
-      setForm({
-        ...fromDraft({ ...draft, source_url: draft.source_url ?? url.trim() }),
+      rf.load(draftToForm({ ...draft, source_url: draft.source_url ?? url.trim() }))
+      setInfo({
         origin,
+        method: draft.parse_method,
         estimatedServings: servingsEstimated ? draft.servings : undefined,
         thumbnail,
       })
@@ -130,13 +70,37 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
     setSaving(true)
     setSaveError(null)
     try {
-      await onSave(toDraft(form))
+      const { draft, commit, rollback } = await rf.prepare()
+      try {
+        await onSave(draft)
+      } catch (e) {
+        await rollback() // nie zostawiamy w Storage zdjęcia bez przepisu
+        throw e
+      }
+      await commit()
       onClose()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Nie udało się zapisać przepisu.')
       setSaving(false)
     }
   }
+
+  const notes = info && (
+    <div className="space-y-1.5 rounded-[12px] bg-surface px-4 py-3 text-[14px] text-label-2">
+      <p>
+        {info.origin === 'tiktok-caption'
+          ? 'Przepis odczytany z opisu filmu na TikToku (samego wideo nie analizujemy). Sprawdź składniki i kroki — bywają niepełne.'
+          : IMPORT_NOTES[info.method]}
+      </p>
+      {info.estimatedServings !== undefined && form.servings === String(info.estimatedServings) && (
+        <p>Liczba porcji ({info.estimatedServings}) to szacunek AI — źródło jej nie podawało. Popraw, jeśli się nie zgadza.</p>
+      )}
+      {info.thumbnail.status === 'failed' && (
+        <p>Nie udało się zapisać miniaturki filmu ({info.thumbnail.reason ?? 'nieznany powód'}). Możesz dodać własne zdjęcie.</p>
+      )}
+      {info.thumbnail.status === 'none' && info.origin === 'tiktok-caption' && <p>Ten film nie udostępnia miniaturki.</p>}
+    </div>
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -155,9 +119,7 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
       </header>
 
       <div className="scroll-y flex-1 px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+32px)]">
-        {saveError && (
-          <p className="mb-3 rounded-[12px] bg-surface px-4 py-3 text-[14px] text-red-500">{saveError}</p>
-        )}
+        {saveError && <p className="mb-3 rounded-[12px] bg-surface px-4 py-3 text-[14px] text-red-500">{saveError}</p>}
         <SegmentedControl<Mode>
           value={mode}
           onChange={setMode}
@@ -220,139 +182,23 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
                 <p className="px-1 pt-1 text-[13px] text-label-2">
                   Wklej link do przepisu albo do filmu z TikToka — w drugim przypadku odczytamy przepis z opisu filmu.
                   Aplikacja w razie potrzeby użyje AI.
-                  Zawsze możesz poprawić wynik przed zapisem.
                 </p>
               </div>
             ) : (
-              <div className="space-y-5">
-                {form.parse_method !== 'manual' && (
-                  <div className="space-y-1.5 rounded-[12px] bg-surface px-4 py-3 text-[14px] text-label-2">
-                    <p>
-                      {form.origin === 'tiktok-caption'
-                        ? 'Przepis odczytany z opisu filmu na TikToku (samego wideo nie analizujemy). Sprawdź składniki i kroki — bywają niepełne.'
-                        : IMPORT_NOTES[form.parse_method]}
-                    </p>
-                    {form.estimatedServings !== undefined && form.servings === String(form.estimatedServings) && (
-                      <p>Liczba porcji ({form.estimatedServings}) to szacunek AI — źródło jej nie podawało. Popraw, jeśli się nie zgadza.</p>
-                    )}
-                    {form.thumbnail?.status === 'failed' && (
-                      <p>Nie udało się zapisać miniaturki filmu ({form.thumbnail.reason ?? 'nieznany powód'}). Przepis zapiszesz bez zdjęcia.</p>
-                    )}
-                    {form.thumbnail?.status === 'none' && form.origin === 'tiktok-caption' && <p>Ten film nie udostępnia miniaturki.</p>}
-                  </div>
-                )}
-                {form.image_url && (
-                  <img
-                    src={form.image_url}
-                    alt=""
-                    className="h-32 w-full rounded-[14px] object-cover"
-                    draggable={false}
-                    onError={(e) => (e.currentTarget.style.display = 'none')}
-                  />
-                )}
-                <Group>
-                  <Field label="Tytuł">
-                    <input
-                      value={form.title}
-                      onChange={(e) => set('title', e.target.value)}
-                      placeholder="Np. Zupa pomidorowa"
-                      className="w-full bg-transparent text-right outline-none placeholder:text-label-3"
-                    />
-                  </Field>
-                  <Field label="Porcje">
-                    <NumberInput value={form.servings} onChange={(v) => set('servings', v)} />
-                  </Field>
-                  <Field label="Przygotowanie (min)">
-                    <NumberInput value={form.prep} onChange={(v) => set('prep', v)} />
-                  </Field>
-                  <Field label="Gotowanie (min)">
-                    <NumberInput value={form.cook} onChange={(v) => set('cook', v)} />
-                  </Field>
-                </Group>
-
-                <TextBlock
-                  header="Składniki"
-                  footer="Jeden składnik w linii."
-                  value={form.ingredients}
-                  onChange={(v) => set('ingredients', v)}
-                  placeholder={'200 g mąki\n2 jajka'}
-                />
-                <TextBlock
-                  header="Przygotowanie"
-                  footer="Jeden krok w linii."
-                  value={form.steps}
-                  onChange={(v) => set('steps', v)}
-                  placeholder={'Wymieszaj składniki.\nPiecz 30 minut.'}
-                />
-
-                <Group>
-                  <Field label="Tagi">
-                    <input
-                      value={form.tags}
-                      onChange={(e) => set('tags', e.target.value)}
-                      placeholder="deser, szybkie"
-                      autoCapitalize="none"
-                      className="w-full bg-transparent text-right outline-none placeholder:text-label-3"
-                    />
-                  </Field>
-                </Group>
-              </div>
+              <RecipeFields
+                form={form}
+                set={rf.set}
+                imageSrc={rf.imageSrc}
+                imageBusy={rf.imageBusy}
+                imageError={rf.imageError}
+                onPickImage={rf.pickImage}
+                onRemoveImage={rf.removeImage}
+                notes={notes}
+              />
             )}
           </motion.div>
         </AnimatePresence>
       </div>
-    </div>
-  )
-}
-
-/* — małe elementy formularza w stylu „inset grouped” — */
-
-function Group({ children }: { children: ReactNode }) {
-  return <div className="divide-y divide-separator overflow-hidden rounded-[14px] bg-surface">{children}</div>
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex items-center gap-4 px-4 py-3">
-      <span className="shrink-0 text-[16px]">{label}</span>
-      <span className="min-w-0 flex-1">{children}</span>
-    </label>
-  )
-}
-
-function NumberInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <input
-      inputMode="numeric"
-      pattern="[0-9]*"
-      value={value}
-      onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
-      placeholder="—"
-      className="w-full bg-transparent text-right outline-none placeholder:text-label-3"
-    />
-  )
-}
-
-function TextBlock(props: {
-  header: string
-  footer: string
-  value: string
-  onChange: (v: string) => void
-  placeholder: string
-}) {
-  return (
-    <div>
-      <p className="mb-1.5 px-4 text-[13px] text-label-2 uppercase">{props.header}</p>
-      <Group>
-        <textarea
-          value={props.value}
-          onChange={(e) => props.onChange(e.target.value)}
-          placeholder={props.placeholder}
-          rows={4}
-          className="block min-h-28 w-full resize-none bg-transparent px-4 py-3 outline-none [field-sizing:content] placeholder:text-label-3"
-        />
-      </Group>
-      <p className="mt-1.5 px-4 text-[13px] text-label-2">{props.footer}</p>
     </div>
   )
 }

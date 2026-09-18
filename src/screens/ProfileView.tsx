@@ -1,0 +1,150 @@
+import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
+import type { ProfileSummary, Recipe } from '@/types/recipe'
+import { backend } from '@/lib/data'
+import { usePaged } from '@/hooks/usePaged'
+import { Avatar } from '@/components/Avatar'
+import { FollowButton } from '@/components/FollowButton'
+import { LockIcon, SpinnerIcon } from '@/components/Icons'
+import { LoadMore } from '@/components/LoadMore'
+import { RecipeCard } from '@/components/RecipeCard'
+
+interface Props {
+  username: string
+  onOpenRecipe: (r: Recipe) => void
+  /** Tylko na własnym profilu */
+  onEdit?: () => void
+  onSignOut?: () => void
+  /** Zmiana wartości wymusza ponowne pobranie profilu (np. po edycji) */
+  reloadKey?: number
+}
+
+/** Profil w stylu Instagrama: awatar, liczniki, przycisk obserwowania i siatka przepisów */
+export function ProfileView({ username, onOpenRecipe, onEdit, onSignOut, reloadKey }: Props) {
+  const [profile, setProfile] = useState<ProfileSummary | null | undefined>(undefined) // undefined = ładowanie
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setError(null)
+    backend
+      .getProfile(username)
+      .then((p) => alive && setProfile(p))
+      .catch((e: unknown) => {
+        if (!alive) return
+        setProfile(null)
+        setError(e instanceof Error ? e.message : 'Nie udało się wczytać profilu.')
+      })
+    return () => {
+      alive = false
+    }
+  }, [username, reloadKey])
+
+  const visible = !!profile && (profile.is_public || profile.is_me)
+  const recipes = usePaged((o, l) => backend.profileRecipes(profile!, o, l), [profile?.id, reloadKey], 12, visible)
+
+  if (profile === undefined) {
+    return (
+      <div className="flex justify-center pt-24 text-label-2">
+        <SpinnerIcon width={24} height={24} />
+      </div>
+    )
+  }
+  if (profile === null) {
+    return (
+      <p className="px-6 pt-24 text-center text-[16px] text-label-2">{error ?? `Nie znaleziono użytkownika @${username}.`}</p>
+    )
+  }
+
+  const setFollowing = (following: boolean) =>
+    setProfile((p) =>
+      p ? { ...p, is_following: following, followers_count: p.followers_count + (following === p.is_following ? 0 : following ? 1 : -1) } : p,
+    )
+
+  return (
+    <div>
+      <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pt-4 pb-5">
+        <div className="flex items-center gap-4">
+          <Avatar name={profile.username} size={84} />
+          <div className="grid flex-1 grid-cols-3 text-center">
+            <Stat value={visible ? profile.recipe_count : '–'} label="przepisów" />
+            <Stat value={profile.followers_count} label="obserwujących" />
+            <Stat value={profile.following_count} label="obserwuje" />
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <p className="flex items-center gap-1.5 text-[17px] font-semibold">
+            @{profile.username}
+            {!profile.is_public && <LockIcon width={15} height={15} className="text-label-2" aria-label="Profil prywatny" />}
+          </p>
+          {profile.full_name && <p className="text-[15px] text-label-2">{profile.full_name}</p>}
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          {profile.is_me ? (
+            <>
+              {onEdit && (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={onEdit} className="flex-1 rounded-[10px] bg-surface-2 py-2 text-[15px] font-semibold">
+                  Edytuj profil
+                </motion.button>
+              )}
+              {onSignOut && (
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => {
+                    if (confirm('Wylogować się?')) onSignOut()
+                  }}
+                  className="rounded-[10px] bg-surface-2 px-4 py-2 text-[15px] font-semibold text-red-500"
+                >
+                  Wyloguj
+                </motion.button>
+              )}
+            </>
+          ) : (
+            <div className="flex-1 [&>button]:w-full">
+              <FollowButton userId={profile.id} following={profile.is_following} onChange={setFollowing} />
+            </div>
+          )}
+        </div>
+
+        {profile.is_me && !profile.is_public && (
+          <p className="mt-3 flex items-start gap-2 rounded-[12px] bg-surface px-3.5 py-2.5 text-[13px] text-label-2">
+            <LockIcon width={15} height={15} className="mt-0.5 shrink-0" />
+            Profil prywatny: Twoich przepisów nie zobaczą inni użytkownicy, nie pojawią się też w wyszukiwarce ani w ich feedzie.
+          </p>
+        )}
+      </motion.header>
+
+      {!visible ? (
+        <div className="flex flex-col items-center gap-2 border-t border-separator px-6 pt-10 text-center">
+          <LockIcon width={32} height={32} className="text-label-2" />
+          <p className="text-[17px] font-semibold">Ten profil jest prywatny</p>
+          <p className="text-[14px] text-label-2">Przepisy tej osoby są widoczne tylko dla niej.</p>
+        </div>
+      ) : recipes.items.length === 0 && !recipes.loading && !recipes.error ? (
+        <p className="border-t border-separator pt-10 text-center text-[15px] text-label-2">
+          {profile.is_me ? 'Nie masz jeszcze przepisów.' : 'Ta osoba nie dodała jeszcze przepisów.'}
+        </p>
+      ) : (
+        <div className="border-t border-separator pt-4">
+          <div className="grid grid-cols-2 gap-3">
+            {recipes.items.map((r) => (
+              <RecipeCard key={r.id} recipe={r} onOpen={() => onOpenRecipe(r)} />
+            ))}
+          </div>
+          <LoadMore loading={recipes.loading} done={recipes.done} error={recipes.error} onLoadMore={recipes.loadMore} onRetry={recipes.retry} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Stat({ value, label }: { value: number | string; label: string }) {
+  return (
+    <div>
+      <p className="text-[19px] leading-tight font-bold tabular-nums">{value}</p>
+      <p className="text-[12px] text-label-2">{label}</p>
+    </div>
+  )
+}

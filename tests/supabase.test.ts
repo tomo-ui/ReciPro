@@ -36,6 +36,7 @@ describe('auth (endpoint /api/parse-recipe)', () => {
 describe('mapowanie wiersz ↔ Recipe', () => {
   const row: RecipeRow = {
     id: 'id-1',
+    user_id: 'user-1',
     title: 'Placki',
     description: null,
     image_url: null,

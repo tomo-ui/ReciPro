@@ -48,10 +48,37 @@ export interface Recipe {
   parse_method: ParseMethod
   created_at: string // ISO 8601
   updated_at: string // ISO 8601
+  /** Autor przepisu (nadaje baza) */
+  user_id?: string
+  /** Dane autora — wypełnione w feedzie, wyszukiwarce i na cudzych profilach */
+  author?: RecipeAuthor
 }
 
-/** To, co produkuje parser lub formularz — id i timestampy nadaje repozytorium */
-export type RecipeDraft = Omit<Recipe, 'id' | 'created_at' | 'updated_at'>
+/** Autor przepisu, tak jak widzą go inni użytkownicy */
+export interface RecipeAuthor {
+  username: string
+  full_name?: string
+}
+
+/** Profil użytkownika (tabela `profiles`) */
+export interface Profile {
+  id: string
+  username: string
+  full_name?: string
+  is_public: boolean
+}
+
+/** Profil z licznikami i relacją do zalogowanego użytkownika */
+export interface ProfileSummary extends Profile {
+  recipe_count: number
+  followers_count: number
+  following_count: number
+  is_following: boolean
+  is_me: boolean
+}
+
+/** To, co produkuje parser lub formularz — id, autora i timestampy nadaje baza */
+export type RecipeDraft = Omit<Recipe, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'author'>
 
 export const emptyDraft = (): RecipeDraft => ({
   title: '',

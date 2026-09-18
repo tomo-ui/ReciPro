@@ -22,3 +22,12 @@ export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
   return data.session?.access_token ?? null
 }
+
+/**
+ * Czy aplikacja korzysta z Supabase (konta, chmura). W trybie deweloperskim `?demo=1` wymusza
+ * tryb lokalny mimo obecnych kluczy — do oglądania interfejsu bez logowania.
+ */
+const forceDemo =
+  import.meta.env.DEV && typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo')
+
+export const usesSupabase = isSupabaseConfigured && !forceDemo

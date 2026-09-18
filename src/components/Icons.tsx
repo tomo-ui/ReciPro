@@ -59,3 +59,55 @@ export const UserIcon = (p: P) => (
     <path d="M4 20a8 8 0 0 1 16 0" />
   </svg>
 )
+export const HomeIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z" />
+  </svg>
+)
+export const BookIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v16H6.5A1.5 1.5 0 0 0 5 20.5zM5 20.5A1.5 1.5 0 0 0 6.5 22H19M9 7h6" />
+  </svg>
+)
+export const PencilIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16zM13.5 6.5l4 4" />
+  </svg>
+)
+export const TrashIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+  </svg>
+)
+export const CameraIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z" />
+    <circle cx="12" cy="13" r="3.5" />
+  </svg>
+)
+export const LockIcon = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="5" y="11" width="14" height="9" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </svg>
+)
+export const MinusIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M5 12h14" />
+  </svg>
+)
+export const CheckIcon = (p: P) => (
+  <svg {...base({ strokeWidth: 2.5, ...p })}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </svg>
+)
+export const ShuffleIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 7h3.5c3 0 4 2 5.5 5s2.5 5 5.5 5H20M4 17h3.5c1.7 0 2.7-.7 3.6-1.9M20 7h-1.5c-1.7 0-2.7.7-3.6 1.9M17 4l3 3-3 3M17 14l3 3-3 3" />
+  </svg>
+)
+export const XIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M6 6l12 12M18 6 6 18" />
+  </svg>
+)

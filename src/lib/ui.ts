@@ -33,3 +33,17 @@ export function formatMinutes(min?: number): string | null {
 export function totalTime(r: Recipe): number | undefined {
   return r.total_minutes ?? ((r.prep_minutes ?? 0) + (r.cook_minutes ?? 0) || undefined)
 }
+
+/** „przed chwilą”, „5 min temu”, „3 godz. temu”, „2 dni temu”, potem data */
+export function timeAgo(iso: string, now = Date.now()): string {
+  const diff = Math.max(0, now - new Date(iso).getTime())
+  const min = Math.floor(diff / 60_000)
+  if (min < 1) return 'przed chwilą'
+  if (min < 60) return `${min} min temu`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h} godz. temu`
+  const d = Math.floor(h / 24)
+  if (d === 1) return 'wczoraj'
+  if (d < 7) return `${d} dni temu`
+  return new Date(iso).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })
+}

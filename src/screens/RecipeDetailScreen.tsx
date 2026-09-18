@@ -1,12 +1,20 @@
+import { useState } from 'react'
 import { motion, useDragControls } from 'framer-motion'
 import type { Recipe } from '@/types/recipe'
-import { coverGradient, formatMinutes, spring, totalTime } from '@/lib/ui'
-import { ChevronLeftIcon, ClockIcon, UsersIcon } from '@/components/Icons'
+import { scaleFactor, scaleIngredient } from '@/lib/scale'
+import { formatMinutes, spring, totalTime } from '@/lib/ui'
+import { Avatar } from '@/components/Avatar'
+import { ChevronLeftIcon, ClockIcon, MinusIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
+import { Cover } from '@/components/RecipeCard'
 
 interface Props {
   recipe: Recipe
+  /** Autor może edytować i usuwać; pozostali tylko oglądają */
+  isOwner: boolean
   onBack: () => void
+  onEdit: () => void
   onDelete: () => void
+  onOpenAuthor: (username: string) => void
 }
 
 /** Grupuje linie po polu `group`, zachowując kolejność */
@@ -20,9 +28,17 @@ function groupLines<T extends { group?: string }>(lines: T[]) {
   return groups
 }
 
-export function RecipeDetailScreen({ recipe, onBack, onDelete }: Props) {
+const MAX_SERVINGS = 99
+
+export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, onOpenAuthor }: Props) {
   const controls = useDragControls()
   const time = formatMinutes(totalTime(recipe))
+
+  // Kalkulator porcji: zmiana widoku, nie zapisuje się w przepisie (zapis = edycja)
+  const original = recipe.servings
+  const [target, setTarget] = useState(original ?? 0)
+  const factor = scaleFactor(original, target) ?? 1
+  const scaledView = original !== undefined && target !== original
 
   return (
     <motion.div
@@ -41,29 +57,28 @@ export function RecipeDetailScreen({ recipe, onBack, onDelete }: Props) {
         if (info.offset.x > 100 || info.velocity.x > 500) onBack()
       }}
     >
-      <div
-        className="absolute inset-y-0 left-0 z-40 w-5 touch-pan-y"
-        onPointerDown={(e) => controls.start(e)}
-      />
+      <div className="absolute inset-y-0 left-0 z-40 w-5 touch-pan-y" onPointerDown={(e) => controls.start(e)} />
 
       <div className="scroll-y h-full">
-        <div
-          className="relative h-64 w-full"
-          style={{
-            background: recipe.image_url ? undefined : coverGradient(recipe.id + recipe.title),
-          }}
-        >
-          {recipe.image_url && (
-            <img src={recipe.image_url} alt="" className="h-full w-full object-cover" draggable={false} />
-          )}
-        </div>
+        <Cover recipe={recipe} className="aspect-[4/3] max-h-80 w-full" />
 
         <div className="relative -mt-6 rounded-t-[28px] bg-bg px-[max(20px,env(safe-area-inset-left))] pt-6 pb-[calc(env(safe-area-inset-bottom,0px)+40px)]">
           <h1 className="text-[28px] leading-tight font-bold tracking-tight" data-selectable>
             {recipe.title}
           </h1>
+
+          {!isOwner && recipe.author && (
+            <button onClick={() => onOpenAuthor(recipe.author!.username)} className="mt-3 flex items-center gap-2.5 text-left">
+              <Avatar name={recipe.author.username} size={30} />
+              <span>
+                <span className="block text-[15px] leading-tight font-semibold">{recipe.author.username}</span>
+                {recipe.author.full_name && <span className="block text-[12px] text-label-2">{recipe.author.full_name}</span>}
+              </span>
+            </button>
+          )}
+
           {recipe.description && (
-            <p className="mt-2 text-[16px] text-label-2" data-selectable>
+            <p className="mt-3 text-[16px] text-label-2" data-selectable>
               {recipe.description}
             </p>
           )}
@@ -74,9 +89,9 @@ export function RecipeDetailScreen({ recipe, onBack, onDelete }: Props) {
                 <ClockIcon width={15} height={15} /> {time}
               </Chip>
             )}
-            {recipe.servings && (
+            {original && (
               <Chip>
-                <UsersIcon width={15} height={15} /> {recipe.servings} porcji
+                <UsersIcon width={15} height={15} /> {original} porcji
               </Chip>
             )}
             {recipe.tags.map((t) => (
@@ -87,21 +102,57 @@ export function RecipeDetailScreen({ recipe, onBack, onDelete }: Props) {
           </div>
 
           <Section title="Składniki">
+            {original !== undefined && (
+              <div className="mb-3 rounded-[14px] bg-surface p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[15px] font-semibold">Porcje</p>
+                    <p className="text-[12px] text-label-2">Kalkulator przelicza ilości składników</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <StepButton label="Mniej porcji" disabled={target <= 1} onClick={() => setTarget((t) => Math.max(1, t - 1))}>
+                      <MinusIcon width={18} height={18} />
+                    </StepButton>
+                    <span className="min-w-8 text-center text-[22px] font-bold tabular-nums" aria-live="polite">
+                      {target}
+                    </span>
+                    <StepButton label="Więcej porcji" disabled={target >= MAX_SERVINGS} onClick={() => setTarget((t) => Math.min(MAX_SERVINGS, t + 1))}>
+                      <PlusIcon width={18} height={18} />
+                    </StepButton>
+                  </div>
+                </div>
+                {scaledView && (
+                  <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-separator pt-2.5 text-[13px]">
+                    <span className="text-label-2">
+                      Przeliczono z {original} porcji. Ilości w krokach zostają bez zmian.
+                    </span>
+                    <button onClick={() => setTarget(original)} className="shrink-0 font-semibold text-accent">
+                      Przywróć
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {groupLines(recipe.ingredients).map((g, gi) => (
               <div key={gi} className="mb-3 last:mb-0">
                 {g.name && <p className="mb-1 text-[13px] font-semibold text-label-2 uppercase">{g.name}</p>}
                 <ul className="divide-y divide-separator overflow-hidden rounded-[14px] bg-surface">
-                  {g.items.map((i, k) => (
-                    <li key={k} className="px-4 py-3 text-[16px]" data-selectable>
-                      {i.text}
-                    </li>
-                  ))}
+                  {g.items.map((i, k) => {
+                    const line = scaledView ? scaleIngredient(i.text, factor) : { text: i.text, scaled: false }
+                    return (
+                      <li key={k} className={`px-4 py-3 text-[16px] ${line.scaled ? 'text-accent' : ''}`} data-selectable>
+                        {line.text}
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
             ))}
           </Section>
 
           <Section title="Przygotowanie">
+            {recipe.steps.length === 0 && <p className="text-[15px] text-label-2">Brak opisanych kroków.</p>}
             {groupLines(recipe.steps).map((g, gi) => (
               <div key={gi} className="mb-3 last:mb-0">
                 {g.name && <p className="mb-1 text-[13px] font-semibold text-label-2 uppercase">{g.name}</p>}
@@ -128,24 +179,26 @@ export function RecipeDetailScreen({ recipe, onBack, onDelete }: Props) {
               rel="noopener noreferrer"
               className="mt-6 block truncate text-[14px] text-accent"
             >
-              Źródło: {new URL(recipe.source_url).hostname}
+              Źródło: {safeHostname(recipe.source_url)}
             </a>
           )}
 
-          <button
-            onClick={() => {
-              if (confirm('Usunąć ten przepis?')) onDelete()
-            }}
-            className="mt-8 w-full rounded-[14px] bg-surface py-3.5 text-[16px] font-medium text-red-500 active:opacity-60"
-          >
-            Usuń przepis
-          </button>
+          {isOwner && (
+            <button
+              onClick={() => {
+                if (confirm('Usunąć ten przepis? Zdjęcie też zostanie usunięte.')) onDelete()
+              }}
+              className="mt-8 flex w-full items-center justify-center gap-2 rounded-[14px] bg-surface py-3.5 text-[16px] font-medium text-red-500 active:opacity-60"
+            >
+              <TrashIcon width={18} height={18} /> Usuń przepis
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Pływający przycisk wstecz na okładce */}
+      {/* Pływające przyciski: wstecz i (dla autora) edycja */}
       <div className="absolute inset-x-0 top-0 z-20 pt-safe-top">
-        <div className="flex h-11 items-center pl-[max(12px,env(safe-area-inset-left))]">
+        <div className="flex h-11 items-center justify-between px-[max(12px,env(safe-area-inset-left))]">
           <motion.button
             whileTap={{ scale: 0.88 }}
             onClick={onBack}
@@ -154,9 +207,41 @@ export function RecipeDetailScreen({ recipe, onBack, onDelete }: Props) {
           >
             <ChevronLeftIcon />
           </motion.button>
+          {isOwner && (
+            <motion.button
+              whileTap={{ scale: 0.88 }}
+              onClick={onEdit}
+              aria-label="Edytuj przepis"
+              className="glass flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[14px] font-semibold text-label shadow-sm"
+            >
+              <PencilIcon width={16} height={16} /> Edytuj
+            </motion.button>
+          )}
         </div>
       </div>
     </motion.div>
+  )
+}
+
+function safeHostname(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
+}
+
+function StepButton({ children, label, disabled, onClick }: { children: React.ReactNode; label: string; disabled: boolean; onClick: () => void }) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.88 }}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
+    >
+      {children}
+    </motion.button>
   )
 }
 
@@ -171,11 +256,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Chip({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
   return (
-    <span
-      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 ${
-        muted ? 'bg-surface-2 text-label-2' : 'bg-surface font-medium'
-      }`}
-    >
+    <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 ${muted ? 'bg-surface-2 text-label-2' : 'bg-surface font-medium'}`}>
       {children}
     </span>
   )

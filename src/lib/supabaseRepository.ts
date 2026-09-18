@@ -1,10 +1,9 @@
 import type { IngredientLine, ParseMethod, Recipe, RecipeDraft, StepLine } from '@/types/recipe'
-import type { RecipeRepository } from './repository'
-import { supabase } from './supabase'
 
 /** Wiersz tabeli `recipes` (patrz supabase/schema.sql) */
 export interface RecipeRow {
   id: string
+  user_id: string
   title: string
   description: string | null
   image_url: string | null
@@ -21,11 +20,18 @@ export interface RecipeRow {
   updated_at: string
 }
 
+/** Wiersz zwracany przez funkcje search_recipes i feed: przepis + autor */
+export interface RecipeWithAuthorRow extends RecipeRow {
+  author_username: string
+  author_full_name: string | null
+}
+
 const orUndef = <T>(v: T | null): T | undefined => v ?? undefined
 
 export function rowToRecipe(r: RecipeRow): Recipe {
   return {
     id: r.id,
+    user_id: r.user_id,
     title: r.title,
     description: orUndef(r.description),
     image_url: orUndef(r.image_url),
@@ -40,6 +46,13 @@ export function rowToRecipe(r: RecipeRow): Recipe {
     parse_method: r.parse_method,
     created_at: r.created_at,
     updated_at: r.updated_at,
+  }
+}
+
+export function rowWithAuthorToRecipe(r: RecipeWithAuthorRow): Recipe {
+  return {
+    ...rowToRecipe(r),
+    author: { username: r.author_username, full_name: orUndef(r.author_full_name) },
   }
 }
 
@@ -59,28 +72,4 @@ export function draftToInsert(d: RecipeDraft) {
     tags: d.tags,
     parse_method: d.parse_method,
   }
-}
-
-function client() {
-  if (!supabase) throw new Error('Supabase nie jest skonfigurowany.')
-  return supabase
-}
-
-export const supabaseRepository: RecipeRepository = {
-  async list() {
-    const { data, error } = await client().from('recipes').select('*').order('created_at', { ascending: false })
-    if (error) throw new Error(error.message)
-    return (data as RecipeRow[]).map(rowToRecipe)
-  },
-
-  async add(draft) {
-    const { data, error } = await client().from('recipes').insert(draftToInsert(draft)).select().single()
-    if (error) throw new Error(error.message)
-    return rowToRecipe(data as RecipeRow)
-  },
-
-  async remove(id) {
-    const { error } = await client().from('recipes').delete().eq('id', id)
-    if (error) throw new Error(error.message)
-  },
 }
