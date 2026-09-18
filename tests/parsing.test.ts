@@ -233,7 +233,7 @@ describe('warstwa 3: Gemini', () => {
     expect(d?.title).toBe('Lite')
     const urls = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]))
     expect(urls[0]).toContain('models/gemini-flash-lite-latest:')
-    expect(urls[2]).toContain('models/gemini-flash-latest:')
+    expect(urls[2]).toContain('models/gemini-3.1-flash-lite:')
   })
 
   it('ponawia chwilowy 503 i kończy sukcesem', async () => {

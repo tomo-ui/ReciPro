@@ -34,7 +34,12 @@ export interface GeminiOptions {
 }
 
 const DEFAULT_MODEL = 'gemini-flash-lite-latest'
-const FALLBACK_MODEL = 'gemini-flash-latest'
+/**
+ * Kolejność zapasowych modeli. Na darmowym kluczu każdy model ma osobny, niski limit zapytań
+ * (zmierzone: gemini-flash-latest miał limit 0 i zawsze zwracał 429), więc zapas musi być kilka.
+ * Zwykły Flash jest ostatni — działa dopiero po włączeniu płatności w projekcie Gemini.
+ */
+const FALLBACK_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-flash-latest']
 const ATTEMPTS_PER_MODEL = 2
 const RETRYABLE = new Set([429, 500, 502, 503, 504])
 const MAX_PAGE_CHARS = 30_000
@@ -137,7 +142,7 @@ async function generateJson(
     generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: schema },
   })
 
-  const models = [...new Set([model, FALLBACK_MODEL])]
+  const models = [...new Set([model, ...FALLBACK_MODELS])]
   let res: Response | undefined
   let lastError: GeminiError | undefined
   search: for (const m of models) {
@@ -165,6 +170,8 @@ async function generateJson(
       const body = await res.text().catch(() => '')
       lastError = new GeminiError(`Gemini HTTP ${res.status} (${m}): ${body.slice(0, 300)}`, res.status)
       if (!RETRYABLE.has(res.status)) throw lastError
+      // 429 = wyczerpany limit tego modelu; ponowna próba za sekundę nic nie da, idziemy do następnego
+      if (res.status === 429) continue search
     }
   }
   if (!res?.ok) throw lastError ?? new GeminiError('Gemini request was not sent')

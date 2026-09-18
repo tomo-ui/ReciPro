@@ -1,16 +1,25 @@
+import jpeg from 'jpeg-js'
 import { assertPublicUrl, readCapped } from './fetchHtml.js'
 
 /**
  * Miniaturka filmu z TikToka. Adres z oEmbed jest podpisany i wygasa po ok. 48 h,
- * więc pobieramy obraz po stronie serwera i zapisujemy go w Supabase Storage
- * (bucket `recipe-images`, patrz supabase/storage.sql). Wtedy okładka nie znika.
+ * więc pobieramy obraz po stronie serwera, przycinamy do formatu okładki przepisu (4:3)
+ * i zapisujemy w Supabase Storage (bucket `recipe-images`, patrz supabase/storage.sql).
  */
 
 // CDN TikToka: p16-common-sign.tiktokcdn-eu.com, …tiktokcdn.com, …tiktokcdn-us.com
 const CDN_HOST = /(^|\.)tiktokcdn(-[a-z]+)?\.com$/i
 const MAX_IMAGE_BYTES = 1_500_000 // obserwowane miniaturki: 110–240 KB
+const MAX_REDIRECTS = 3
 
 const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
+
+/**
+ * Proporcje okładki: takie same jak karta na liście (RecipeCard: aspect-[4/3]),
+ * dzięki czemu zdjęcie z TikToka ma ten sam kadr co zdjęcia ze stron z przepisami.
+ */
+export const COVER_ASPECT = 4 / 3
+const JPEG_QUALITY = 82
 
 export interface DownloadedImage {
   bytes: Uint8Array
@@ -27,28 +36,144 @@ export function sniffImageType(b: Uint8Array): string | null {
   return null // np. HEIC, którego większość przeglądarek nie wyświetli
 }
 
-/** Pobiera miniaturkę wyłącznie z CDN TikToka (https, publiczny adres, bez przekierowań) */
+/** Miniaturki TikToka mają 1080 px szerokości; zdjęcia ze stron z przepisami zwykle 600–1200 px */
+export const COVER_MAX_WIDTH = 800
+
+/** Zmniejszanie przez uśrednianie powierzchni (box filter) — ostre i bez zniekształceń */
+function resizeRGBA(src: Uint8Array, sw: number, sh: number, dw: number, dh: number): Uint8Array {
+  const dst = new Uint8Array(dw * dh * 4)
+  const xr = sw / dw
+  const yr = sh / dh
+  for (let y = 0; y < dh; y++) {
+    const sy0 = y * yr
+    const sy1 = (y + 1) * yr
+    const iy1 = Math.min(sh, Math.ceil(sy1))
+    for (let x = 0; x < dw; x++) {
+      const sx0 = x * xr
+      const sx1 = (x + 1) * xr
+      const ix1 = Math.min(sw, Math.ceil(sx1))
+      let r = 0
+      let g = 0
+      let b = 0
+      let total = 0
+      for (let yy = Math.floor(sy0); yy < iy1; yy++) {
+        const wy = Math.min(yy + 1, sy1) - Math.max(yy, sy0)
+        for (let xx = Math.floor(sx0); xx < ix1; xx++) {
+          const w = (Math.min(xx + 1, sx1) - Math.max(xx, sx0)) * wy
+          const i = (yy * sw + xx) * 4
+          r += src[i] * w
+          g += src[i + 1] * w
+          b += src[i + 2] * w
+          total += w
+        }
+      }
+      const o = (y * dw + x) * 4
+      dst[o] = r / total
+      dst[o + 1] = g / total
+      dst[o + 2] = b / total
+      dst[o + 3] = 255
+    }
+  }
+  return dst
+}
+
+/**
+ * Kadruje miniaturkę do okładki przepisu: pionowy kadr (TikTok: 9:16) przycinamy do poziomego 4:3
+ * (bierzemy środek obrazu), a potem zmniejszamy do COVER_MAX_WIDTH. Obraz, który już spełnia oba
+ * warunki, zostaje bez zmian (bajt w bajt).
+ */
+export function cropToCover(bytes: Uint8Array): Uint8Array {
+  const img = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true })
+  const cropHeight = Math.min(img.height, Math.round(img.width / COVER_ASPECT))
+  const outWidth = Math.min(img.width, COVER_MAX_WIDTH)
+  if (cropHeight === img.height && outWidth === img.width) return bytes
+
+  const top = Math.floor((img.height - cropHeight) / 2)
+  const rowBytes = img.width * 4
+  let data: Uint8Array = img.data.subarray(top * rowBytes, (top + cropHeight) * rowBytes)
+  let width = img.width
+  let height = cropHeight
+
+  if (outWidth < width) {
+    const outHeight = Math.round(outWidth * (height / width))
+    data = resizeRGBA(data, width, height, outWidth, outHeight)
+    width = outWidth
+    height = outHeight
+  }
+  return new Uint8Array(jpeg.encode({ data, width, height }, JPEG_QUALITY).data)
+}
+
+export interface DownloadResult {
+  image?: DownloadedImage
+  /** Krótki, bezpieczny powód porażki — trafia do komunikatu w aplikacji i do logów */
+  reason?: string
+}
+
+/**
+ * Pobiera miniaturkę wyłącznie z CDN TikToka (https, publiczny adres). Przekierowania idą ręcznie,
+ * a każdy hop musi znowu być https, w domenie CDN i pod publicznym adresem.
+ */
 export async function downloadTikTokThumbnail(
   rawUrl: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<DownloadedImage | null> {
+): Promise<DownloadResult> {
   let url: URL
   try {
     url = new URL(rawUrl)
   } catch {
-    return null
+    return { reason: 'nieprawidłowy adres miniaturki' }
   }
-  if (url.protocol !== 'https:' || !CDN_HOST.test(url.hostname)) return null
 
   try {
-    await assertPublicUrl(url)
-    const res = await fetchImpl(url, { redirect: 'manual', signal: AbortSignal.timeout(8000) })
-    if (!res.ok) return null
-    const bytes = await readCapped(res, MAX_IMAGE_BYTES)
-    const contentType = sniffImageType(bytes)
-    return contentType ? { bytes, contentType } : null
-  } catch {
-    return null
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      if (url.protocol !== 'https:' || !CDN_HOST.test(url.hostname)) {
+        return { reason: `adres miniaturki poza CDN TikToka (${url.hostname})` }
+      }
+      await assertPublicUrl(url)
+
+      const res = await fetchImpl(url, {
+        redirect: 'manual',
+        headers: {
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+          accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8',
+          referer: 'https://www.tiktok.com/',
+        },
+        signal: AbortSignal.timeout(8000),
+      })
+
+      const location = res.headers.get('location')
+      if (res.status >= 300 && res.status < 400 && location) {
+        await res.body?.cancel().catch(() => {})
+        url = new URL(location, url)
+        continue
+      }
+      if (!res.ok) {
+        await res.body?.cancel().catch(() => {})
+        return { reason: `pobranie miniaturki: HTTP ${res.status}` }
+      }
+
+      const bytes = await readCapped(res, MAX_IMAGE_BYTES)
+      const contentType = sniffImageType(bytes)
+      if (!contentType) return { reason: 'miniaturka w nieobsługiwanym formacie' }
+      return { image: { bytes, contentType } }
+    }
+    return { reason: 'pobranie miniaturki: zbyt wiele przekierowań' }
+  } catch (e) {
+    const name = (e as Error).name
+    if (name === 'TimeoutError' || name === 'AbortError') return { reason: 'pobranie miniaturki: przekroczono czas' }
+    return { reason: `pobranie miniaturki: ${(e as Error).message}`.slice(0, 120) }
+  }
+}
+
+/** Kadruje pobraną miniaturkę do okładki 4:3; przy niepowodzeniu (np. uszkodzony plik) zostawia oryginał */
+export function prepareCover(img: DownloadedImage): DownloadedImage {
+  if (img.contentType !== 'image/jpeg') return img
+  try {
+    return { bytes: cropToCover(img.bytes), contentType: 'image/jpeg' }
+  } catch (e) {
+    console.warn('[image] nie udało się przyciąć miniaturki, zapisuję oryginał:', (e as Error).message)
+    return img
   }
 }
 
@@ -58,6 +183,18 @@ export interface StorageConfig {
   /** Token sesji użytkownika — zapis idzie jako on, więc obowiązują polityki RLS z storage.sql */
   userToken: string
   userId: string
+}
+
+/** Storage odpowiada JSON-em {"message": …}; wyciągamy sam komunikat zamiast surowego JSON-a */
+async function readErrorMessage(res: Response): Promise<string> {
+  const text = await res.text().catch(() => '')
+  try {
+    const message = (JSON.parse(text) as { message?: unknown }).message
+    if (typeof message === 'string' && message) return message.slice(0, 120)
+  } catch {
+    /* nie JSON — zwykły tekst poniżej */
+  }
+  return text.slice(0, 120)
 }
 
 /** Zapisuje obraz w `recipe-images/<userId>/<uuid>.<ext>` i zwraca publiczny adres */
@@ -80,8 +217,6 @@ export async function uploadRecipeImage(
     body: new Blob([img.bytes as BlobPart], { type: img.contentType }),
     signal: AbortSignal.timeout(10_000),
   })
-  if (!res.ok) {
-    throw new Error(`Storage HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`)
-  }
+  if (!res.ok) throw new Error(`Storage HTTP ${res.status}: ${await readErrorMessage(res)}`)
   return `${base}/storage/v1/object/public/recipe-images/${path}`
 }

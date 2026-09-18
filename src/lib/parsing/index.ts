@@ -1,4 +1,4 @@
-import type { ParseOrigin, RecipeDraft } from '@/types/recipe'
+import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '@/types/recipe'
 import { getAccessToken } from '@/lib/supabase'
 
 /**
@@ -18,8 +18,8 @@ export interface ParseResult {
   origin: ParseOrigin
   /** Liczbę porcji oszacowało AI, bo źródło jej nie podawało */
   servingsEstimated: boolean
-  /** Film miał miniaturkę, ale nie udało się jej zapisać */
-  thumbnailFailed: boolean
+  /** Co się stało z miniaturką filmu z TikToka */
+  thumbnail: ThumbnailInfo
 }
 
 export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
@@ -44,7 +44,7 @@ export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
     draft?: RecipeDraft
     origin?: ParseOrigin
     servingsEstimated?: boolean
-    thumbnailFailed?: boolean
+    thumbnail?: ThumbnailInfo
     error?: string
   } | null
   if (!res.ok || !body?.draft) {
@@ -54,6 +54,6 @@ export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
     draft: body.draft,
     origin: body.origin ?? 'page',
     servingsEstimated: body.servingsEstimated ?? false,
-    thumbnailFailed: body.thumbnailFailed ?? false,
+    thumbnail: body.thumbnail ?? { status: 'none' },
   }
 }

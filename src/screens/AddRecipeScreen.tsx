@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { emptyDraft, type ParseOrigin, type RecipeDraft } from '@/types/recipe'
+import { emptyDraft, type ParseOrigin, type RecipeDraft, type ThumbnailInfo } from '@/types/recipe'
 import { parseRecipeFromUrl } from '@/lib/parsing'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { LinkIcon, SpinnerIcon } from '@/components/Icons'
@@ -23,7 +23,7 @@ interface FormState {
   origin?: ParseOrigin
   /** Wartość porcji podana przez AI; komunikat znika, gdy użytkownik ją zmieni */
   estimatedServings?: number
-  thumbnailFailed?: boolean
+  thumbnail?: ThumbnailInfo
 }
 
 const IMPORT_NOTES: Record<RecipeDraft['parse_method'], string> = {
@@ -110,12 +110,12 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
     setError(null)
     setFetching(true)
     try {
-      const { draft, origin, servingsEstimated, thumbnailFailed } = await parseRecipeFromUrl(url.trim())
+      const { draft, origin, servingsEstimated, thumbnail } = await parseRecipeFromUrl(url.trim())
       setForm({
         ...fromDraft({ ...draft, source_url: draft.source_url ?? url.trim() }),
         origin,
         estimatedServings: servingsEstimated ? draft.servings : undefined,
-        thumbnailFailed,
+        thumbnail,
       })
       setMode('manual') // użytkownik weryfikuje wynik parsowania przed zapisem
     } catch (e) {
@@ -235,7 +235,10 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
                     {form.estimatedServings !== undefined && form.servings === String(form.estimatedServings) && (
                       <p>Liczba porcji ({form.estimatedServings}) to szacunek AI — źródło jej nie podawało. Popraw, jeśli się nie zgadza.</p>
                     )}
-                    {form.thumbnailFailed && <p>Nie udało się zapisać miniaturki filmu — przepis zapiszesz bez zdjęcia.</p>}
+                    {form.thumbnail?.status === 'failed' && (
+                      <p>Nie udało się zapisać miniaturki filmu ({form.thumbnail.reason ?? 'nieznany powód'}). Przepis zapiszesz bez zdjęcia.</p>
+                    )}
+                    {form.thumbnail?.status === 'none' && form.origin === 'tiktok-caption' && <p>Ten film nie udostępnia miniaturki.</p>}
                   </div>
                 )}
                 {form.image_url && (

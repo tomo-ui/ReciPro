@@ -1,10 +1,10 @@
-import type { ParseOrigin, RecipeDraft } from '../../src/types/recipe.js'
+import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '../../src/types/recipe.js'
 import { fetchHtml, type FetchHtmlOptions } from './fetchHtml.js'
 import { estimateServings, extractRecipeFromText, GeminiError, parseWithGemini } from './gemini.js'
 import { parseHeuristic } from './heuristic.js'
 import { parseJsonLd } from './jsonld.js'
 import { hasAnyContent, isComplete, servingsFromText, totalMinutesFromText } from './normalize.js'
-import { downloadTikTokThumbnail, uploadRecipeImage, type StorageConfig } from './image.js'
+import { downloadTikTokThumbnail, prepareCover, uploadRecipeImage, type StorageConfig } from './image.js'
 import { fetchTikTokInfo, hashtagsFromCaption, isTikTokUrl, withoutGenericTags } from './tiktok.js'
 
 export type ParseErrorCode =
@@ -39,8 +39,18 @@ export interface ParseOutcome {
   origin: ParseOrigin
   /** Liczbę porcji oszacowało AI (w źródle jej nie było) */
   servingsEstimated: boolean
-  /** Film miał miniaturkę, ale nie udało się jej zapisać */
-  thumbnailFailed: boolean
+  /** Wynik zapisu miniaturki filmu (dla stron WWW zawsze status „none”) */
+  thumbnail: ThumbnailInfo
+}
+
+/** Czytelny dla użytkownika powód, dla którego AI nie odpowiedziało */
+export function aiFailureMessage(e: unknown): string {
+  const status = e instanceof GeminiError ? e.status : undefined
+  const text = e instanceof Error ? e.message : ''
+  if (status === 429) return 'Limit zapytań do AI został chwilowo wyczerpany. Spróbuj ponownie za minutę.'
+  if (status !== undefined && status >= 500) return 'Usługa AI jest teraz przeciążona. Spróbuj ponownie za chwilę.'
+  if (/limit czasu|timeout|aborted/i.test(text)) return 'AI nie odpowiedziało na czas. Spróbuj ponownie.'
+  return 'Nie udało się odczytać przepisu — usługa AI jest chwilowo niedostępna.'
 }
 
 /**
@@ -71,6 +81,7 @@ export async function parseRecipeHtml(
   }
 
   let aiFailed = false
+  let aiError: unknown
   if (geminiApiKey) {
     try {
       const draft = await parseWithGemini(html, pageUrl, {
@@ -84,6 +95,7 @@ export async function parseRecipeHtml(
       if (draft && hasAnyContent(draft)) partials.push(draft)
     } catch (e) {
       aiFailed = true
+      aiError = e
       console.error('[parse] Gemini:', e)
     }
   }
@@ -93,7 +105,7 @@ export async function parseRecipeHtml(
   )[0]
   if (best) return best
 
-  if (aiFailed) throw new ParseError('ai_failed', 'Nie udało się odczytać przepisu — usługa AI jest chwilowo niedostępna.')
+  if (aiFailed) throw new ParseError('ai_failed', aiFailureMessage(aiError))
   throw new ParseError('no_recipe', 'Nie znalazłem przepisu na tej stronie.')
 }
 
@@ -108,7 +120,7 @@ const MIN_CAPTION_CHARS = 40
 export async function parseTikTokCaption(
   url: string,
   { geminiApiKey, geminiModel, geminiRetryDelayMs, deadlineAt, storage, fetchImpl }: PipelineOptions = {},
-): Promise<{ draft: RecipeDraft; thumbnailFailed: boolean }> {
+): Promise<{ draft: RecipeDraft; thumbnail: ThumbnailInfo }> {
   const info = await fetchTikTokInfo(url, fetchImpl)
 
   if (!geminiApiKey) {
@@ -133,7 +145,7 @@ export async function parseTikTokCaption(
     )
   } catch (e) {
     console.error('[parse] Gemini (TikTok):', e instanceof GeminiError ? e.message : e)
-    throw new ParseError('ai_failed', 'Nie udało się odczytać opisu — usługa AI jest chwilowo niedostępna.')
+    throw new ParseError('ai_failed', aiFailureMessage(e))
   }
 
   if (!draft || !hasAnyContent(draft)) {
@@ -143,25 +155,7 @@ export async function parseTikTokCaption(
     )
   }
   // Miniaturka dopiero po znalezieniu przepisu, żeby nie zostawiać w Storage obrazów bez przepisu
-  let image_url: string | undefined
-  let thumbnailFailed = false
-  if (info.thumbnailUrl) {
-    if (!storage) {
-      // Tryb lokalny bez Supabase: adres tymczasowy (ok. 48 h) — dane i tak żyją tylko w przeglądarce
-      image_url = info.thumbnailUrl
-    } else if (deadlineAt !== undefined && deadlineAt - Date.now() < 6000) {
-      thumbnailFailed = true
-    } else {
-      try {
-        const img = await downloadTikTokThumbnail(info.thumbnailUrl, fetchImpl)
-        if (!img) throw new Error('miniaturka niedostępna lub w nieobsługiwanym formacie')
-        image_url = await uploadRecipeImage(img, storage, fetchImpl)
-      } catch (e) {
-        thumbnailFailed = true
-        console.warn('[parse] miniaturka TikToka:', e instanceof Error ? e.message : e)
-      }
-    }
-  }
+  const { image_url, thumbnail } = await persistThumbnail(info.thumbnailUrl, { storage, deadlineAt, fetchImpl })
 
   // Siatka bezpieczeństwa: dane podane wprost w opisie („PORCJE: 6”, „CZAS: 40 MIN”) mają pierwszeństwo
   // przed szacunkiem AI, nawet jeśli model ich nie odczytał
@@ -174,7 +168,38 @@ export async function parseTikTokCaption(
       image_url,
       tags: withoutGenericTags(draft.tags),
     },
-    thumbnailFailed,
+    thumbnail,
+  }
+}
+
+/**
+ * Pobiera miniaturkę filmu, kadruje ją do okładki 4:3 i zapisuje w Supabase Storage.
+ * Nigdy nie rzuca — porażka daje status „failed” z powodem, a import przepisu trwa dalej.
+ */
+async function persistThumbnail(
+  thumbnailUrl: string | undefined,
+  { storage, deadlineAt, fetchImpl }: Pick<PipelineOptions, 'storage' | 'deadlineAt' | 'fetchImpl'>,
+): Promise<{ image_url?: string; thumbnail: ThumbnailInfo }> {
+  if (!thumbnailUrl) return { thumbnail: { status: 'none' } }
+  if (!storage) {
+    // Tryb lokalny bez Supabase: adres tymczasowy (ok. 48 h) — dane i tak żyją tylko w przeglądarce
+    return { image_url: thumbnailUrl, thumbnail: { status: 'temporary' } }
+  }
+
+  const fail = (reason: string) => {
+    console.warn('[parse] miniaturka TikToka:', reason)
+    return { thumbnail: { status: 'failed' as const, reason } }
+  }
+  if (deadlineAt !== undefined && deadlineAt - Date.now() < 6000) return fail('za mało czasu na pobranie miniaturki')
+
+  const { image, reason } = await downloadTikTokThumbnail(thumbnailUrl, fetchImpl)
+  if (!image) return fail(reason ?? 'nie udało się pobrać miniaturki')
+
+  try {
+    const image_url = await uploadRecipeImage(prepareCover(image), storage, fetchImpl)
+    return { image_url, thumbnail: { status: 'saved' } }
+  } catch (e) {
+    return fail(`zapis w Storage: ${e instanceof Error ? e.message : String(e)}`.slice(0, 160))
   }
 }
 
@@ -213,12 +238,17 @@ export async function parseRecipeUrl(
   const options = { ...opts, deadlineAt: opts.deadlineAt ?? Date.now() + TOTAL_BUDGET_MS }
 
   if (isTikTokUrl(url)) {
-    const { draft, thumbnailFailed } = await parseTikTokCaption(url, options)
+    const { draft, thumbnail } = await parseTikTokCaption(url, options)
     const withServings = await withEstimatedServings(draft, options)
-    return { draft: withServings.draft, origin: 'tiktok-caption', servingsEstimated: withServings.estimated, thumbnailFailed }
+    return { draft: withServings.draft, origin: 'tiktok-caption', servingsEstimated: withServings.estimated, thumbnail }
   }
 
   const { html, finalUrl } = await fetchHtml(url, { fetchImpl: opts.fetchImpl, ...opts.fetch })
   const withServings = await withEstimatedServings(await parseRecipeHtml(html, finalUrl, options), options)
-  return { draft: withServings.draft, origin: 'page', servingsEstimated: withServings.estimated, thumbnailFailed: false }
+  return {
+    draft: withServings.draft,
+    origin: 'page',
+    servingsEstimated: withServings.estimated,
+    thumbnail: { status: 'none' },
+  }
 }

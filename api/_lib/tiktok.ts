@@ -113,7 +113,18 @@ export async function fetchTikTokInfo(rawUrl: string, fetchImpl: typeof fetch = 
   const canonicalUrl = await resolveTikTokUrl(rawUrl, fetchImpl)
 
   const viaOEmbed = await fromOEmbed(canonicalUrl, fetchImpl)
-  if (viaOEmbed) return { canonicalUrl, ...viaOEmbed }
+  if (viaOEmbed) {
+    // oEmbed bywa bez miniaturki (zależnie od regionu serwera) — próbujemy jeszcze danych ze strony filmu
+    if (!viaOEmbed.thumbnailUrl) {
+      try {
+        const { html } = await fetchHtml(canonicalUrl, { fetchImpl, timeoutMs: 5000 })
+        viaOEmbed.thumbnailUrl = captionFromPageHtml(html)?.thumbnailUrl
+      } catch {
+        /* bez miniaturki — przepis i tak się zaimportuje */
+      }
+    }
+    return { canonicalUrl, ...viaOEmbed }
+  }
 
   try {
     const { html } = await fetchHtml(canonicalUrl, { fetchImpl })

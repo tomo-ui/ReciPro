@@ -9,6 +9,16 @@ export type ParseMethod = 'manual' | 'json-ld' | 'heuristic' | 'gemini'
 /** Skąd pochodzi zaimportowany przepis (tylko informacja dla UI, nie trafia do bazy) */
 export type ParseOrigin = 'page' | 'tiktok-caption'
 
+/**
+ * Co się stało z miniaturką filmu (tylko informacja dla UI):
+ * saved = zapisana u nas, temporary = adres tymczasowy (tryb lokalny), none = film jej nie ma,
+ * failed = miała, ale nie udało się jej zapisać (powód w `reason`).
+ */
+export interface ThumbnailInfo {
+  status: 'saved' | 'temporary' | 'none' | 'failed'
+  reason?: string
+}
+
 export interface IngredientLine {
   /** Pełny tekst linii, np. "2 łyżki oliwy z oliwek" — źródło prawdy dla UI */
   text: string

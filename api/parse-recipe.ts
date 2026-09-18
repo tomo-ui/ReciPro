@@ -5,7 +5,7 @@ import type { StorageConfig } from './_lib/image.js'
 import { ParseError, parseRecipeUrl } from './_lib/pipeline.js'
 
 /**
- * POST /api/parse-recipe  { url }  →  { draft, origin: 'page' | 'tiktok-caption', servingsEstimated, thumbnailFailed }
+ * POST /api/parse-recipe  { url }  →  { draft, origin: 'page' | 'tiktok-caption', servingsEstimated, thumbnail }
  * Strona WWW: pobranie po stronie serwera (omija CORS) i 3-warstwowy pipeline.
  * Link do TikToka: odczyt opisu filmu i wyciągnięcie z niego przepisu (Gemini).
  * GEMINI_API_KEY żyje tylko tutaj. Wymaga nagłówka Authorization: Bearer <token sesji Supabase>.
@@ -55,12 +55,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { draft, origin, servingsEstimated, thumbnailFailed } = await parseRecipeUrl(url, {
+    const { draft, origin, servingsEstimated, thumbnail } = await parseRecipeUrl(url, {
       geminiApiKey: process.env.GEMINI_API_KEY,
       geminiModel: process.env.GEMINI_MODEL,
       storage,
     })
-    return res.status(200).json({ draft, origin, servingsEstimated, thumbnailFailed })
+    return res.status(200).json({ draft, origin, servingsEstimated, thumbnail })
   } catch (e) {
     if (e instanceof FetchError) {
       const status = e.code === 'timeout' ? 504 : e.code === 'invalid_url' || e.code === 'blocked' ? 400 : 502
