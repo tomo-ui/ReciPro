@@ -4,8 +4,9 @@ import { FetchError } from './_lib/fetchHtml.js'
 import { ParseError, parseRecipeUrl } from './_lib/pipeline.js'
 
 /**
- * POST /api/parse-recipe  { url }  →  { draft: RecipeDraft }
- * Pobiera stronę po stronie serwera (omija CORS) i puszcza 3-warstwowy pipeline.
+ * POST /api/parse-recipe  { url }  →  { draft: RecipeDraft, origin: 'page' | 'tiktok-caption' }
+ * Strona WWW: pobranie po stronie serwera (omija CORS) i 3-warstwowy pipeline.
+ * Link do TikToka: odczyt opisu filmu i wyciągnięcie z niego przepisu (Gemini).
  * GEMINI_API_KEY żyje tylko tutaj. Wymaga nagłówka Authorization: Bearer <token sesji Supabase>.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -51,18 +52,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const draft = await parseRecipeUrl(url, {
+    const { draft, origin } = await parseRecipeUrl(url, {
       geminiApiKey: process.env.GEMINI_API_KEY,
       geminiModel: process.env.GEMINI_MODEL,
     })
-    return res.status(200).json({ draft })
+    return res.status(200).json({ draft, origin })
   } catch (e) {
     if (e instanceof FetchError) {
       const status = e.code === 'timeout' ? 504 : e.code === 'invalid_url' || e.code === 'blocked' ? 400 : 502
       return res.status(status).json({ error: e.message, code: e.code })
     }
     if (e instanceof ParseError) {
-      return res.status(e.code === 'no_recipe' ? 422 : 502).json({ error: e.message, code: e.code })
+      const status =
+        e.code === 'no_recipe' || e.code === 'no_recipe_in_caption' ? 422 : e.code === 'ai_unavailable' ? 503 : 502
+      return res.status(status).json({ error: e.message, code: e.code })
     }
     console.error('[parse-recipe]', e)
     return res.status(500).json({ error: 'Wystąpił nieoczekiwany błąd.', code: 'internal' })

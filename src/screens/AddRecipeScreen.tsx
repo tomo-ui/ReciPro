@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { emptyDraft, type RecipeDraft } from '@/types/recipe'
+import { emptyDraft, type ParseOrigin, type RecipeDraft } from '@/types/recipe'
 import { parseRecipeFromUrl } from '@/lib/parsing'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { LinkIcon, SpinnerIcon } from '@/components/Icons'
@@ -19,6 +19,8 @@ interface FormState {
   source_url?: string
   parse_method: RecipeDraft['parse_method']
   image_url?: string
+  /** Tylko do komunikatu w UI — nie zapisujemy w bazie */
+  origin?: ParseOrigin
 }
 
 const IMPORT_NOTES: Record<RecipeDraft['parse_method'], string> = {
@@ -105,8 +107,8 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
     setError(null)
     setFetching(true)
     try {
-      const draft = await parseRecipeFromUrl(url.trim())
-      setForm(fromDraft({ ...draft, source_url: draft.source_url ?? url.trim() }))
+      const { draft, origin } = await parseRecipeFromUrl(url.trim())
+      setForm({ ...fromDraft({ ...draft, source_url: draft.source_url ?? url.trim() }), origin })
       setMode('manual') // użytkownik weryfikuje wynik parsowania przed zapisem
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Nie udało się pobrać przepisu.')
@@ -208,7 +210,8 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
                 </AnimatePresence>
 
                 <p className="px-1 pt-1 text-[13px] text-label-2">
-                  Wklej link do przepisu. Aplikacja odczyta dane strony, a w razie potrzeby użyje AI.
+                  Wklej link do przepisu albo do filmu z TikToka — w drugim przypadku odczytamy przepis z opisu filmu.
+                  Aplikacja w razie potrzeby użyje AI.
                   Zawsze możesz poprawić wynik przed zapisem.
                 </p>
               </div>
@@ -216,7 +219,9 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
               <div className="space-y-5">
                 {form.parse_method !== 'manual' && (
                   <p className="rounded-[12px] bg-surface px-4 py-3 text-[14px] text-label-2">
-                    {IMPORT_NOTES[form.parse_method]}
+                    {form.origin === 'tiktok-caption'
+                      ? 'Przepis odczytany z opisu filmu na TikToku (samego wideo nie analizujemy). Sprawdź składniki i kroki — bywają niepełne.'
+                      : IMPORT_NOTES[form.parse_method]}
                   </p>
                 )}
                 <Group>

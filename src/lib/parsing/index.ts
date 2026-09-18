@@ -1,4 +1,4 @@
-import type { RecipeDraft } from '@/types/recipe'
+import type { ParseOrigin, RecipeDraft } from '@/types/recipe'
 import { getAccessToken } from '@/lib/supabase'
 
 /**
@@ -13,7 +13,12 @@ export function normalizeUrl(raw: string): string {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`
 }
 
-export async function parseRecipeFromUrl(rawUrl: string): Promise<RecipeDraft> {
+export interface ParseResult {
+  draft: RecipeDraft
+  origin: ParseOrigin
+}
+
+export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
   // Endpoint wymaga sesji Supabase (chroni limit Gemini); bez Supabase token jest pusty
   const token = await getAccessToken()
 
@@ -31,9 +36,9 @@ export async function parseRecipeFromUrl(rawUrl: string): Promise<RecipeDraft> {
     throw new Error('Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.')
   }
 
-  const body = (await res.json().catch(() => null)) as { draft?: RecipeDraft; error?: string } | null
+  const body = (await res.json().catch(() => null)) as { draft?: RecipeDraft; origin?: ParseOrigin; error?: string } | null
   if (!res.ok || !body?.draft) {
     throw new Error(body?.error ?? 'Nie udało się pobrać przepisu.')
   }
-  return body.draft
+  return { draft: body.draft, origin: body.origin ?? 'page' }
 }

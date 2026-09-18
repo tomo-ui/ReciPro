@@ -25,14 +25,35 @@ function friendlyError(message: string, status?: number, code?: string): string 
   return message
 }
 
+/**
+ * Supabase odsyła z maila na adres aplikacji z wynikiem w hashu (#error=… albo #access_token=…).
+ * Czytamy to raz przy załadowaniu modułu (przed Reactem, odporne na podwójne renderowanie w StrictMode)
+ * i czyścimy hash, żeby tokeny nie zostawały w pasku adresu.
+ */
+const redirectResult = ((): { error?: string; notice?: string } => {
+  if (typeof window === 'undefined') return {}
+  const h = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  if (!h.has('error') && !h.has('access_token')) return {}
+  history.replaceState(null, '', window.location.pathname + window.location.search)
+  if (h.get('error_code') === 'otp_expired') {
+    return {
+      error:
+        'Link potwierdzający wygasł lub został już użyty. Spróbuj się zalogować — jeśli konto nie jest potwierdzone, wyślemy nowy link.',
+    }
+  }
+  if (h.has('error')) return { error: h.get('error_description') ?? 'Nie udało się potwierdzić adresu e-mail.' }
+  return { notice: 'Adres e-mail potwierdzony. Zaloguj się.' }
+})()
+
 /** Logowanie i rejestracja e-mail + hasło (Supabase Auth) */
 export function LoginScreen() {
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(redirectResult.error ?? null)
+  const [notice, setNotice] = useState<string | null>(redirectResult.notice ?? null)
+  const [unconfirmed, setUnconfirmed] = useState(false)
 
   const signup = mode === 'signup'
   const canSubmit = email.includes('@') && (signup ? password.length >= MIN_PASSWORD : password.length > 0)
@@ -41,6 +62,22 @@ export function LoginScreen() {
     setMode(next)
     setError(null)
     setNotice(null)
+    setUnconfirmed(false)
+  }
+
+  async function resendConfirmation() {
+    if (!supabase || !email.includes('@')) return
+    setBusy(true)
+    setError(null)
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+      options: { emailRedirectTo: window.location.origin },
+    })
+    setBusy(false)
+    if (error) return setError(friendlyError(error.message, error.status, error.code))
+    setUnconfirmed(false)
+    setNotice('Wysłaliśmy nowy link potwierdzający. Kliknij go od razu po otrzymaniu — jest ważny krótko i działa tylko raz.')
   }
 
   async function submit(e: FormEvent) {
@@ -71,7 +108,10 @@ export function LoginScreen() {
 
     const { error } = await supabase.auth.signInWithPassword(creds)
     setBusy(false)
-    if (error) setError(friendlyError(error.message, error.status, error.code))
+    if (error) {
+      setError(friendlyError(error.message, error.status, error.code))
+      setUnconfirmed(error.code === 'email_not_confirmed' || /email not confirmed/i.test(error.message))
+    }
   }
 
   return (
@@ -141,6 +181,17 @@ export function LoginScreen() {
             </motion.p>
           )}
         </AnimatePresence>
+
+        {unconfirmed && (
+          <button
+            type="button"
+            onClick={resendConfirmation}
+            disabled={busy}
+            className="mt-2 w-full text-center text-[15px] font-semibold text-accent disabled:opacity-40"
+          >
+            Wyślij link ponownie
+          </button>
+        )}
       </motion.div>
     </div>
   )

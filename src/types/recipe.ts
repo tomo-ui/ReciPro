@@ -6,6 +6,9 @@
 
 export type ParseMethod = 'manual' | 'json-ld' | 'heuristic' | 'gemini'
 
+/** Skąd pochodzi zaimportowany przepis (tylko informacja dla UI, nie trafia do bazy) */
+export type ParseOrigin = 'page' | 'tiktok-caption'
+
 export interface IngredientLine {
   /** Pełny tekst linii, np. "2 łyżki oliwy z oliwek" — źródło prawdy dla UI */
   text: string
