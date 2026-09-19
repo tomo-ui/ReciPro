@@ -10,7 +10,24 @@ export function isStandalone(): boolean {
   return (navigator as Navigator & { standalone?: boolean }).standalone === true || matchMedia('(display-mode: standalone)').matches
 }
 
+/**
+ * Aplikacja nigdy nie przewija dokumentu (przewijają się tylko wewnętrzne kontenery), a iOS po focusie
+ * na polu i schowaniu klawiatury potrafi zostawić stronę przesuniętą w górę — pod spodem robi się pusty pas.
+ * Cofamy każde przesunięcie dokumentu.
+ */
+export function lockDocumentScroll(): void {
+  const reset = () => {
+    if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0)
+  }
+  window.addEventListener('scroll', reset, { passive: true })
+  window.visualViewport?.addEventListener('resize', reset)
+  window.visualViewport?.addEventListener('scroll', reset)
+  document.addEventListener('focusout', () => setTimeout(reset, 60))
+  document.addEventListener('visibilitychange', reset)
+}
+
 export function fitStandaloneViewport(): void {
+  lockDocumentScroll()
   if (!isStandalone()) return
   const root = document.documentElement
 

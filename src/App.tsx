@@ -103,7 +103,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
   const top = stack[stack.length - 1]
   const screen = (id: Tab, node: React.ReactNode) =>
     visited.has(id) && (
-      <div className={tab === id ? 'h-full' : 'hidden'} aria-hidden={tab !== id}>
+      <div className={`absolute inset-0 ${tab === id ? '' : 'invisible pointer-events-none'}`} aria-hidden={tab !== id} inert={tab !== id}>
         {node}
       </div>
     )
@@ -112,7 +112,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
     <div className="fixed inset-0 overflow-hidden bg-bg">
       {/* Zakładki zostają zamontowane po pierwszym wejściu, więc wracasz z zachowanym przewinięciem i stanem */}
       <motion.div
-        className="h-full"
+        className="relative h-full"
         animate={{ x: top ? '-28%' : 0, opacity: top ? 0.6 : 1 }}
         transition={spring}
       >

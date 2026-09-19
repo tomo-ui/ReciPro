@@ -1,3 +1,4 @@
+import { normalizeIngredient } from './ingredients'
 import { emptyDraft, type IngredientLine, type RecipeDraft } from '@/types/recipe'
 
 /**
@@ -95,7 +96,9 @@ export function formToDraft(f: FormState): RecipeDraft {
     prep_minutes: prep,
     cook_minutes: cook,
     total_minutes: prep || cook ? (prep ?? 0) + (cook ?? 0) : undefined,
-    ingredients: parseLines(f.ingredients),
+    ingredients: parseLines(f.ingredients)
+      .map((i) => ({ ...i, text: normalizeIngredient(i.text) }))
+      .filter((i) => i.text),
     steps: parseLines(f.steps),
     tags: tags.slice(0, 12),
     source_url: f.source_url,

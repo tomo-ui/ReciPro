@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, useDragControls } from 'framer-motion'
 import type { Profile, Recipe } from '@/types/recipe'
+import { normalizeIngredient } from '@/lib/ingredients'
 import { scaleFactor, scaleIngredient } from '@/lib/scale'
 import { formatMinutes, spring, totalTime } from '@/lib/ui'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
@@ -158,7 +159,8 @@ export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDele
                 {g.name && <p className="mb-1 text-[13px] font-semibold text-label-2 uppercase">{g.name}</p>}
                 <ul className="divide-y divide-separator overflow-hidden rounded-[14px] bg-surface">
                   {g.items.map((i, k) => {
-                    const line = scaledView ? scaleIngredient(i.text, factor) : { text: i.text, scaled: false }
+                    const text = normalizeIngredient(i.text) // starsze przepisy też pokazujemy w jednym formacie
+                    const line = scaledView ? scaleIngredient(text, factor) : { text, scaled: false }
                     return (
                       <li key={k} className={`px-4 py-3 text-[16px] ${line.scaled ? 'text-accent' : ''}`} data-selectable>
                         {line.text}

@@ -1,3 +1,4 @@
+import { normalizeIngredient } from './ingredients.js'
 import type { IngredientLine, ParseMethod, RecipeDraft, StepLine } from '../../src/types/recipe.js'
 
 // Katalog `_lib` nie jest routem Vercela. Importy względne z rozszerzeniem `.js`,
@@ -158,7 +159,7 @@ export function buildDraft(raw: RawRecipe, method: ParseMethod): RecipeDraft {
     prep_minutes: prep,
     cook_minutes: cook,
     total_minutes: total,
-    ingredients: clean(raw.ingredients ?? [], 300),
+    ingredients: clean((raw.ingredients ?? []).map((i) => ({ ...i, text: normalizeIngredient(i.text) })), 300),
     steps: clean(raw.steps ?? [], 2000),
     tags: raw.tags ?? [],
     parse_method: method,
