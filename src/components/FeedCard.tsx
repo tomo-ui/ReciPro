@@ -19,6 +19,7 @@ interface Props {
 export function FeedCard({ recipe, stats, onStatsChange, onOpen, onOpenAuthor }: Props) {
   const author = recipe.author
   const time = formatMinutes(totalTime(recipe))
+  const last = stats?.last_comment
 
   return (
     <motion.article
@@ -64,13 +65,29 @@ export function FeedCard({ recipe, stats, onStatsChange, onOpen, onOpenAuthor }:
         </div>
       </motion.button>
 
-      <div className="flex items-center gap-5 px-3.5 pb-3.5">
+      <div className={`flex items-center gap-5 px-3.5 ${last ? 'pb-2.5' : 'pb-3.5'}`}>
         <LikeButton recipeId={recipe.id} stats={stats} onChange={onStatsChange} />
         <button onClick={onOpen} aria-label="Komentarze" className="flex items-center gap-1.5 text-[14px] text-label-2">
           <CommentIcon width={22} height={22} />
           <span className="tabular-nums">{stats?.comment_count ?? '–'}</span>
         </button>
       </div>
+      {last && (
+        <button onClick={onOpen} className="block w-full px-3.5 pb-3.5 text-left" aria-label="Zobacz komentarze">
+          <span className="flex items-start gap-2.5 rounded-[14px] bg-surface-2 px-3 py-2.5">
+            <Avatar name={last.author.username} src={last.author.avatar_url} size={26} />
+            <span className="min-w-0 flex-1 text-[14px] leading-snug">
+              <span className="line-clamp-2 break-words whitespace-pre-line">
+                <span className="font-semibold">{last.author.username}</span> {last.body}
+              </span>
+              <span className="mt-0.5 block text-[12px] text-label-2">{timeAgo(last.created_at)}</span>
+            </span>
+          </span>
+          {(stats?.comment_count ?? 0) > 1 && (
+            <span className="mt-1.5 block px-1 text-[13px] text-label-2">Zobacz wszystkie komentarze ({stats?.comment_count})</span>
+          )}
+        </button>
+      )}
     </motion.article>
   )
 }

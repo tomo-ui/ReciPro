@@ -261,3 +261,19 @@ describe('powiadomienia', () => {
     await expect(f.backend.listNotifications(0, 5)).rejects.toThrow(/notifications\.sql/)
   })
 })
+
+describe('ostatni komentarz w statystykach', () => {
+  it('getRecipeStats mapuje ostatni komentarz z autorem albo pomija go, gdy brak', async () => {
+    const base = { like_count: 1, comment_count: 2, liked: false }
+    const f = fake({
+      rpc: () =>
+        ok([
+          { recipe_id: 'a', ...base, last_comment_id: 'c1', last_comment_body: 'Pycha!', last_comment_at: '2026-09-19T10:00:00Z', last_comment_username: 'ola', last_comment_avatar_url: null },
+          { recipe_id: 'b', ...base, comment_count: 0, last_comment_id: null, last_comment_body: null, last_comment_at: null, last_comment_username: null, last_comment_avatar_url: null },
+        ]),
+    })
+    const stats = await f.backend.getRecipeStats(['a', 'b'])
+    expect(stats.a.last_comment).toEqual({ id: 'c1', body: 'Pycha!', created_at: '2026-09-19T10:00:00Z', author: { username: 'ola', avatar_url: undefined } })
+    expect(stats.b.last_comment).toBeUndefined()
+  })
+})

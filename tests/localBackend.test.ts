@@ -157,3 +157,16 @@ describe('tryb lokalny: powiadomienia', () => {
     expect(await b.getRecipe('nie-ma')).toBeNull()
   })
 })
+
+describe('tryb lokalny: ostatni komentarz w statystykach', () => {
+  it('to najnowszy komentarz z autorem; po dodaniu nowego zmienia się', async () => {
+    const id = 'demo-marek-2'
+    await b.addComment(id, 'pierwszy', me)
+    await new Promise((r) => setTimeout(r, 5))
+    const second = await b.addComment(id, 'drugi', { username: 'kuchnia.zosi' })
+    const s = (await b.getRecipeStats([id]))[id]
+    expect(s.last_comment).toMatchObject({ id: second.id, body: 'drugi', author: { username: 'kuchnia.zosi' } })
+    await b.deleteComment(second)
+    expect((await b.getRecipeStats([id]))[id].last_comment?.body).toBe('pierwszy')
+  })
+})

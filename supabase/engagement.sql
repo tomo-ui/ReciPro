@@ -270,15 +270,30 @@ create policy recipe_comments_delete on public.recipe_comments for delete to aut
   );
 -- Bez edycji komentarzy (brak polityki UPDATE)
 
--- Liczba polubień i komentarzy oraz to, czy ja polubiłem (dla listy przepisów naraz)
-create or replace function public.recipe_stats(p_ids uuid[])
-returns table (recipe_id uuid, like_count int, comment_count int, liked boolean)
+-- Liczba polubień i komentarzy, to czy ja polubiłem, oraz ostatni komentarz z autorem (dla listy przepisów naraz).
+-- Zmienia zwracane kolumny, więc funkcję trzeba usunąć i utworzyć na nowo.
+drop function if exists public.recipe_stats(uuid[]);
+create function public.recipe_stats(p_ids uuid[])
+returns table (
+  recipe_id uuid, like_count int, comment_count int, liked boolean,
+  last_comment_id uuid, last_comment_body text, last_comment_at timestamptz,
+  last_comment_username text, last_comment_avatar_url text
+)
 language sql stable set search_path = public as $$
   select i.id,
     (select count(*) from public.recipe_likes l where l.recipe_id = i.id)::int,
     (select count(*) from public.recipe_comments c where c.recipe_id = i.id)::int,
-    exists (select 1 from public.recipe_likes l where l.recipe_id = i.id and l.user_id = auth.uid())
+    exists (select 1 from public.recipe_likes l where l.recipe_id = i.id and l.user_id = auth.uid()),
+    lc.id, lc.body, lc.created_at, lc.username, lc.avatar_url
   from unnest(p_ids[1:100]) as i(id)
+  left join lateral (
+    select c.id, c.body, c.created_at, p.username, p.avatar_url
+    from public.recipe_comments c
+    join public.profiles p on p.id = c.user_id
+    where c.recipe_id = i.id
+    order by c.created_at desc, c.id
+    limit 1
+  ) lc on true
 $$;
 
 -- Komentarze pod przepisem z danymi autora, od najnowszych

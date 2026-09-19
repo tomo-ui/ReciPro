@@ -32,10 +32,12 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch, onOpenActi
   const [mode, setMode] = useState<FeedMode>('random')
   const [seed, setSeed] = useState(newSeed)
   const feed = usePaged((offset, limit) => backend.feed(mode, seed, offset, limit), [mode, seed], 8)
-  const { stats, set: setStats } = useRecipeStats(feed.items)
+  const { stats, set: setStats, refresh: refreshStats } = useRecipeStats(feed.items)
 
   // Zmiana listy obserwowanych (na profilu) → nowe losowanie z aktualnymi danymi
   useEffect(() => on('follows-changed', () => setSeed(newSeed())), [])
+  // Nowy lub usunięty komentarz: ostatni komentarz na karcie ma być aktualny
+  useEffect(() => on('comments-changed', refreshStats), [refreshStats])
 
   const empty = !feed.loading && !feed.error && feed.items.length === 0
 

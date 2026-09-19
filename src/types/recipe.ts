@@ -97,6 +97,8 @@ export interface RecipeStats {
   comment_count: number
   /** Czy zalogowany użytkownik polubił ten przepis */
   liked: boolean
+  /** Najnowszy komentarz (do podglądu w feedzie) */
+  last_comment?: { id: string; body: string; created_at: string; author: RecipeAuthor }
 }
 
 /** Komentarz pod przepisem z danymi autora */

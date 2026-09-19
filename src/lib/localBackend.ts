@@ -251,7 +251,17 @@ function seedComments(): Comment[] {
     c(3, 'demo-anna-1', 'kuchnia.zosi', 'Idealny na zimowy dzień.', 52),
   ]
 }
-const loadComments = () => read<Comment[]>(KEYS.comments, seedComments)
+function loadComments(): Comment[] {
+  const stored = read<Comment[] | null>(KEYS.comments, () => null)
+  if (stored) return stored
+  const seeded = seedComments() // zapisujemy od razu, żeby czasy i usunięcia przykładowych komentarzy były stałe
+  write(KEYS.comments, seeded)
+  return seeded
+}
+const newestComment = (comments: Comment[], recipeId: string): RecipeStats['last_comment'] => {
+  const c = comments.filter((x) => x.recipe_id === recipeId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+  return c && { id: c.id, body: c.body, created_at: c.created_at, author: c.author }
+}
 const saveComments = (list: Comment[]) => write(KEYS.comments, list)
 
 /** Liczby polubień pod przykładowymi przepisami są stałe (z hasha id), własne polubienie dolicza się do nich */
@@ -457,6 +467,7 @@ export const localBackend: Backend = {
         like_count: baseLikes(id) + (liked.has(id) ? 1 : 0),
         comment_count: comments.filter((c) => c.recipe_id === id).length,
         liked: liked.has(id),
+        last_comment: newestComment(comments, id),
       }
     }
     return out

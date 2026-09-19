@@ -52,6 +52,17 @@ const toSummary = (r: ProfileSummaryRow): ProfileSummary => ({
   is_following: r.is_following,
   is_me: r.is_me,
 })
+interface StatsRow {
+  recipe_id: string
+  like_count: number
+  comment_count: number
+  liked: boolean
+  last_comment_id: string | null
+  last_comment_body: string | null
+  last_comment_at: string | null
+  last_comment_username: string | null
+  last_comment_avatar_url: string | null
+}
 interface NotificationRow {
   id: string
   type: AppNotification['type']
@@ -336,8 +347,20 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       if (ids.length === 0) return out
       const { data, error } = await client().rpc('recipe_stats', { p_ids: ids.slice(0, 100) })
       if (error) fail(error)
-      for (const r of data as { recipe_id: string; like_count: number; comment_count: number; liked: boolean }[]) {
-        out[r.recipe_id] = { like_count: r.like_count, comment_count: r.comment_count, liked: r.liked }
+      for (const r of data as StatsRow[]) {
+        out[r.recipe_id] = {
+          like_count: r.like_count,
+          comment_count: r.comment_count,
+          liked: r.liked,
+          last_comment: r.last_comment_id
+            ? {
+                id: r.last_comment_id,
+                body: r.last_comment_body ?? '',
+                created_at: r.last_comment_at ?? '',
+                author: { username: r.last_comment_username ?? '', avatar_url: r.last_comment_avatar_url ?? undefined },
+              }
+            : undefined,
+        }
       }
       return out
     },

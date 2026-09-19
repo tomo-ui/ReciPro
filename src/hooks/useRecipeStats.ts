@@ -27,6 +27,18 @@ export function useRecipeStats(recipes: { id: string }[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 
+  const idsRef = useRef<string[]>([])
+  idsRef.current = recipes.map((r) => r.id)
+  /** Pobiera statystyki widocznych przepisów od nowa (np. po dodaniu komentarza na ekranie szczegółów) */
+  const refresh = useCallback(() => {
+    const ids = idsRef.current.slice(0, BATCH)
+    if (ids.length === 0) return
+    backend
+      .getRecipeStats(ids)
+      .then((res) => setStats((s) => ({ ...s, ...res })))
+      .catch(() => {})
+  }, [])
+
   const update = useCallback(
     (id: string, change: (s: RecipeStats) => RecipeStats) =>
       setStats((s) => (s[id] ? { ...s, [id]: change(s[id]) } : s)),
@@ -34,5 +46,5 @@ export function useRecipeStats(recipes: { id: string }[]) {
   )
   const set = useCallback((id: string, value: RecipeStats) => setStats((s) => ({ ...s, [id]: value })), [])
 
-  return { stats, update, set }
+  return { stats, update, set, refresh }
 }

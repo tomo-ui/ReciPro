@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Comment, Profile } from '@/types/recipe'
 import { backend } from '@/lib/data'
+import { emit } from '@/lib/events'
 import { timeAgo } from '@/lib/ui'
 import { usePaged } from '@/hooks/usePaged'
 import { Avatar } from './Avatar'
@@ -40,6 +41,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
       })
       list.setItems((items) => [created, ...items])
       onCountChange(1)
+      emit('comments-changed')
       setText('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nie udało się dodać komentarza.')
@@ -54,6 +56,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
       await backend.deleteComment(c)
       list.setItems((items) => items.filter((x) => x.id !== c.id))
       onCountChange(-1)
+      emit('comments-changed')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Nie udało się usunąć komentarza.')
     }
@@ -61,23 +64,24 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
 
   return (
     <div>
-      <form onSubmit={send} className="flex items-end gap-2">
-        <Avatar name={me.username} src={me.avatar_url} size={34} />
-        <div className="flex min-w-0 flex-1 items-end gap-2 rounded-[20px] bg-surface py-1.5 pr-1.5 pl-3.5">
+      <form onSubmit={send} className="flex items-start gap-3">
+        <Avatar name={me.username} src={me.avatar_url} size={40} />
+        {/* Wyraźnie obrysowane pole obok mojego zdjęcia; po dotknięciu podświetla się na kolor akcentu */}
+        <div className="flex min-w-0 flex-1 items-end gap-2 rounded-[22px] border-[1.5px] border-label-3 bg-surface py-1.5 pr-1.5 pl-4 shadow-sm transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, MAX))}
-            placeholder="Dodaj komentarz…"
+            placeholder={`Dodaj komentarz jako ${me.username}…`}
             rows={1}
             aria-label="Komentarz"
-            className="max-h-32 min-h-[28px] min-w-0 flex-1 resize-none bg-transparent py-1 leading-snug outline-none [field-sizing:content] placeholder:text-label-3"
+            className="max-h-32 min-h-[30px] min-w-0 flex-1 resize-none bg-transparent py-1 leading-snug outline-none [field-sizing:content] placeholder:text-label-3"
           />
           <motion.button
             type="submit"
             whileTap={{ scale: 0.9 }}
             disabled={!text.trim() || sending}
             aria-label="Wyślij komentarz"
-            className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
+            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
           >
             {sending ? <SpinnerIcon width={16} height={16} /> : <SendIcon width={16} height={16} strokeWidth={2.6} />}
           </motion.button>

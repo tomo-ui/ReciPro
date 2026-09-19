@@ -244,6 +244,22 @@ describe('recipe_stats', () => {
     expect(forA[0].liked).toBe(false)
   })
 
+  it('ostatni komentarz z autorem: najnowszy wygrywa, bez komentarzy są nulle', async () => {
+    await as(C, `insert into public.recipe_comments (recipe_id, body) values ('${R2}', 'najnowszy')`)
+    type Row = { recipe_id: string; comment_count: number; last_comment_body: string | null; last_comment_username: string | null; last_comment_id: string | null }
+    const rows = await as<Row>(A, `select * from public.recipe_stats(array['${R1}', '${R2}']::uuid[])`)
+    const r2 = rows.find((r) => r.recipe_id === R2)!
+    expect(r2.last_comment_body).toBe('najnowszy')
+    expect(r2.last_comment_username).toBe('celina')
+    expect(r2.comment_count).toBeGreaterThanOrEqual(2)
+    const r1 = rows.find((r) => r.recipe_id === R1)!
+    if (r1.comment_count === 0) expect(r1.last_comment_id).toBeNull()
+    // usunięcie najnowszego przywraca poprzedni
+    await as(C, `delete from public.recipe_comments where body = 'najnowszy'`)
+    const after = await as<Row>(A, `select * from public.recipe_stats(array['${R2}']::uuid[])`)
+    expect(after[0].last_comment_body).not.toBe('najnowszy')
+  })
+
   it('nieznane i niewidoczne przepisy dają zera; pusta tablica; limit 100', async () => {
     const unknown = await as<{ like_count: number; comment_count: number }>(
       B, `select * from public.recipe_stats(array['${RP}', '99999999-0000-0000-0000-000000000000']::uuid[])`)
