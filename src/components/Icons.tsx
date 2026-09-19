@@ -15,6 +15,11 @@ const base = (p: P): P => ({
   ...p,
 })
 
+export const MenuIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </svg>
+)
 export const PlusIcon = (p: P) => (
   <svg {...base(p)}>
     <path d="M12 5v14M5 12h14" />

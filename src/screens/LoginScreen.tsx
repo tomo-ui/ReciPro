@@ -133,7 +133,8 @@ export function LoginScreen() {
     <div className="scroll-y fixed inset-0 bg-bg px-8 pt-safe-top pb-safe-bottom">
       <div className="flex min-h-full flex-col items-center justify-center py-8">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        <img src="/pwa-192x192.png" alt="" className="mx-auto mb-6 h-20 w-20 rounded-[22px] shadow-lg" />
+        {/* Ta sama grafika i zaokrąglenie co ikona aplikacji na iPhonie */}
+        <img src="/apple-touch-icon-180x180.png" alt="" className="mx-auto mb-6 h-20 w-20 rounded-[22.37%] shadow-lg" />
         <h1 className="text-center text-[28px] font-bold tracking-tight">Przepisy</h1>
         <p className="mt-1 mb-6 text-center text-[15px] text-label-2">
           {signup ? 'Załóż konto, żeby zapisywać przepisy w chmurze.' : 'Zaloguj się, żeby synchronizować przepisy.'}

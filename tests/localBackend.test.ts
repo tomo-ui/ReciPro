@@ -123,3 +123,37 @@ describe('tryb lokalny: profil ze zdjęciem, listy i liczniki na żywo', () => {
     stop()
   })
 })
+
+describe('tryb lokalny: powiadomienia', () => {
+  it('są przykładowe, od najnowszych, a oznaczenie zeruje licznik', async () => {
+    const list = await b.listNotifications(0, 20)
+    expect(list.length).toBeGreaterThanOrEqual(3)
+    const times = list.map((n) => n.created_at)
+    expect([...times].sort().reverse()).toEqual(times)
+    expect(await b.countUnreadNotifications()).toBe(list.filter((n) => !n.read).length)
+    await b.markNotificationsRead()
+    expect(await b.countUnreadNotifications()).toBe(0)
+  })
+
+  it('nowe powiadomienie na żywo: subskrybent dostaje sygnał, licznik rośnie, po odsubskrybowaniu cisza', async () => {
+    const { pushDemoNotification } = await import('../src/lib/localBackend')
+    let n = 0
+    const stop = b.subscribeNotifications(LOCAL_USER_ID, () => n++)
+    pushDemoNotification('comment', 'marek_grilluje')
+    expect(n).toBe(1)
+    expect(await b.countUnreadNotifications()).toBe(1)
+    const [first] = await b.listNotifications(0, 1)
+    expect(first).toMatchObject({ type: 'comment', read: false, actor: { username: 'marek_grilluje' } })
+    expect(first.comment_body).toBeTruthy()
+    stop()
+    pushDemoNotification('follow', 'kuchnia.zosi')
+    expect(n).toBe(1)
+  })
+
+  it('getRecipe znajduje własny i cudzy publiczny przepis', async () => {
+    const [mine] = await b.listMyRecipes()
+    expect((await b.getRecipe(mine.id))?.id).toBe(mine.id)
+    expect((await b.getRecipe('demo-anna-1'))?.author?.username).toBe('anna_gotuje')
+    expect(await b.getRecipe('nie-ma')).toBeNull()
+  })
+})

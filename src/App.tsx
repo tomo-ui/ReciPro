@@ -1,17 +1,22 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Session } from '@supabase/supabase-js'
 import type { Profile, Recipe } from '@/types/recipe'
-import { usesSupabase } from '@/lib/data'
+import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { spring } from '@/lib/ui'
 import { useMe } from '@/hooks/useMe'
+import { useNotifications } from '@/hooks/useNotifications'
 import { useRecipes } from '@/hooks/useRecipes'
 import { useSession } from '@/hooks/useSession'
+import { MenuIcon } from '@/components/Icons'
 import { LargeTitleScreen } from '@/components/LargeTitleScreen'
+import { NotificationToast } from '@/components/NotificationToast'
 import { PushedScreen } from '@/components/PushedScreen'
+import { SettingsMenu } from '@/components/SettingsMenu'
 import { Sheet } from '@/components/Sheet'
 import { TabBar, type Tab } from '@/components/TabBar'
+import { ActivityScreen } from '@/screens/ActivityScreen'
 import { AddRecipeScreen } from '@/screens/AddRecipeScreen'
 import { EditProfileScreen } from '@/screens/EditProfileScreen'
 import { EditRecipeScreen } from '@/screens/EditRecipeScreen'
@@ -73,11 +78,13 @@ type Entry =
   | { kind: 'recipe'; recipe: Recipe }
   | { kind: 'profile'; username: string }
   | { kind: 'people'; username: string; list: ListKind }
+  | { kind: 'activity' }
 
-type SheetState = { kind: 'add' } | { kind: 'edit'; recipe: Recipe } | { kind: 'edit-profile' } | null
+type SheetState = { kind: 'add' } | { kind: 'menu' } | { kind: 'edit'; recipe: Recipe } | { kind: 'edit-profile' } | null
 
 function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Profile) => void; onSignOut?: () => void }) {
   const mine = useRecipes()
+  const notes = useNotifications(me.id)
   const [tab, setTab] = useState<Tab>('feed')
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(['feed']))
   const [stack, setStack] = useState<Entry[]>([])
@@ -99,6 +106,20 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
   }
   const openList = (username: string, list: ListKind) => setStack((s) => [...s, { kind: 'people', username, list }])
   const pop = () => setStack((s) => s.slice(0, -1))
+  const openActivity = () => {
+    setSheet(null)
+    notes.dismissLatest()
+    setStack((s) => (s.some((e) => e.kind === 'activity') ? s : [...s, { kind: 'activity' }]))
+  }
+  // Z aktywności otwieramy przepis po id: wpis nie niesie całego przepisu
+  const openRecipeById = (id: string) => {
+    backend
+      .getRecipe(id)
+      .then((r) => (r ? openRecipe(r) : alert('Ten przepis został usunięty.')))
+      .catch((e: unknown) => alert(e instanceof Error ? e.message : 'Nie udało się otworzyć przepisu.'))
+  }
+  const { markRead } = notes
+  const onSeen = useCallback(() => void markRead(), [markRead])
 
   const top = stack[stack.length - 1]
   const screen = (id: Tab, node: React.ReactNode) =>
@@ -131,20 +152,33 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         )}
         {screen(
           'profile',
-          <LargeTitleScreen title="Profil">
+          <LargeTitleScreen
+            title={me.username}
+            variant="inline"
+            right={
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={() => setSheet({ kind: 'menu' })}
+                aria-label="Ustawienia i aktywność"
+                className="relative flex h-9 w-9 items-center justify-center rounded-full"
+              >
+                <MenuIcon width={26} height={26} strokeWidth={2.2} />
+                {notes.unread > 0 && <span aria-hidden className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full border-2 border-bg bg-red-500" />}
+              </motion.button>
+            }
+          >
             <ProfileView
               username={me.username}
               reloadKey={profileVersion}
               onOpenRecipe={openRecipe}
               onEdit={() => setSheet({ kind: 'edit-profile' })}
-              onSignOut={onSignOut}
               onOpenList={(kind) => openList(me.username, kind)}
             />
           </LargeTitleScreen>,
         )}
       </motion.div>
 
-      <TabBar tab={tab} onChange={changeTab} />
+      <TabBar tab={tab} onChange={changeTab} badges={{ profile: notes.unread }} />
 
       <AnimatePresence>
         {stack.map((entry, i) =>
@@ -177,6 +211,10 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
                 />
               </div>
             </PushedScreen>
+          ) : entry.kind === 'activity' ? (
+            <PushedScreen key={`activity-${i}`} title="Aktywność" onBack={pop}>
+              <ActivityScreen arrivals={notes.arrivals} onSeen={onSeen} onOpenProfile={openProfile} onOpenRecipe={openRecipeById} />
+            </PushedScreen>
           ) : (
             <PushedScreen
               key={`people-${entry.username}-${entry.list}-${i}`}
@@ -190,6 +228,16 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
       </AnimatePresence>
 
       <AnimatePresence>
+        {sheet?.kind === 'menu' && (
+          <SettingsMenu
+            key="menu"
+            unread={notes.unread}
+            onClose={() => setSheet(null)}
+            onActivity={openActivity}
+            onEditProfile={() => setSheet({ kind: 'edit-profile' })}
+            onSignOut={onSignOut}
+          />
+        )}
         {sheet?.kind === 'add' && (
           <Sheet key="add" onClose={() => setSheet(null)}>
             <AddRecipeScreen
@@ -231,6 +279,11 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
           </Sheet>
         )}
       </AnimatePresence>
+      <NotificationToast
+        notification={top?.kind === 'activity' ? null : notes.latest}
+        onOpen={openActivity}
+        onDismiss={notes.dismissLatest}
+      />
     </div>
   )
 }

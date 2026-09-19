@@ -1,14 +1,16 @@
 /**
- * iOS potrafi uruchomić aplikację z ekranu głównego z widokiem niższym niż ekran:
- * `innerHeight` nie obejmuje wtedy pasa ze wskaźnikiem gestu, a pod aplikacją widać czerń.
- * W trybie standalone wymuszamy więc wysokość równą wysokości ekranu (CSS: `html.fit-screen`).
- * Ograniczamy różnicę do rozmiaru pasa, żeby nie reagować na klawiaturę ani inne zmiany.
+ * iPhone w trybie aplikacji z ekranu głównego czasem zmniejsza widok o pas ze wskaźnikiem gestu
+ * (po klawiaturze, gestach systemowych, powrocie z tła): `innerHeight` robi się niższe niż ekran,
+ * a na dole pojawia się pusty pasek, który znika dopiero po odświeżeniu. Wysokość ekranu iPhone'a
+ * jest stała, więc w tym trybie ustawiamy ją na sztywno (CSS: `html.fit-screen`) zamiast ufać
+ * `innerHeight`, i pilnujemy jej także wtedy, gdy przeglądarka nie wyśle żadnego zdarzenia.
  */
-const MAX_GAP = 100
 
 export function isStandalone(): boolean {
   return (navigator as Navigator & { standalone?: boolean }).standalone === true || matchMedia('(display-mode: standalone)').matches
 }
+
+const isIPhone = () => /iPhone|iPod/.test(navigator.userAgent)
 
 /**
  * Aplikacja nigdy nie przewija dokumentu (przewijają się tylko wewnętrzne kontenery), a iOS po focusie
@@ -28,22 +30,17 @@ export function lockDocumentScroll(): void {
 
 export function fitStandaloneViewport(): void {
   lockDocumentScroll()
-  if (!isStandalone()) return
+  if (!isStandalone() || !isIPhone()) return
   const root = document.documentElement
 
   const apply = () => {
+    // Na iOS screen.width/height zawsze opisują ekran w pionie, niezależnie od obrotu
     const tall = Math.max(screen.width, screen.height)
     const short = Math.min(screen.width, screen.height)
-    const portrait = window.innerHeight >= window.innerWidth
-    const full = portrait ? tall : short
-    const gap = full - window.innerHeight
-    if (gap > 0 && gap <= MAX_GAP) {
-      root.style.setProperty('--app-height', `${full}px`)
-      root.classList.add('fit-screen')
-    } else {
-      root.classList.remove('fit-screen')
-      root.style.removeProperty('--app-height')
-    }
+    const full = window.innerWidth > window.innerHeight ? short : tall
+    const height = `${Math.max(full, window.innerHeight)}px`
+    if (root.style.getPropertyValue('--app-height') !== height) root.style.setProperty('--app-height', height)
+    if (!root.classList.contains('fit-screen')) root.classList.add('fit-screen')
   }
 
   apply()
@@ -51,4 +48,7 @@ export function fitStandaloneViewport(): void {
   window.addEventListener('orientationchange', () => setTimeout(apply, 250))
   window.addEventListener('pageshow', apply)
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && apply())
+  document.addEventListener('focusout', () => setTimeout(apply, 100))
+  // Siatka bezpieczeństwa na zmiany, o których system nie powiadamia; porównanie jest tanie
+  setInterval(apply, 1000)
 }

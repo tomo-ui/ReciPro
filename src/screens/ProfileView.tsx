@@ -14,7 +14,6 @@ interface Props {
   onOpenRecipe: (r: Recipe) => void
   /** Tylko na własnym profilu */
   onEdit?: () => void
-  onSignOut?: () => void
   /** Otwiera listę obserwujących / obserwowanych tego profilu */
   onOpenList?: (kind: 'followers' | 'following') => void
   /** Zmiana wartości wymusza ponowne pobranie profilu (np. po edycji) */
@@ -22,7 +21,7 @@ interface Props {
 }
 
 /** Profil w stylu Instagrama: awatar, liczniki, przycisk obserwowania i siatka przepisów */
-export function ProfileView({ username, onOpenRecipe, onEdit, onSignOut, onOpenList, reloadKey }: Props) {
+export function ProfileView({ username, onOpenRecipe, onEdit, onOpenList, reloadKey }: Props) {
   const [profile, setProfile] = useState<ProfileSummary | null | undefined>(undefined) // undefined = ładowanie
   const [error, setError] = useState<string | null>(null)
 
@@ -113,17 +112,6 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onSignOut, onOpenL
               {onEdit && (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={onEdit} className="flex-1 rounded-[10px] bg-surface-2 py-2 text-[15px] font-semibold">
                   Edytuj profil
-                </motion.button>
-              )}
-              {onSignOut && (
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => {
-                    if (confirm('Wylogować się?')) onSignOut()
-                  }}
-                  className="rounded-[10px] bg-surface-2 px-4 py-2 text-[15px] font-semibold text-red-500"
-                >
-                  Wyloguj
                 </motion.button>
               )}
             </>

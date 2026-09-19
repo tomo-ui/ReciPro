@@ -216,3 +216,48 @@ describe('tryb bez klienta', () => {
     expect(() => b.subscribeProfileCounts('u', vi.fn())).toThrow(/nie jest skonfigurowany/)
   })
 })
+
+describe('powiadomienia', () => {
+  const row = { id: 'n1', type: 'comment', created_at: '2026-09-19T10:00:00Z', is_read: false, actor_id: 'u', actor_username: 'anna', actor_full_name: null, actor_avatar_url: 'https://x/a.jpg', recipe_id: 'r', recipe_title: 'Placki', recipe_image_url: null, comment_body: 'Pycha' }
+
+  it('listNotifications mapuje wiersze i przekazuje stronicowanie', async () => {
+    const f = fake({ rpc: () => ok([row, { ...row, id: 'n2', type: 'follow', recipe_id: null, recipe_title: null, comment_body: null, is_read: true }]) })
+    const [a, b] = await f.backend.listNotifications(20, 10)
+    expect(a).toEqual({
+      id: 'n1', type: 'comment', created_at: '2026-09-19T10:00:00Z', read: false,
+      actor: { username: 'anna', full_name: undefined, avatar_url: 'https://x/a.jpg' },
+      recipe: { id: 'r', title: 'Placki', image_url: undefined }, comment_body: 'Pycha',
+    })
+    expect(b).toMatchObject({ type: 'follow', read: true, recipe: undefined, comment_body: undefined })
+    expect(f.rpcCalls[0]).toEqual({ name: 'list_notifications', args: { p_limit: 10, p_offset: 20 } })
+  })
+
+  it('licznik i oznaczanie jako przeczytane', async () => {
+    const f = fake({ rpc: (name) => ok(name === 'unread_notification_count' ? 4 : null) })
+    expect(await f.backend.countUnreadNotifications()).toBe(4)
+    await f.backend.markNotificationsRead()
+    expect(f.rpcCalls.map((c) => c.name)).toEqual(['unread_notification_count', 'mark_notifications_read'])
+  })
+
+  it('nasłuchuje wstawień do notifications tylko dla mnie i kończy nasłuch', () => {
+    const f = fake()
+    let n = 0
+    const stop = f.backend.subscribeNotifications('u-1', () => n++)
+    const ch = f.channels[0]
+    expect(ch.subscribed).toBe(true)
+    expect(ch.listeners[0].filter).toEqual({ event: 'INSERT', schema: 'public', table: 'notifications', filter: 'recipient_id=eq.u-1' })
+    ch.listeners[0].cb({ new: { id: 'x' } })
+    expect(n).toBe(1)
+    stop()
+    expect(f.removed).toEqual([ch])
+  })
+
+  it('getRecipe: brak wiersza daje null', async () => {
+    expect(await fake({ results: () => ok(null) }).backend.getRecipe('x')).toBeNull()
+  })
+
+  it('brak migracji wskazuje notifications.sql', async () => {
+    const f = fake({ rpc: () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.list_notifications' } }) })
+    await expect(f.backend.listNotifications(0, 5)).rejects.toThrow(/notifications\.sql/)
+  })
+})

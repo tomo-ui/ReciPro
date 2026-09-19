@@ -1,4 +1,5 @@
 import type {
+  AppNotification,
   Comment,
   Profile,
   ProfileCounts,
@@ -51,6 +52,16 @@ export interface Backend {
   listFollowing(username: string, offset: number, limit: number): Promise<ProfileSummary[]>
   /** Nasłuchuje zmian liczników profilu na żywo. Zwraca funkcję kończącą nasłuchiwanie. */
   subscribeProfileCounts(userId: string, onCounts: (counts: ProfileCounts) => void): () => void
+
+  /* — aktywność (powiadomienia) — */
+  /** Polubienia, komentarze i nowi obserwujący, od najnowszych */
+  listNotifications(offset: number, limit: number): Promise<AppNotification[]>
+  countUnreadNotifications(): Promise<number>
+  markNotificationsRead(): Promise<void>
+  /** Wywołuje `onNew` na żywo, gdy pojawi się nowe powiadomienie. Zwraca funkcję kończącą nasłuchiwanie. */
+  subscribeNotifications(userId: string, onNew: () => void): () => void
+  /** Przepis po id (widoczny dla zalogowanego) albo null */
+  getRecipe(id: string): Promise<Recipe | null>
 
   /* — odkrywanie — */
   searchRecipes(query: string, sort: RecipeSort, offset: number, limit: number): Promise<Recipe[]>

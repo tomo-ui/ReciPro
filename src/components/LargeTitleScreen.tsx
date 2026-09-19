@@ -6,6 +6,8 @@ interface Props {
   title: string
   left?: ReactNode
   right?: ReactNode
+  /** `inline`: bez dużego tytułu — nazwa wyśrodkowana na pasku (jak nazwa użytkownika na profilu w Instagramie) */
+  variant?: 'large' | 'inline'
   children: ReactNode
 }
 
@@ -13,7 +15,8 @@ interface Props {
  * Szkielet ekranu zakładki w stylu iOS: duży tytuł, który przy przewijaniu zamienia się w mały
  * na rozmytym pasku, oraz dolny margines na pasek zakładek.
  */
-export function LargeTitleScreen({ title, left, right, children }: Props) {
+export function LargeTitleScreen({ title, left, right, variant = 'large', children }: Props) {
+  const inline = variant === 'inline'
   const scrollRef = useRef<HTMLDivElement>(null)
   const { scrollY } = useScroll({ container: scrollRef })
   const smallTitleOpacity = useTransform(scrollY, [36, 64], [0, 1])
@@ -25,7 +28,10 @@ export function LargeTitleScreen({ title, left, right, children }: Props) {
         <motion.div className="glass absolute inset-0 border-b border-separator" style={{ opacity: barBgOpacity }} />
         <div className="relative flex h-11 items-center justify-between pr-[max(16px,env(safe-area-inset-right))] pl-[max(16px,env(safe-area-inset-left))]">
           <div className="flex min-w-9 items-center">{left}</div>
-          <motion.h2 style={{ opacity: smallTitleOpacity }} className="text-[17px] font-semibold">
+          <motion.h2
+            style={{ opacity: inline ? 1 : smallTitleOpacity }}
+            className={inline ? 'max-w-[70%] truncate text-[20px] font-bold tracking-tight' : 'text-[17px] font-semibold'}
+          >
             {title}
           </motion.h2>
           <div className="flex min-w-9 items-center justify-end">{right}</div>
@@ -37,7 +43,7 @@ export function LargeTitleScreen({ title, left, right, children }: Props) {
           className="px-[max(16px,env(safe-area-inset-left))] pt-[calc(env(safe-area-inset-top,0px)+44px)]"
           style={{ paddingBottom: TAB_BAR_PADDING }}
         >
-          <h1 className="pt-1 pb-3 text-[34px] leading-tight font-bold tracking-tight">{title}</h1>
+          {!inline && <h1 className="pt-1 pb-3 text-[34px] leading-tight font-bold tracking-tight">{title}</h1>}
           {children}
         </div>
       </div>

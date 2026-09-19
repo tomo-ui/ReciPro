@@ -1,6 +1,6 @@
-import type { Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
+import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
 import type { Backend, FeedMode, ProfilePatch, RecipeSort } from './backend'
-import { on } from './events'
+import { emit, on } from './events'
 import { seedRecipes } from './seed'
 import { fold } from './text'
 import { normalizeFullName, normalizeUsername, validateUsername } from './username'
@@ -20,6 +20,7 @@ const KEYS = {
   follows: 'przepisy:v2:follows',
   likes: 'przepisy:v2:likes',
   comments: 'przepisy:v2:comments',
+  notifications: 'przepisy:v2:notifications',
 }
 
 /* — magazyn: localStorage, a gdy go brak (testy, tryb prywatny) — pamięć — */
@@ -113,6 +114,72 @@ function buildDemo(): DemoUser[] {
       make('sekret', 1, 'Tajny przepis babci', ['obiad', 'sekret'], ['ziemniaki', 'śmietana'], ['Ugotuj.'], 4, 60, 9),
     ]),
   ]
+}
+
+/* — powiadomienia (przykładowe, bo lokalnie nikt poza Tobą nic nie robi) — */
+
+interface StoredNotification {
+  id: string
+  type: AppNotification['type']
+  /** nazwa użytkownika przykładowej osoby */
+  actor: string
+  recipe_id?: string
+  comment_body?: string
+  created_at: string
+  read: boolean
+}
+
+function seedNotifications(): StoredNotification[] {
+  const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString()
+  const own = read<Recipe[] | null>(KEYS.recipes, () => null)?.[0]?.id
+  const first = own ?? 'demo-anna-1'
+  return [
+    { id: 'demo-n1', type: 'like', actor: 'anna_gotuje', recipe_id: first, created_at: ago(4), read: false },
+    { id: 'demo-n2', type: 'comment', actor: 'marek_grilluje', recipe_id: first, comment_body: 'Robiłem wczoraj, wyszło świetnie!', created_at: ago(35), read: false },
+    { id: 'demo-n3', type: 'follow', actor: 'kuchnia.zosi', created_at: ago(60 * 26), read: true },
+  ]
+}
+const loadNotifications = () => read<StoredNotification[]>(KEYS.notifications, seedNotifications)
+const saveNotifications = (list: StoredNotification[]) => write(KEYS.notifications, list)
+
+/** Tylko tryb demo i testy: dodaje nowe powiadomienie tak, jakby przyszło na żywo */
+export function pushDemoNotification(type: AppNotification['type'] = 'like', actor = 'anna_gotuje'): void {
+  const recipe = loadOwn()[0]
+  const item: StoredNotification = {
+    id: crypto.randomUUID(),
+    type,
+    actor,
+    recipe_id: type === 'follow' ? undefined : recipe?.id,
+    comment_body: type === 'comment' ? 'Wygląda pysznie!' : undefined,
+    created_at: new Date().toISOString(),
+    read: false,
+  }
+  saveNotifications([item, ...loadNotifications()])
+  emit('notifications-changed')
+}
+
+/** Powiadomienia w postaci widzianej przez aplikację (bez tych, których przepis już nie istnieje) */
+function visibleNotifications(): AppNotification[] {
+  const own = loadOwn()
+  return loadNotifications()
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .flatMap((n): AppNotification[] => {
+      const actor = allProfiles().find((p) => p.username === n.actor)
+      if (!actor) return []
+      const recipe = n.recipe_id ? own.find((r) => r.id === n.recipe_id) : undefined
+      if (n.type !== 'follow' && !recipe) return [] // przepis usunięty razem z powiadomieniem
+      return [
+        {
+          id: n.id,
+          type: n.type,
+          created_at: n.created_at,
+          read: n.read,
+          actor: { username: actor.username, full_name: actor.full_name, avatar_url: actor.avatar_url },
+          recipe: recipe && { id: recipe.id, title: recipe.title, image_url: recipe.image_url },
+          comment_body: n.comment_body,
+        },
+      ]
+    })
 }
 
 /* — implementacja — */
@@ -357,6 +424,28 @@ export const localBackend: Backend = {
       const { followers_count, following_count } = summary(p)
       onCounts({ followers_count, following_count })
     })
+  },
+
+  async listNotifications(offset, limit) {
+    return page(visibleNotifications(), offset, limit)
+  },
+
+  async countUnreadNotifications() {
+    return visibleNotifications().filter((n) => !n.read).length
+  },
+
+  async markNotificationsRead() {
+    saveNotifications(loadNotifications().map((n) => ({ ...n, read: true })))
+  },
+
+  subscribeNotifications(_userId, onNew) {
+    return on('notifications-changed', onNew)
+  },
+
+  async getRecipe(id) {
+    const own = loadOwn().find((r) => r.id === id)
+    if (own) return withAuthor(own, loadMe())
+    return publicDemoRecipes().find((r) => r.id === id) ?? null
   },
 
   async getRecipeStats(ids) {

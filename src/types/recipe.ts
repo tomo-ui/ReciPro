@@ -114,3 +114,18 @@ export interface ProfileCounts {
   followers_count: number
   following_count: number
 }
+
+export type NotificationType = 'like' | 'comment' | 'follow'
+
+/** Pozycja aktywności: ktoś polubił / skomentował mój przepis albo zaczął mnie obserwować */
+export interface AppNotification {
+  id: string
+  type: NotificationType
+  created_at: string
+  /** Czy zostało już oznaczone jako przeczytane */
+  read: boolean
+  actor: RecipeAuthor
+  /** Przepis, którego dotyczy polubienie lub komentarz */
+  recipe?: { id: string; title: string; image_url?: string }
+  comment_body?: string
+}

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Comment, Profile, ProfileSummary, Recipe, RecipeStats } from '@/types/recipe'
+import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeStats } from '@/types/recipe'
 import type { Backend } from './backend'
 import { deleteRecipeImage } from './images'
 import { supabase } from './supabase'
@@ -52,6 +52,29 @@ const toSummary = (r: ProfileSummaryRow): ProfileSummary => ({
   is_following: r.is_following,
   is_me: r.is_me,
 })
+interface NotificationRow {
+  id: string
+  type: AppNotification['type']
+  created_at: string
+  is_read: boolean
+  actor_id: string
+  actor_username: string
+  actor_full_name: string | null
+  actor_avatar_url: string | null
+  recipe_id: string | null
+  recipe_title: string | null
+  recipe_image_url: string | null
+  comment_body: string | null
+}
+const toNotification = (r: NotificationRow): AppNotification => ({
+  id: r.id,
+  type: r.type,
+  created_at: r.created_at,
+  read: r.is_read,
+  actor: { username: r.actor_username, full_name: r.actor_full_name ?? undefined, avatar_url: r.actor_avatar_url ?? undefined },
+  recipe: r.recipe_id ? { id: r.recipe_id, title: r.recipe_title ?? '', image_url: r.recipe_image_url ?? undefined } : undefined,
+  comment_body: r.comment_body ?? undefined,
+})
 const toComment = (r: CommentRow): Comment => ({
   id: r.id,
   recipe_id: r.recipe_id,
@@ -72,7 +95,7 @@ function fail(error: { code?: string; message: string }, context?: 'profile'): n
     /could not find the (function|table)/i.test(error.message)
   if (migrationMissing) {
     throw new Error(
-      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql i supabase/engagement.sql w SQL Editorze Supabase.',
+      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql, engagement.sql i notifications.sql w SQL Editorze Supabase.',
     )
   }
   if (context === 'profile' && error.code === '23505') throw new Error('Ta nazwa użytkownika jest już zajęta.')
@@ -243,6 +266,47 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       return () => {
         void c.removeChannel(channel)
       }
+    },
+
+    /* — aktywność (powiadomienia) — */
+
+    async listNotifications(offset, limit) {
+      const { data, error } = await client().rpc('list_notifications', { p_limit: limit, p_offset: offset })
+      if (error) fail(error)
+      return (data as NotificationRow[]).map(toNotification)
+    },
+
+    async countUnreadNotifications() {
+      const { data, error } = await client().rpc('unread_notification_count')
+      if (error) fail(error)
+      return Number(data) || 0
+    },
+
+    async markNotificationsRead() {
+      const { error } = await client().rpc('mark_notifications_read')
+      if (error) fail(error)
+    },
+
+    subscribeNotifications(userId, onNew) {
+      const c = client()
+      // Powiadomienia tworzą triggery; RLS wysyła zdarzenie tylko odbiorcy, a filtr zawęża je do jego wierszy
+      const channel = c
+        .channel(`notifications-${userId}-${++channelSeq}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${userId}` },
+          () => onNew(),
+        )
+        .subscribe()
+      return () => {
+        void c.removeChannel(channel)
+      }
+    },
+
+    async getRecipe(id) {
+      const { data, error } = await client().from('recipes').select('*').eq('id', id).maybeSingle()
+      if (error) fail(error)
+      return data ? rowToRecipe(data as RecipeRow) : null
     },
 
     /* — odkrywanie — */
