@@ -91,20 +91,19 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onOpenList, reload
       <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pt-4 pb-5">
         <div className="flex items-center gap-4">
           <Avatar name={profile.username} src={profile.avatar_url} size={84} />
-          <div className="min-w-0 flex-1">
-            {/* Imię i nazwisko nad licznikami, jak w Instagramie; nazwa użytkownika jest tylko w nagłówku ekranu */}
-            {(profile.full_name || !profile.is_public) && (
-              <p className="mb-1.5 flex items-center gap-1.5 truncate text-[16px] font-semibold">
-                <span className="truncate">{profile.full_name ?? ''}</span>
-                {!profile.is_public && <LockIcon width={14} height={14} className="shrink-0 text-label-2" aria-label="Profil prywatny" />}
-              </p>
-            )}
-            <div className="grid grid-cols-3 text-center">
-              <Stat value={visible ? profile.recipe_count : '–'} label="przepisów" />
-              <Stat value={profile.followers_count} label="obserwujących" onClick={visible && onOpenList ? () => onOpenList('followers') : undefined} />
-              <Stat value={profile.following_count} label="obserwuje" onClick={visible && onOpenList ? () => onOpenList('following') : undefined} />
-            </div>
+          <div className="grid flex-1 grid-cols-3 text-center">
+            <Stat value={visible ? profile.recipe_count : '–'} label="przepisów" />
+            <Stat value={profile.followers_count} label="obserwujących" onClick={visible && onOpenList ? () => onOpenList('followers') : undefined} />
+            <Stat value={profile.following_count} label="obserwuje" onClick={visible && onOpenList ? () => onOpenList('following') : undefined} />
           </div>
+        </div>
+
+        <div className="mt-3">
+          <p className="flex items-center gap-1.5 text-[17px] font-semibold">
+            @{profile.username}
+            {!profile.is_public && <LockIcon width={15} height={15} className="text-label-2" aria-label="Profil prywatny" />}
+          </p>
+          {profile.full_name && <p className="text-[15px] text-label-2">{profile.full_name}</p>}
         </div>
 
         <div className="mt-4 flex gap-2">
