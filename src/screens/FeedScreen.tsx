@@ -7,7 +7,7 @@ import { on } from '@/lib/events'
 import { usePaged } from '@/hooks/usePaged'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { FeedCard } from '@/components/FeedCard'
-import { ShuffleIcon } from '@/components/Icons'
+import { HeartIcon, ShuffleIcon } from '@/components/Icons'
 import { LargeTitleScreen } from '@/components/LargeTitleScreen'
 import { LoadMore } from '@/components/LoadMore'
 import { SegmentedControl } from '@/components/SegmentedControl'
@@ -16,6 +16,9 @@ interface Props {
   onOpenRecipe: (r: Recipe) => void
   onOpenProfile: (username: string) => void
   onGoSearch: () => void
+  /** Centrum powiadomień i liczba nieprzeczytanych */
+  onOpenActivity: () => void
+  unread: number
 }
 
 const newSeed = () => crypto.randomUUID()
@@ -25,7 +28,7 @@ const newSeed = () => crypto.randomUUID()
  * (stabilnej w obrębie jednego „tasowania”, więc doładowywanie nie powtarza pozycji),
  * a filtr „Najnowsze” pokazuje je chronologicznie.
  */
-export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch }: Props) {
+export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch, onOpenActivity, unread }: Props) {
   const [mode, setMode] = useState<FeedMode>('random')
   const [seed, setSeed] = useState(newSeed)
   const feed = usePaged((offset, limit) => backend.feed(mode, seed, offset, limit), [mode, seed], 8)
@@ -40,16 +43,31 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch }: Props) {
     <LargeTitleScreen
       title="Feed"
       right={
-        mode === 'random' ? (
+        <div className="flex items-center gap-2">
+          {mode === 'random' && (
+            <motion.button
+              whileTap={{ scale: 0.88, rotate: 90 }}
+              onClick={() => setSeed(newSeed())}
+              aria-label="Wymieszaj ponownie"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-2 text-label-2"
+            >
+              <ShuffleIcon width={18} height={18} />
+            </motion.button>
+          )}
           <motion.button
-            whileTap={{ scale: 0.88, rotate: 90 }}
-            onClick={() => setSeed(newSeed())}
-            aria-label="Wymieszaj ponownie"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-2 text-label-2"
+            whileTap={{ scale: 0.88 }}
+            onClick={onOpenActivity}
+            aria-label={unread > 0 ? `Aktywność, nowe: ${unread}` : 'Aktywność'}
+            className="relative flex h-9 w-9 items-center justify-center rounded-full"
           >
-            <ShuffleIcon width={18} height={18} />
+            <HeartIcon width={26} height={26} strokeWidth={2} />
+            {unread > 0 && (
+              <span className="absolute top-0 -right-0.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] leading-none font-bold text-white tabular-nums">
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
           </motion.button>
-        ) : undefined
+        </div>
       }
     >
       <div className="mb-4">

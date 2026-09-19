@@ -137,7 +137,13 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         animate={{ x: top ? '-28%' : 0, opacity: top ? 0.6 : 1 }}
         transition={spring}
       >
-        {screen('feed', <FeedScreen onOpenRecipe={openRecipe} onOpenProfile={openProfile} onGoSearch={() => changeTab('search')} />)}
+        {screen('feed', <FeedScreen
+            onOpenRecipe={openRecipe}
+            onOpenProfile={openProfile}
+            onGoSearch={() => changeTab('search')}
+            onOpenActivity={openActivity}
+            unread={notes.unread}
+          />)}
         {screen('search', <SearchScreen onOpenRecipe={openRecipe} onOpenProfile={openProfile} />)}
         {screen(
           'mine',
