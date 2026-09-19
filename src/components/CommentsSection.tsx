@@ -64,26 +64,26 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
 
   return (
     <div>
-      <form onSubmit={send} className="flex items-start gap-3">
-        <Avatar name={me.username} src={me.avatar_url} size={40} />
+      <form onSubmit={send} className="flex items-center gap-2.5">
+        <Avatar name={me.username} src={me.avatar_url} size={34} />
         {/* Wyraźnie obrysowane pole obok mojego zdjęcia; po dotknięciu podświetla się na kolor akcentu */}
-        <div className="flex min-w-0 flex-1 items-end gap-2 rounded-[22px] border-[1.5px] border-label-3 bg-surface py-1.5 pr-1.5 pl-4 shadow-sm transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[20px] border-[1.5px] border-label-3 bg-surface py-0.5 pr-1 pl-3.5 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, MAX))}
-            placeholder={`Dodaj komentarz jako ${me.username}…`}
+            placeholder="Dodaj komentarz…"
             rows={1}
             aria-label="Komentarz"
-            className="max-h-32 min-h-[30px] min-w-0 flex-1 resize-none bg-transparent py-1 leading-snug outline-none [field-sizing:content] placeholder:text-label-3"
+            className="max-h-32 min-h-[28px] min-w-0 flex-1 resize-none bg-transparent py-1 leading-snug outline-none [field-sizing:content] placeholder:text-label-3"
           />
           <motion.button
             type="submit"
             whileTap={{ scale: 0.9 }}
             disabled={!text.trim() || sending}
             aria-label="Wyślij komentarz"
-            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
+            className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
           >
-            {sending ? <SpinnerIcon width={16} height={16} /> : <SendIcon width={16} height={16} strokeWidth={2.6} />}
+            {sending ? <SpinnerIcon width={16} height={16} /> : <SendIcon width={15} height={15} strokeWidth={2.6} />}
           </motion.button>
         </div>
       </form>
