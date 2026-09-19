@@ -58,6 +58,7 @@ export interface Recipe {
 export interface RecipeAuthor {
   username: string
   full_name?: string
+  avatar_url?: string
 }
 
 /** Profil użytkownika (tabela `profiles`) */
@@ -65,6 +66,8 @@ export interface Profile {
   id: string
   username: string
   full_name?: string
+  /** Zdjęcie profilowe (adres w Storage) */
+  avatar_url?: string
   is_public: boolean
 }
 
@@ -87,3 +90,27 @@ export const emptyDraft = (): RecipeDraft => ({
   tags: [],
   parse_method: 'manual',
 })
+
+/** Polubienia i komentarze przepisu widziane przez zalogowanego użytkownika */
+export interface RecipeStats {
+  like_count: number
+  comment_count: number
+  /** Czy zalogowany użytkownik polubił ten przepis */
+  liked: boolean
+}
+
+/** Komentarz pod przepisem z danymi autora */
+export interface Comment {
+  id: string
+  recipe_id: string
+  user_id: string
+  body: string
+  created_at: string
+  author: RecipeAuthor
+}
+
+/** Liczniki profilu, które backend potrafi wysyłać na żywo */
+export interface ProfileCounts {
+  followers_count: number
+  following_count: number
+}

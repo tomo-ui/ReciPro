@@ -1,4 +1,13 @@
-import type { Profile, ProfileSummary, Recipe, RecipeDraft } from '@/types/recipe'
+import type {
+  Comment,
+  Profile,
+  ProfileCounts,
+  ProfileSummary,
+  Recipe,
+  RecipeAuthor,
+  RecipeDraft,
+  RecipeStats,
+} from '@/types/recipe'
 
 /**
  * Wszystko, czego aplikacja potrzebuje od danych. UI zna tylko ten interfejs —
@@ -12,6 +21,8 @@ export interface ProfilePatch {
   username?: string
   full_name?: string | null
   is_public?: boolean
+  /** Adres nowego zdjęcia profilowego; null usuwa zdjęcie */
+  avatar_url?: string | null
 }
 
 export interface Backend {
@@ -35,9 +46,23 @@ export interface Backend {
   searchProfiles(query: string, offset: number, limit: number): Promise<ProfileSummary[]>
   follow(userId: string): Promise<void>
   unfollow(userId: string): Promise<void>
+  /** Obserwujący / obserwowani danego profilu, od najnowszych (profil prywatny: tylko dla właściciela) */
+  listFollowers(username: string, offset: number, limit: number): Promise<ProfileSummary[]>
+  listFollowing(username: string, offset: number, limit: number): Promise<ProfileSummary[]>
+  /** Nasłuchuje zmian liczników profilu na żywo. Zwraca funkcję kończącą nasłuchiwanie. */
+  subscribeProfileCounts(userId: string, onCounts: (counts: ProfileCounts) => void): () => void
 
   /* — odkrywanie — */
   searchRecipes(query: string, sort: RecipeSort, offset: number, limit: number): Promise<Recipe[]>
   feed(mode: FeedMode, seed: string, offset: number, limit: number): Promise<Recipe[]>
   popularTags(limit: number): Promise<{ tag: string; uses: number }[]>
+
+  /* — polubienia i komentarze — */
+  getRecipeStats(ids: string[]): Promise<Record<string, RecipeStats>>
+  likeRecipe(recipeId: string): Promise<void>
+  unlikeRecipe(recipeId: string): Promise<void>
+  listComments(recipeId: string, offset: number, limit: number): Promise<Comment[]>
+  /** `author` to zalogowany użytkownik — potrzebny, żeby od razu pokazać nowy komentarz */
+  addComment(recipeId: string, body: string, author: RecipeAuthor): Promise<Comment>
+  deleteComment(comment: Comment): Promise<void>
 }

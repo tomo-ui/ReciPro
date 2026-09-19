@@ -48,6 +48,35 @@ export async function fileToCoverBlob(file: File): Promise<Blob> {
   }
 }
 
+/** Rozmiar zdjęcia profilowego (px) — wystarcza na 3× ekranie przy awatarze 84 pt */
+export const AVATAR_SIZE = 320
+
+/** Środek zdjęcia jako kwadrat AVATAR_SIZE × AVATAR_SIZE, JPEG — na zdjęcie profilowe */
+export async function fileToAvatarBlob(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  try {
+    const side = Math.min(bitmap.width, bitmap.height)
+    const sx = Math.floor((bitmap.width - side) / 2)
+    const sy = Math.floor((bitmap.height - side) / 2)
+    const out = Math.min(side, AVATAR_SIZE)
+    const canvas = document.createElement('canvas')
+    canvas.width = out
+    canvas.height = out
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Przeglądarka nie obsługuje przetwarzania obrazów.')
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, out, out)
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Nie udało się przetworzyć zdjęcia.'))), 'image/jpeg', 0.88),
+    )
+  } finally {
+    bitmap.close()
+  }
+}
+
+/** Zapisuje zdjęcie profilowe (folder użytkownika, plik „avatar-…”) */
+export const uploadAvatarImage = (blob: Blob) => uploadRecipeImage(blob, 'avatar-')
+
 const blobToDataUrl = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -56,13 +85,13 @@ const blobToDataUrl = (blob: Blob) =>
     reader.readAsDataURL(blob)
   })
 
-/** Zapisuje zdjęcie i zwraca adres do `image_url` */
-export async function uploadRecipeImage(blob: Blob): Promise<string> {
+/** Zapisuje zdjęcie i zwraca jego adres. `namePrefix` odróżnia rodzaj pliku w folderze użytkownika (np. „avatar-”). */
+export async function uploadRecipeImage(blob: Blob, namePrefix = ''): Promise<string> {
   if (!supabase || !usesSupabase) return blobToDataUrl(blob) // tryb lokalny: obraz zostaje w przepisie jako data URL
 
   const { data: userData, error: userError } = await supabase.auth.getUser()
   if (userError || !userData.user) throw new Error('Zaloguj się ponownie, żeby dodać zdjęcie.')
-  const path = `${userData.user.id}/${crypto.randomUUID()}.jpg`
+  const path = `${userData.user.id}/${namePrefix}${crypto.randomUUID()}.jpg`
 
   const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000' })
   if (error) throw new Error(`Nie udało się zapisać zdjęcia: ${error.message}`)

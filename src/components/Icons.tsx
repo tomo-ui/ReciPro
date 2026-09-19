@@ -111,3 +111,18 @@ export const XIcon = (p: P) => (
     <path d="M6 6l12 12M18 6 6 18" />
   </svg>
 )
+export const HeartIcon = ({ filled, ...p }: P & { filled?: boolean }) => (
+  <svg {...base({ ...p, fill: filled ? 'currentColor' : 'none' })}>
+    <path d="M12 20.5s-7.5-4.6-9.3-9.3C1.6 8 3.4 5 6.6 5c2 0 3.6 1.1 5.4 3.2C13.8 6.1 15.4 5 17.4 5c3.2 0 5 3 3.9 6.2-1.8 4.7-9.3 9.3-9.3 9.3z" />
+  </svg>
+)
+export const CommentIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4A8 8 0 1 1 20 12z" />
+  </svg>
+)
+export const SendIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </svg>
+)

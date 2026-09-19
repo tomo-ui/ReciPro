@@ -151,23 +151,37 @@ export function LoginScreen() {
         </div>
 
         <form onSubmit={submit} className="space-y-3">
-          {signup && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3 overflow-hidden">
-              <div className="overflow-hidden rounded-[14px] bg-surface">
-                <UsernameInput value={username} onChange={setUsername} status={usernameStatus} />
-              </div>
-              <div className="overflow-hidden rounded-[14px] bg-surface">
-                <input
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="imię i nazwisko (opcjonalnie)"
-                  maxLength={60}
-                  autoComplete="name"
-                  className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
-                />
-              </div>
-            </motion.div>
-          )}
+          {/* Pola rejestracji rozwijają się i zwijają tą samą animacją przy zmianie zakładki */}
+          <AnimatePresence initial={false}>
+            {signup && (
+              <motion.div
+                key="signup-fields"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+                // odstęp pod polami jest wewnątrz animowanego bloku, więc znika płynnie razem z nim
+                style={{ marginTop: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-3 pb-3">
+                  <div className="overflow-hidden rounded-[14px] bg-surface">
+                    <UsernameInput value={username} onChange={setUsername} status={usernameStatus} />
+                  </div>
+                  <div className="overflow-hidden rounded-[14px] bg-surface">
+                    <input
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="imię i nazwisko (opcjonalnie)"
+                      maxLength={60}
+                      autoComplete="name"
+                      className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="divide-y divide-separator overflow-hidden rounded-[14px] bg-surface">
             <input
               type="email"

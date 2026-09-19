@@ -5,6 +5,7 @@ import type { FeedMode } from '@/lib/backend'
 import { backend } from '@/lib/data'
 import { on } from '@/lib/events'
 import { usePaged } from '@/hooks/usePaged'
+import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { FeedCard } from '@/components/FeedCard'
 import { ShuffleIcon } from '@/components/Icons'
 import { LargeTitleScreen } from '@/components/LargeTitleScreen'
@@ -28,6 +29,7 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch }: Props) {
   const [mode, setMode] = useState<FeedMode>('random')
   const [seed, setSeed] = useState(newSeed)
   const feed = usePaged((offset, limit) => backend.feed(mode, seed, offset, limit), [mode, seed], 8)
+  const { stats, set: setStats } = useRecipeStats(feed.items)
 
   // Zmiana listy obserwowanych (na profilu) → nowe losowanie z aktualnymi danymi
   useEffect(() => on('follows-changed', () => setSeed(newSeed())), [])
@@ -74,7 +76,14 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch }: Props) {
       ) : (
         <div className="space-y-4">
           {feed.items.map((r) => (
-            <FeedCard key={r.id} recipe={r} onOpen={() => onOpenRecipe(r)} onOpenAuthor={onOpenProfile} />
+            <FeedCard
+              key={r.id}
+              recipe={r}
+              stats={stats[r.id]}
+              onStatsChange={(next) => setStats(r.id, next)}
+              onOpen={() => onOpenRecipe(r)}
+              onOpenAuthor={onOpenProfile}
+            />
           ))}
           <LoadMore loading={feed.loading} done={feed.done} error={feed.error} onLoadMore={feed.loadMore} onRetry={feed.retry} />
         </div>

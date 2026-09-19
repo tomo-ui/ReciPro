@@ -1,18 +1,22 @@
 import { motion } from 'framer-motion'
-import type { Recipe } from '@/types/recipe'
+import type { Recipe, RecipeStats } from '@/types/recipe'
 import { formatMinutes, timeAgo, totalTime } from '@/lib/ui'
 import { Avatar } from './Avatar'
-import { ClockIcon, UsersIcon } from './Icons'
+import { ClockIcon, CommentIcon, UsersIcon } from './Icons'
+import { LikeButton } from './LikeButton'
 import { Cover } from './RecipeCard'
 
 interface Props {
   recipe: Recipe
+  /** Polubienia i komentarze; puste, dopóki się wczytują */
+  stats?: RecipeStats
+  onStatsChange: (next: RecipeStats) => void
   onOpen: () => void
   onOpenAuthor: (username: string) => void
 }
 
 /** Duża karta do feedu: autor, zdjęcie 4:3, tytuł, czas, porcje i tagi */
-export function FeedCard({ recipe, onOpen, onOpenAuthor }: Props) {
+export function FeedCard({ recipe, stats, onStatsChange, onOpen, onOpenAuthor }: Props) {
   const author = recipe.author
   const time = formatMinutes(totalTime(recipe))
 
@@ -25,7 +29,7 @@ export function FeedCard({ recipe, onOpen, onOpenAuthor }: Props) {
     >
       {author && (
         <button onClick={() => onOpenAuthor(author.username)} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left">
-          <Avatar name={author.username} size={34} />
+          <Avatar name={author.username} src={author.avatar_url} size={34} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[15px] leading-tight font-semibold">{author.username}</span>
             {author.full_name && <span className="block truncate text-[12px] text-label-2">{author.full_name}</span>}
@@ -36,7 +40,7 @@ export function FeedCard({ recipe, onOpen, onOpenAuthor }: Props) {
 
       <motion.button whileTap={{ scale: 0.985 }} onClick={onOpen} className="block w-full text-left">
         <Cover recipe={recipe} className="aspect-[4/3] w-full" />
-        <div className="space-y-2 px-3.5 pt-3 pb-3.5">
+        <div className="space-y-2 px-3.5 pt-3 pb-2.5">
           <h3 className="text-[18px] leading-snug font-semibold">{recipe.title}</h3>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-label-2">
             {time && (
@@ -59,6 +63,14 @@ export function FeedCard({ recipe, onOpen, onOpenAuthor }: Props) {
           )}
         </div>
       </motion.button>
+
+      <div className="flex items-center gap-5 px-3.5 pb-3.5">
+        <LikeButton recipeId={recipe.id} stats={stats} onChange={onStatsChange} />
+        <button onClick={onOpen} aria-label="Komentarze" className="flex items-center gap-1.5 text-[14px] text-label-2">
+          <CommentIcon width={22} height={22} />
+          <span className="tabular-nums">{stats?.comment_count ?? '–'}</span>
+        </button>
+      </div>
     </motion.article>
   )
 }

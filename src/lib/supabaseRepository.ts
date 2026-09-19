@@ -24,6 +24,7 @@ export interface RecipeRow {
 export interface RecipeWithAuthorRow extends RecipeRow {
   author_username: string
   author_full_name: string | null
+  author_avatar_url: string | null
 }
 
 const orUndef = <T>(v: T | null): T | undefined => v ?? undefined
@@ -52,7 +53,11 @@ export function rowToRecipe(r: RecipeRow): Recipe {
 export function rowWithAuthorToRecipe(r: RecipeWithAuthorRow): Recipe {
   return {
     ...rowToRecipe(r),
-    author: { username: r.author_username, full_name: orUndef(r.author_full_name) },
+    author: {
+      username: r.author_username,
+      full_name: orUndef(r.author_full_name),
+      avatar_url: orUndef(r.author_avatar_url),
+    },
   }
 }
 

@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { motion, useDragControls } from 'framer-motion'
-import type { Recipe } from '@/types/recipe'
+import type { Profile, Recipe } from '@/types/recipe'
 import { scaleFactor, scaleIngredient } from '@/lib/scale'
 import { formatMinutes, spring, totalTime } from '@/lib/ui'
+import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { Avatar } from '@/components/Avatar'
-import { ChevronLeftIcon, ClockIcon, MinusIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
+import { ChevronLeftIcon, ClockIcon, CommentIcon, MinusIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
+import { CommentsSection } from '@/components/CommentsSection'
+import { LikeButton } from '@/components/LikeButton'
 import { Cover } from '@/components/RecipeCard'
 
 interface Props {
   recipe: Recipe
+  /** Zalogowany użytkownik (autor nowych komentarzy) */
+  me: Profile
   /** Autor może edytować i usuwać; pozostali tylko oglądają */
   isOwner: boolean
   onBack: () => void
@@ -30,8 +35,10 @@ function groupLines<T extends { group?: string }>(lines: T[]) {
 
 const MAX_SERVINGS = 99
 
-export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, onOpenAuthor }: Props) {
+export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDelete, onOpenAuthor }: Props) {
   const controls = useDragControls()
+  const { stats, set: setStats, update: updateStats } = useRecipeStats([recipe])
+  const recipeStats = stats[recipe.id]
   const time = formatMinutes(totalTime(recipe))
 
   // Kalkulator porcji: zmiana widoku, nie zapisuje się w przepisie (zapis = edycja)
@@ -69,7 +76,7 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
 
           {!isOwner && recipe.author && (
             <button onClick={() => onOpenAuthor(recipe.author!.username)} className="mt-3 flex items-center gap-2.5 text-left">
-              <Avatar name={recipe.author.username} size={30} />
+              <Avatar name={recipe.author.username} src={recipe.author.avatar_url} size={30} />
               <span>
                 <span className="block text-[15px] leading-tight font-semibold">{recipe.author.username}</span>
                 {recipe.author.full_name && <span className="block text-[12px] text-label-2">{recipe.author.full_name}</span>}
@@ -99,6 +106,18 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
                 #{t}
               </Chip>
             ))}
+          </div>
+
+          <div className="mt-5 flex items-center gap-6 border-y border-separator py-3">
+            <LikeButton large recipeId={recipe.id} stats={recipeStats} onChange={(next) => setStats(recipe.id, next)} />
+            <button
+              onClick={() => document.getElementById('komentarze')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              aria-label="Przejdź do komentarzy"
+              className="flex items-center gap-1.5 text-[16px] font-semibold text-label-2"
+            >
+              <CommentIcon width={26} height={26} />
+              <span className="tabular-nums">{recipeStats?.comment_count ?? '–'}</span>
+            </button>
           </div>
 
           <Section title="Składniki">
@@ -170,6 +189,18 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
                 </ol>
               </div>
             ))}
+          </Section>
+
+          <Section title={recipeStats ? `Komentarze (${recipeStats.comment_count})` : 'Komentarze'}>
+            <div id="komentarze">
+              <CommentsSection
+                recipeId={recipe.id}
+                me={me}
+                isRecipeOwner={isOwner}
+                onOpenAuthor={onOpenAuthor}
+                onCountChange={(delta) => updateStats(recipe.id, (st) => ({ ...st, comment_count: Math.max(0, st.comment_count + delta) }))}
+              />
+            </div>
           </Section>
 
           {recipe.source_url && (

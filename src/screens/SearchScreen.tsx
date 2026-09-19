@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import type { ProfileSummary, Recipe } from '@/types/recipe'
+import type { Recipe } from '@/types/recipe'
 import type { RecipeSort } from '@/lib/backend'
 import { backend } from '@/lib/data'
 import { useDebounced } from '@/hooks/useDebounced'
 import { usePaged } from '@/hooks/usePaged'
-import { Avatar } from '@/components/Avatar'
-import { FollowButton } from '@/components/FollowButton'
-import { LockIcon, SearchIcon, XIcon } from '@/components/Icons'
+import { SearchIcon, XIcon } from '@/components/Icons'
 import { LargeTitleScreen } from '@/components/LargeTitleScreen'
 import { LoadMore } from '@/components/LoadMore'
+import { PersonRow } from '@/components/PersonRow'
 import { RecipeCard } from '@/components/RecipeCard'
 import { SegmentedControl } from '@/components/SegmentedControl'
 
@@ -138,27 +136,5 @@ export function SearchScreen({ onOpenRecipe, onOpenProfile }: Props) {
         <LoadMore loading={list.loading} done={list.done} error={list.error} onLoadMore={list.loadMore} onRetry={list.retry} />
       </div>
     </LargeTitleScreen>
-  )
-}
-
-function PersonRow({ person, onOpen, onFollowChange }: { person: ProfileSummary; onOpen: () => void; onFollowChange: (f: boolean) => void }) {
-  return (
-    <li>
-      <motion.div whileTap={{ backgroundColor: 'var(--surface-2)' }} onClick={onOpen} className="flex cursor-pointer items-center gap-3 px-4 py-3">
-        <Avatar name={person.username} size={46} />
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1 truncate text-[16px] font-semibold">
-            {person.username}
-            {!person.is_public && <LockIcon width={13} height={13} className="shrink-0 text-label-2" />}
-          </p>
-          {person.full_name && <p className="truncate text-[14px] text-label-2">{person.full_name}</p>}
-          <p className="text-[12px] text-label-2">
-            {person.is_public || person.is_me ? `${person.recipe_count} przepisów · ` : ''}
-            {person.followers_count} obserwujących
-          </p>
-        </div>
-        {!person.is_me && <FollowButton compact userId={person.id} following={person.is_following} onChange={onFollowChange} />}
-      </motion.div>
-    </li>
   )
 }

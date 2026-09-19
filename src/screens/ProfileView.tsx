@@ -15,12 +15,14 @@ interface Props {
   /** Tylko na własnym profilu */
   onEdit?: () => void
   onSignOut?: () => void
+  /** Otwiera listę obserwujących / obserwowanych tego profilu */
+  onOpenList?: (kind: 'followers' | 'following') => void
   /** Zmiana wartości wymusza ponowne pobranie profilu (np. po edycji) */
   reloadKey?: number
 }
 
 /** Profil w stylu Instagrama: awatar, liczniki, przycisk obserwowania i siatka przepisów */
-export function ProfileView({ username, onOpenRecipe, onEdit, onSignOut, reloadKey }: Props) {
+export function ProfileView({ username, onOpenRecipe, onEdit, onSignOut, onOpenList, reloadKey }: Props) {
   const [profile, setProfile] = useState<ProfileSummary | null | undefined>(undefined) // undefined = ładowanie
   const [error, setError] = useState<string | null>(null)
 
@@ -39,6 +41,30 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onSignOut, reloadK
       alive = false
     }
   }, [username, reloadKey])
+
+  const profileId = profile?.id
+
+  // Liczniki na żywo: serwer wysyła zmianę wiersza profilu, gdy ktoś zaczyna lub przestaje obserwować
+  useEffect(() => {
+    if (!profileId) return
+    return backend.subscribeProfileCounts(profileId, (counts) =>
+      setProfile((p) => (p && p.id === profileId ? { ...p, ...counts } : p)),
+    )
+  }, [profileId])
+
+  // Siatka bezpieczeństwa: po powrocie do aplikacji (telefon w tle mógł stracić połączenie) pobieramy liczniki od nowa
+  useEffect(() => {
+    if (!profileId) return
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      backend
+        .getProfile(username)
+        .then((fresh) => fresh && setProfile((p) => (p && p.id === fresh.id ? { ...p, followers_count: fresh.followers_count, following_count: fresh.following_count, is_following: fresh.is_following } : p)))
+        .catch(() => {})
+    }
+    document.addEventListener('visibilitychange', refresh)
+    return () => document.removeEventListener('visibilitychange', refresh)
+  }, [profileId, username])
 
   const visible = !!profile && (profile.is_public || profile.is_me)
   const recipes = usePaged((o, l) => backend.profileRecipes(profile!, o, l), [profile?.id, reloadKey], 12, visible)
@@ -65,11 +91,11 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onSignOut, reloadK
     <div>
       <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pt-4 pb-5">
         <div className="flex items-center gap-4">
-          <Avatar name={profile.username} size={84} />
+          <Avatar name={profile.username} src={profile.avatar_url} size={84} />
           <div className="grid flex-1 grid-cols-3 text-center">
             <Stat value={visible ? profile.recipe_count : '–'} label="przepisów" />
-            <Stat value={profile.followers_count} label="obserwujących" />
-            <Stat value={profile.following_count} label="obserwuje" />
+            <Stat value={profile.followers_count} label="obserwujących" onClick={visible && onOpenList ? () => onOpenList('followers') : undefined} />
+            <Stat value={profile.following_count} label="obserwuje" onClick={visible && onOpenList ? () => onOpenList('following') : undefined} />
           </div>
         </div>
 
@@ -140,11 +166,20 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onSignOut, reloadK
   )
 }
 
-function Stat({ value, label }: { value: number | string; label: string }) {
-  return (
-    <div>
-      <p className="text-[19px] leading-tight font-bold tabular-nums">{value}</p>
+function Stat({ value, label, onClick }: { value: number | string; label: string; onClick?: () => void }) {
+  const body = (
+    <>
+      <motion.p key={String(value)} initial={{ opacity: 0.4, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-[19px] leading-tight font-bold tabular-nums">
+        {value}
+      </motion.p>
       <p className="text-[12px] text-label-2">{label}</p>
-    </div>
+    </>
+  )
+  return onClick ? (
+    <button onClick={onClick} className="rounded-lg py-0.5 active:bg-surface-2" aria-label={`${label}: ${value}`}>
+      {body}
+    </button>
+  ) : (
+    <div>{body}</div>
   )
 }

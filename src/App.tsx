@@ -17,6 +17,7 @@ import { EditProfileScreen } from '@/screens/EditProfileScreen'
 import { EditRecipeScreen } from '@/screens/EditRecipeScreen'
 import { FeedScreen } from '@/screens/FeedScreen'
 import { LoginScreen } from '@/screens/LoginScreen'
+import { PeopleListScreen, type ListKind } from '@/screens/PeopleListScreen'
 import { ProfileSetupScreen } from '@/screens/ProfileSetupScreen'
 import { ProfileView } from '@/screens/ProfileView'
 import { RecipeDetailScreen } from '@/screens/RecipeDetailScreen'
@@ -68,7 +69,10 @@ function Gate({ session }: { session: Session | null }) {
 }
 
 /** Ekran „wepchnięty” na stos nawigacji ponad zakładkami */
-type Entry = { kind: 'recipe'; recipe: Recipe } | { kind: 'profile'; username: string }
+type Entry =
+  | { kind: 'recipe'; recipe: Recipe }
+  | { kind: 'profile'; username: string }
+  | { kind: 'people'; username: string; list: ListKind }
 
 type SheetState = { kind: 'add' } | { kind: 'edit'; recipe: Recipe } | { kind: 'edit-profile' } | null
 
@@ -93,6 +97,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
     if (username === me.username) return changeTab('profile')
     setStack((s) => [...s, { kind: 'profile', username }])
   }
+  const openList = (username: string, list: ListKind) => setStack((s) => [...s, { kind: 'people', username, list }])
   const pop = () => setStack((s) => s.slice(0, -1))
 
   const top = stack[stack.length - 1]
@@ -133,6 +138,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               onOpenRecipe={openRecipe}
               onEdit={() => setSheet({ kind: 'edit-profile' })}
               onSignOut={onSignOut}
+              onOpenList={(kind) => openList(me.username, kind)}
             />
           </LargeTitleScreen>,
         )}
@@ -146,6 +152,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             <RecipeDetailScreen
               key={`recipe-${entry.recipe.id}-${i}`}
               recipe={entry.recipe}
+              me={me}
               isOwner={entry.recipe.user_id === me.id}
               onBack={pop}
               onEdit={() => setSheet({ kind: 'edit', recipe: entry.recipe })}
@@ -160,11 +167,23 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               }}
               onOpenAuthor={openProfile}
             />
-          ) : (
+          ) : entry.kind === 'profile' ? (
             <PushedScreen key={`profile-${entry.username}-${i}`} title={`@${entry.username}`} onBack={pop}>
               <div className="px-[max(16px,env(safe-area-inset-left))]">
-                <ProfileView username={entry.username} onOpenRecipe={openRecipe} />
+                <ProfileView
+                  username={entry.username}
+                  onOpenRecipe={openRecipe}
+                  onOpenList={(kind) => openList(entry.username, kind)}
+                />
               </div>
+            </PushedScreen>
+          ) : (
+            <PushedScreen
+              key={`people-${entry.username}-${entry.list}-${i}`}
+              title={entry.list === 'followers' ? 'Obserwujący' : 'Obserwowani'}
+              onBack={pop}
+            >
+              <PeopleListScreen username={entry.username} kind={entry.list} onOpenProfile={openProfile} />
             </PushedScreen>
           ),
         )}

@@ -1,13 +1,8 @@
-import { readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
-import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm'
-import { unaccent } from '@electric-sql/pglite/contrib/unaccent'
+import type { PGlite } from '@electric-sql/pglite'
+import { actors, createDb } from './helpers/pg'
 
-/**
- * Testy migracji na prawdziwym Postgresie (PGlite, WASM). Środowisko Supabase (auth.uid(), role,
- * schemat storage) jest atrapą, ale reguły RLS, ograniczenia i funkcje SQL wykonują się naprawdę.
- */
+/** Testy migracji na prawdziwym Postgresie (PGlite) — patrz tests/helpers/pg.ts */
 
 const ANNA = '00000000-0000-0000-0000-00000000000a'
 const JAN = '00000000-0000-0000-0000-00000000000b'
@@ -15,25 +10,9 @@ const ZOSIA = '00000000-0000-0000-0000-00000000000c'
 const PRIV = '00000000-0000-0000-0000-00000000000d' // profil prywatny
 const NOPROFILE = '00000000-0000-0000-0000-00000000000e'
 
-const db = new PGlite({ extensions: { pg_trgm, unaccent } })
-
-/** Wykonuje zapytanie jako zalogowany użytkownik (rola authenticated + auth.uid()) */
-async function as<T = Record<string, unknown>>(uid: string | null, sql: string, params: unknown[] = []): Promise<T[]> {
-  await db.exec(uid ? `set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);` : 'set role anon;')
-  try {
-    return (await db.query<T>(sql, params)).rows
-  } finally {
-    await db.exec(`reset role; select set_config('request.jwt.claim.sub', '', false);`)
-  }
-}
-const asOk = async (uid: string | null, sql: string, params: unknown[] = []) => {
-  try {
-    await as(uid, sql, params)
-    return null
-  } catch (e) {
-    return (e as Error).message
-  }
-}
+let db: PGlite
+let as: ReturnType<typeof actors>['as']
+let asOk: ReturnType<typeof actors>['asOk']
 
 const recipe = (id: string, userId: string, title: string, tags: string[], ingredients: string[], createdAt: string) => ({
   id,
@@ -45,39 +24,8 @@ const recipe = (id: string, userId: string, title: string, tags: string[], ingre
 })
 
 beforeAll(async () => {
-  // — atrapa środowiska Supabase —
-  await db.exec(`
-    create schema extensions;
-    create extension pg_trgm with schema extensions;
-    create extension unaccent with schema extensions;
-    create schema auth;
-    create table auth.users (id uuid primary key, email text);
-    create function auth.uid() returns uuid language sql stable
-      as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-    create role anon nologin;
-    create role authenticated nologin;
-    create schema storage;
-    create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
-    create table storage.objects (id uuid default gen_random_uuid(), bucket_id text, name text);
-    alter table storage.objects enable row level security;
-    create function storage.foldername(name text) returns text[] language sql immutable
-      as $$ select (string_to_array(name, '/'))[1:greatest(array_length(string_to_array(name, '/'), 1) - 1, 0)] $$;
-  `)
-  // — domyślne uprawnienia jak w Supabase: nowe obiekty w public dostępne dla anon/authenticated,
-  //   a wycofanie ich robi dopiero sama migracja (revoke …) —
-  await db.exec(`
-    grant usage on schema public, extensions, auth, storage to anon, authenticated;
-    grant execute on function auth.uid() to anon, authenticated;
-    grant execute on all functions in schema extensions to anon, authenticated;
-    alter default privileges in schema public grant all on tables to anon, authenticated;
-    alter default privileges in schema public grant execute on functions to anon, authenticated;
-    grant all on all tables in schema storage to authenticated;
-  `)
-  // — schemat z repozytorium: najpierw pierwotny, potem migracja społecznościowa —
-  await db.exec(readFileSync('supabase/schema.sql', 'utf8'))
-  await db.exec(readFileSync('supabase/social.sql', 'utf8'))
-  await db.exec(readFileSync('supabase/social.sql', 'utf8')) // idempotentność: drugie uruchomienie nie może się wysypać
-
+  db = await createDb()
+  ;({ as, asOk } = actors(db))
   for (const id of [ANNA, JAN, ZOSIA, PRIV, NOPROFILE]) await db.query('insert into auth.users (id, email) values ($1, $2)', [id, `${id}@x.pl`])
   await db.exec(`
     insert into public.profiles (id, username, full_name, is_public) values

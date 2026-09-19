@@ -1,5 +1,6 @@
-import type { Profile, ProfileSummary, Recipe, RecipeDraft } from '@/types/recipe'
+import type { Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
 import type { Backend, FeedMode, ProfilePatch, RecipeSort } from './backend'
+import { on } from './events'
 import { seedRecipes } from './seed'
 import { fold } from './text'
 import { normalizeFullName, normalizeUsername, validateUsername } from './username'
@@ -17,6 +18,8 @@ const KEYS = {
   legacyRecipes: 'przepisy:v1',
   profile: 'przepisy:v2:profile',
   follows: 'przepisy:v2:follows',
+  likes: 'przepisy:v2:likes',
+  comments: 'przepisy:v2:comments',
 }
 
 /* — magazyn: localStorage, a gdy go brak (testy, tryb prywatny) — pamięć — */
@@ -118,7 +121,10 @@ const demo = buildDemo()
 const demoById = new Map(demo.map((d) => [d.profile.id, d]))
 const publicDemoRecipes = () => demo.filter((d) => d.profile.is_public).flatMap((d) => d.recipes.map((r) => withAuthor(r, d.profile)))
 
-const withAuthor = (r: Recipe, p: Profile): Recipe => ({ ...r, author: { username: p.username, full_name: p.full_name } })
+const withAuthor = (r: Recipe, p: Profile): Recipe => ({
+  ...r,
+  author: { username: p.username, full_name: p.full_name, avatar_url: p.avatar_url },
+})
 
 const defaultProfile = (): Profile => ({ id: LOCAL_USER_ID, username: 'ty', full_name: 'Ty', is_public: true })
 const loadMe = () => read<Profile>(KEYS.profile, defaultProfile)
@@ -155,6 +161,47 @@ function summary(p: Profile): ProfileSummary {
 }
 
 const page = <T,>(list: T[], offset: number, limit: number) => list.slice(offset, offset + limit)
+
+const loadLikes = () => new Set(read<string[]>(KEYS.likes, () => []))
+
+/** Kilka komentarzy pod przykładowymi przepisami, żeby sekcja komentarzy nie była pusta */
+function seedComments(): Comment[] {
+  const at = (hoursAgo: number) => new Date(Date.now() - hoursAgo * 3_600_000).toISOString()
+  const by = (username: string) => {
+    const d = demo.find((x) => x.profile.username === username)!.profile
+    return { user_id: d.id, author: { username: d.username, full_name: d.full_name } }
+  }
+  const c = (n: number, recipe: string, who: string, body: string, hoursAgo: number): Comment => ({
+    id: `demo-comment-${n}`,
+    recipe_id: recipe,
+    body,
+    created_at: at(hoursAgo),
+    ...by(who),
+  })
+  return [
+    c(1, 'demo-zosia-1', 'anna_gotuje', 'Robiłam w niedzielę — cała rodzina zachwycona!', 30),
+    c(2, 'demo-zosia-1', 'marek_grilluje', 'Dodałem trochę suszonych grzybów, polecam.', 6),
+    c(3, 'demo-anna-1', 'kuchnia.zosi', 'Idealny na zimowy dzień.', 52),
+  ]
+}
+const loadComments = () => read<Comment[]>(KEYS.comments, seedComments)
+const saveComments = (list: Comment[]) => write(KEYS.comments, list)
+
+/** Liczby polubień pod przykładowymi przepisami są stałe (z hasha id), własne polubienie dolicza się do nich */
+const baseLikes = (recipeId: string) => (recipeId.startsWith('demo-') ? hash(recipeId) % 23 : 0)
+
+/** Obserwujący i obserwowani w trybie demo: przykładowe osoby (prawdziwych relacji tu nie ma) */
+function demoPeople(target: Profile, kind: 'followers' | 'following'): Profile[] {
+  const me = loadMe()
+  if (!target.is_public && target.id !== me.id) return []
+  const follows = loadFollows()
+  const others = demo.map((d) => d.profile).filter((p) => p.id !== target.id && p.is_public)
+  if (kind === 'following') {
+    return target.id === me.id ? demo.map((d) => d.profile).filter((p) => follows.has(p.id)) : others.slice(0, 2)
+  }
+  if (target.id === me.id) return []
+  return [...(follows.has(target.id) ? [me] : []), ...others]
+}
 
 export const localBackend: Backend = {
   remote: false,
@@ -207,6 +254,7 @@ export const localBackend: Backend = {
     }
     if (patch.full_name !== undefined) next.full_name = normalizeFullName(patch.full_name ?? '')
     if (patch.is_public !== undefined) next.is_public = patch.is_public
+    if (patch.avatar_url !== undefined) next.avatar_url = patch.avatar_url ?? undefined
     write(KEYS.profile, next)
     return next
   },
@@ -289,5 +337,78 @@ export const localBackend: Backend = {
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, limit)
       .map(([tag, uses]) => ({ tag, uses }))
+  },
+
+  async listFollowers(username, offset, limit) {
+    const target = allProfiles().find((p) => p.username === normalizeUsername(username))
+    return target ? page(demoPeople(target, 'followers').map(summary), offset, limit) : []
+  },
+
+  async listFollowing(username, offset, limit) {
+    const target = allProfiles().find((p) => p.username === normalizeUsername(username))
+    return target ? page(demoPeople(target, 'following').map(summary), offset, limit) : []
+  },
+
+  subscribeProfileCounts(userId, onCounts) {
+    // Lokalnie zmiany pochodzą tylko od użytkownika, więc wystarczy zdarzenie z aplikacji
+    return on('follows-changed', () => {
+      const p = allProfiles().find((x) => x.id === userId)
+      if (!p) return
+      const { followers_count, following_count } = summary(p)
+      onCounts({ followers_count, following_count })
+    })
+  },
+
+  async getRecipeStats(ids) {
+    const liked = loadLikes()
+    const comments = loadComments()
+    const out: Record<string, RecipeStats> = {}
+    for (const id of ids) {
+      out[id] = {
+        like_count: baseLikes(id) + (liked.has(id) ? 1 : 0),
+        comment_count: comments.filter((c) => c.recipe_id === id).length,
+        liked: liked.has(id),
+      }
+    }
+    return out
+  },
+
+  async likeRecipe(recipeId) {
+    const l = loadLikes()
+    l.add(recipeId)
+    write(KEYS.likes, [...l])
+  },
+
+  async unlikeRecipe(recipeId) {
+    const l = loadLikes()
+    l.delete(recipeId)
+    write(KEYS.likes, [...l])
+  },
+
+  async listComments(recipeId, offset, limit) {
+    const list = loadComments().filter((c) => c.recipe_id === recipeId).sort((a, b) => b.created_at.localeCompare(a.created_at))
+    return page(list, offset, limit)
+  },
+
+  async addComment(recipeId, body, author) {
+    const text = body.trim()
+    if (!text) throw new Error('Napisz komentarz.')
+    if (text.length > 500) throw new Error('Komentarz może mieć najwyżej 500 znaków.')
+    const comment: Comment = {
+      id: crypto.randomUUID(),
+      recipe_id: recipeId,
+      user_id: LOCAL_USER_ID,
+      body: text,
+      created_at: new Date().toISOString(),
+      author,
+    }
+    saveComments([comment, ...loadComments()])
+    return comment
+  },
+
+  async deleteComment(comment) {
+    const ownsRecipe = loadOwn().some((r) => r.id === comment.recipe_id)
+    if (comment.user_id !== LOCAL_USER_ID && !ownsRecipe) throw new Error('Brak uprawnień do usunięcia tego komentarza.')
+    saveComments(loadComments().filter((c) => c.id !== comment.id))
   },
 }
