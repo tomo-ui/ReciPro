@@ -70,6 +70,19 @@
     width: 100%;
   }
 
+  /* Standalone na iOS z krótszym widokiem (patrz lib/viewport.ts): pełna wysokość ekranu.
+     transform robi z body blok zawierający dla elementów fixed, więc ekrany, arkusze i pasek
+     zakładek rozciągają się na tę samą wysokość co reszta. */
+  html.fit-screen,
+  html.fit-screen body,
+  html.fit-screen #root {
+    height: var(--app-height);
+  }
+  html.fit-screen body {
+    bottom: auto;
+    transform: translateZ(0);
+  }
+
   /* UI nie jest zaznaczalne, treść przepisu i pola formularzy tak */
   body {
     -webkit-user-select: none;
