@@ -93,6 +93,8 @@ export default defineConfig(({ mode }) => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
           globIgnores: ['splash/**'], // ekrany startowe czyta system, nie trzeba ich w cache
+          // baza składników (~1,8 MB) też ma być dostępna offline
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           // /api/* zawsze idzie do sieci (serverless functions), nigdy do fallbacku SPA
           navigateFallbackDenylist: [/^\/api\//],
         },

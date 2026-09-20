@@ -206,6 +206,10 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
                 }
               }}
               onOpenAuthor={openProfile}
+              onSaveCopy={async (draft) => {
+                await mine.add(draft) // nowy przepis w „Przepisy”; zostajemy na ekranie szczegółów
+                bump()
+              }}
             />
           ) : entry.kind === 'profile' ? (
             <PushedScreen key={`profile-${entry.username}-${i}`} title={`@${entry.username}`} onBack={pop}>

@@ -80,7 +80,12 @@
   }
   html.fit-screen body {
     bottom: auto;
-    transform: translateZ(0);
+    /* --vv-top: iOS przesuwa widoczną część strony nad klawiaturę; przesuwamy za nią całą aplikację */
+    transform: translate3d(0, var(--vv-top, 0px), 0);
+  }
+  /* Klawiatura otwarta: aplikacja jest niższa, więc pasek zakładek zabierałby miejsce nad klawiaturą */
+  html.kb-open nav[aria-label='Nawigacja'] {
+    display: none;
   }
 
   /* UI nie jest zaznaczalne, treść przepisu i pola formularzy tak */

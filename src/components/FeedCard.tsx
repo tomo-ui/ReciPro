@@ -1,8 +1,10 @@
 import { motion } from 'framer-motion'
 import type { Recipe, RecipeStats } from '@/types/recipe'
 import { formatMinutes, timeAgo, totalTime } from '@/lib/ui'
+import { kcalPerServing } from '@/lib/nutrition'
+import { useRecipeNutrition } from '@/hooks/useFoodDb'
 import { Avatar } from './Avatar'
-import { ClockIcon, CommentIcon, UsersIcon } from './Icons'
+import { ClockIcon, CommentIcon, FlameIcon, UsersIcon } from './Icons'
 import { LikeButton } from './LikeButton'
 import { Cover } from './RecipeCard'
 
@@ -20,6 +22,8 @@ export function FeedCard({ recipe, stats, onStatsChange, onOpen, onOpenAuthor }:
   const author = recipe.author
   const time = formatMinutes(totalTime(recipe))
   const last = stats?.last_comment
+  const nutrition = useRecipeNutrition(recipe.ingredients, recipe.servings)
+  const kcal = nutrition ? kcalPerServing(nutrition) : null
 
   return (
     <motion.article
@@ -52,6 +56,11 @@ export function FeedCard({ recipe, stats, onStatsChange, onOpen, onOpenAuthor }:
             {recipe.servings && (
               <span className="flex items-center gap-1">
                 <UsersIcon width={14} height={14} /> {recipe.servings} porcji
+              </span>
+            )}
+            {kcal !== null && (
+              <span className="flex items-center gap-1" title="Szacunek z bazy składników">
+                <FlameIcon width={14} height={14} /> ≈ {kcal} kcal{recipe.servings ? ' / porcja' : ''}
               </span>
             )}
           </div>

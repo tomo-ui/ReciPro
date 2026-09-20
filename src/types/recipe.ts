@@ -24,6 +24,8 @@ export interface IngredientLine {
   text: string
   /** Opcjonalna sekcja, np. "Ciasto", "Sos" */
   group?: string
+  /** Produkt z bazy składników wskazany ręcznie (id USDA) — nadpisuje automatyczne dopasowanie */
+  food_id?: number
 }
 
 export interface StepLine {

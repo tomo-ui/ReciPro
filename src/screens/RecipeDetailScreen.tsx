@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, useDragControls } from 'framer-motion'
-import type { Profile, Recipe } from '@/types/recipe'
+import type { Profile, Recipe, RecipeDraft } from '@/types/recipe'
 import { normalizeIngredient } from '@/lib/ingredients'
 import { scaleFactor, scaleIngredient } from '@/lib/scale'
 import { formatMinutes, spring, totalTime } from '@/lib/ui'
@@ -9,6 +9,7 @@ import { Avatar } from '@/components/Avatar'
 import { ChevronLeftIcon, ClockIcon, CommentIcon, MinusIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
 import { CommentsSection } from '@/components/CommentsSection'
 import { LikeButton } from '@/components/LikeButton'
+import { NutritionSection } from '@/components/NutritionSection'
 import { Cover } from '@/components/RecipeCard'
 
 interface Props {
@@ -21,6 +22,8 @@ interface Props {
   onEdit: () => void
   onDelete: () => void
   onOpenAuthor: (username: string) => void
+  /** Zapisuje dopasowaną wersję przepisu jako nowy przepis użytkownika */
+  onSaveCopy?: (draft: RecipeDraft) => Promise<void>
 }
 
 /** Grupuje linie po polu `group`, zachowując kolejność */
@@ -36,7 +39,7 @@ function groupLines<T extends { group?: string }>(lines: T[]) {
 
 const MAX_SERVINGS = 99
 
-export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDelete, onOpenAuthor }: Props) {
+export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDelete, onOpenAuthor, onSaveCopy }: Props) {
   const controls = useDragControls()
   const { stats, set: setStats, update: updateStats } = useRecipeStats([recipe])
   const recipeStats = stats[recipe.id]
@@ -170,6 +173,10 @@ export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDele
                 </ul>
               </div>
             ))}
+          </Section>
+
+          <Section title="Wartości odżywcze">
+            <NutritionSection recipe={recipe} onSaveCopy={onSaveCopy} />
           </Section>
 
           <Section title="Przygotowanie">

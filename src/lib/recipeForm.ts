@@ -19,6 +19,8 @@ export interface FormState {
   source_url?: string
   parse_method: RecipeDraft['parse_method']
   image_url?: string
+  /** Produkty z bazy składników wskazane ręcznie: tekst linii → id produktu (patrz IngredientLine.food_id) */
+  foodIds?: Record<string, number>
 }
 
 export const emptyForm = (): FormState => ({
@@ -76,6 +78,7 @@ export function draftToForm(d: RecipeDraft): FormState {
     prep: d.prep_minutes?.toString() ?? '',
     cook: d.cook_minutes?.toString() ?? '',
     ingredients: formatLines(d.ingredients),
+    foodIds: Object.fromEntries(d.ingredients.filter((i) => i.food_id !== undefined).map((i) => [i.text, i.food_id as number])),
     steps: formatLines(d.steps),
     tags: d.tags.join(', '),
     source_url: d.source_url,
@@ -96,8 +99,12 @@ export function formToDraft(f: FormState): RecipeDraft {
     prep_minutes: prep,
     cook_minutes: cook,
     total_minutes: prep || cook ? (prep ?? 0) + (cook ?? 0) : undefined,
+    // food_id przypisujemy po surowym tekście linii (przed normalizacją), bo pod takim kluczem trzyma go formularz
     ingredients: parseLines(f.ingredients)
-      .map((i) => ({ ...i, text: normalizeIngredient(i.text) }))
+      .map((i) => {
+        const foodId = f.foodIds?.[i.text]
+        return { ...i, text: normalizeIngredient(i.text), ...(foodId !== undefined ? { food_id: foodId } : {}) }
+      })
       .filter((i) => i.text),
     steps: parseLines(f.steps),
     tags: tags.slice(0, 12),

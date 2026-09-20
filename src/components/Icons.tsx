@@ -131,3 +131,21 @@ export const SendIcon = (p: P) => (
     <path d="M5 12h14M13 6l6 6-6 6" />
   </svg>
 )
+
+export const FlameIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 3c1 3.2 4.5 5.2 4.5 9.5A4.5 4.5 0 0 1 12 17a4.5 4.5 0 0 1-4.5-4.5c0-1.6.7-2.8 1.5-3.8.3 1.3 1 2 1.8 2.3C10.5 8.2 11 5.5 12 3z" />
+  </svg>
+)
+export const ChevronDownIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+)
+export const SlidersIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="8" cy="17" r="2" />
+  </svg>
+)

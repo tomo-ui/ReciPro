@@ -279,3 +279,39 @@ export function normalizeIngredient(input: string): string {
   t = moveTrailingQuantity(t)
   return normalizeLeading(t).trim()
 }
+
+/* — odczyt ilości z linii (dla kalkulatora wartości odżywczych) — */
+
+export interface ParsedIngredient {
+  /** Ilość: gramy, mililitry albo sztuki; brak = „do smaku” */
+  kind?: 'g' | 'ml' | 'count'
+  value?: number
+  /** Słowo jednostki przy sztukach: „puszka”, „ząbki”, „szt.” */
+  unitWord?: string
+  /** Nazwa składnika bez ilości */
+  name: string
+}
+
+/** Rozbija linię na ilość i nazwę. Linię najpierw ujednolica (normalizeIngredient), zakresy zastępuje środkiem. */
+export function parseIngredient(input: string): ParsedIngredient {
+  const text = normalizeIngredient(input)
+  const lead = LEAD.exec(text)
+  if (!lead || !/^(?:\d|[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|pół)/i.test(text)) {
+    const bare = LEAD_BARE.exec(text)
+    if (bare) return { kind: 'count', value: 1, unitWord: bare[1], name: tidy(bare[2]) }
+    return { name: text }
+  }
+  const [lo, hi] = parseRange(lead[1])
+  if (!Number.isFinite(lo)) return { name: text }
+  const value = hi !== undefined && Number.isFinite(hi) ? (lo + hi) / 2 : lo
+  const unit = lead[2]
+  const rest = tidy(lead[3])
+  const metric = unit ? metricOf(unit) : undefined
+  if (metric) return { kind: metric.kind, value: value * metric.factor, name: rest }
+  return { kind: 'count', value, unitWord: unit, name: rest }
+}
+
+/** Waga typowej sztuki (g) na podstawie nazwy składnika, gdy baza nie podaje wagi porcji */
+export function pieceWeightOf(name: string): number | undefined {
+  return PIECE_WEIGHT.find(([re]) => re.test(name.slice(0, 40)))?.[1]
+}

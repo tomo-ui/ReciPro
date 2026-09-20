@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import type { FormState } from '@/lib/recipeForm'
 import { CameraIcon, SpinnerIcon, TrashIcon } from './Icons'
 import { Field, Group, NumberInput, TextBlock } from './formParts'
+import { IngredientTools } from './IngredientTools'
 
 interface Props {
   form: FormState
@@ -119,6 +120,7 @@ export function RecipeFields({ form, set, imageSrc, imageBusy, imageError, onPic
         onChange={(v) => set('ingredients', v)}
         placeholder={'200 g mąki\n2 jajka'}
       />
+      <IngredientTools form={form} set={set} />
       <TextBlock
         header="Przygotowanie"
         footer="Jeden krok w linii. Sekcje jak wyżej."
