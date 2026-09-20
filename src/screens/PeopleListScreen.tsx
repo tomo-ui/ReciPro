@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ProfileSummary } from '@/types/recipe'
 import { backend } from '@/lib/data'
 import { usePaged } from '@/hooks/usePaged'
@@ -7,6 +7,9 @@ import { LoadMore } from '@/components/LoadMore'
 import { PersonRow } from '@/components/PersonRow'
 
 export type ListKind = 'followers' | 'following'
+
+/** Tyle po własnej zmianie ignorujemy odświeżanie listy z powodu zmiany licznika (zdarzenie z serwera dociera z opóźnieniem) */
+const LOCAL_CHANGE_QUIET_MS = 5000
 
 interface Props {
   username: string
@@ -37,6 +40,10 @@ export function PeopleListScreen({ username, kind, onOpenProfile }: Props) {
     allowed,
   )
 
+  // Po własnym (od)obserwowaniu z tej listy wiersz zostaje do wyjścia z widoku, więc nie przeładowujemy jej
+  // w odpowiedzi na licznik, który zmienił się przez nas
+  const lastLocalChange = useRef(0)
+
   // Na żywo: zmiana licznika oznacza zmianę listy
   const profileId = profile?.id
   useEffect(() => {
@@ -47,7 +54,7 @@ export function PeopleListScreen({ username, kind, onOpenProfile }: Props) {
       const signature = `${c.followers_count}/${c.following_count}`
       if (signature !== last) {
         last = signature
-        people.reload()
+        if (Date.now() - lastLocalChange.current > LOCAL_CHANGE_QUIET_MS) people.reload()
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -72,10 +79,12 @@ export function PeopleListScreen({ username, kind, onOpenProfile }: Props) {
   }
 
   const total = kind === 'followers' ? profile.followers_count : profile.following_count
-  const setFollowing = (id: string, following: boolean) =>
+  const setFollowing = (id: string, following: boolean) => {
+    lastLocalChange.current = Date.now()
     people.setItems((items) =>
       items.map((x) => (x.id === id ? { ...x, is_following: following, followers_count: x.followers_count + (following ? 1 : -1) } : x)),
     )
+  }
 
   return (
     <div className="px-[max(16px,env(safe-area-inset-left))] pt-4">

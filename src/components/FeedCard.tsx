@@ -20,7 +20,9 @@ interface Props {
   recipe: Recipe
   /** Polubienia i komentarze; puste, dopóki się wczytują */
   stats?: RecipeStats
-  /** Czy zalogowany użytkownik obserwuje autora — wtedy przycisk obserwowania jest ukryty */
+  /** Czy przycisk obserwowania ma być na karcie: tylko dla autorów, których nie obserwowałeś przy ostatnim odświeżeniu feedu */
+  showFollow: boolean
+  /** Aktualny stan: po dotknięciu przycisk zostaje jako szary „Obserwujesz” do następnego odświeżenia feedu */
   following: boolean
   onFollowChange: (following: boolean) => void
   onStatsChange: (next: RecipeStats) => void
@@ -31,7 +33,7 @@ interface Props {
 }
 
 /** Duża karta do feedu: autor (z przyciskiem obserwowania), zdjęcie 4:3, tytuł, czas, porcje, tagi i komentarze */
-export function FeedCard({ recipe, stats, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments }: Props) {
+export function FeedCard({ recipe, stats, showFollow, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments }: Props) {
   const author = recipe.author
   const time = formatMinutes(totalTime(recipe))
   const last = stats?.last_comment
@@ -79,7 +81,7 @@ export function FeedCard({ recipe, stats, following, onFollowChange, onStatsChan
               </span>
             </span>
           </button>
-          {!following && recipe.user_id && <FollowButton userId={recipe.user_id} following={false} onChange={onFollowChange} compact />}
+          {showFollow && recipe.user_id && <FollowButton userId={recipe.user_id} following={following} onChange={onFollowChange} compact silent />}
         </div>
       )}
 
@@ -184,12 +186,14 @@ function CommentRow({ comment, lines, onOpen }: { comment: { author: Comment['au
     <button onClick={onOpen} aria-label="Zobacz komentarze" className="block w-full text-left">
       <span className="flex items-start gap-2.5 rounded-[14px] bg-surface-2 px-3 py-2.5">
         <Avatar name={comment.author.username} src={comment.author.avatar_url} size={26} />
-        <span className="min-w-0 flex-1 text-[14px] leading-snug">
-          <span className={`${lines === 2 ? 'line-clamp-2' : 'line-clamp-3'} break-words whitespace-pre-line`}>
-            <span className="font-semibold">{comment.author.username}</span>
-            <VerifiedBadge username={comment.author.username} size={12} className="mr-1" /> {comment.body}
+        <span className="min-w-0 flex-1 leading-snug">
+          {/* Nazwa, znaczek i czas w jednym rzędzie, wyśrodkowane w pionie (jak w liście komentarzy) */}
+          <span className="flex items-center text-[13px] text-label-2">
+            <span className="truncate font-semibold text-label">{comment.author.username}</span>
+            <VerifiedBadge username={comment.author.username} size={12} className="align-baseline" />
+            <span className="ml-1.5 shrink-0">· {timeAgo(comment.created_at)}</span>
           </span>
-          <span className="mt-0.5 block text-[12px] text-label-2">{timeAgo(comment.created_at)}</span>
+          <span className={`${lines === 2 ? 'line-clamp-2' : 'line-clamp-3'} block text-[14px] break-words whitespace-pre-line`}>{comment.body}</span>
         </span>
       </span>
     </button>

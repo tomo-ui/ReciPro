@@ -4,10 +4,11 @@ import type { Recipe } from '@/types/recipe'
 import type { FeedMode } from '@/lib/backend'
 import { backend } from '@/lib/data'
 import { on } from '@/lib/events'
+import { spreadAuthors } from '@/lib/feedOrder'
 import { usePaged } from '@/hooks/usePaged'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { FeedCard } from '@/components/FeedCard'
-import { HeartIcon, ShuffleIcon } from '@/components/Icons'
+import { HeartIcon } from '@/components/Icons'
 import { LargeTitleScreen } from '@/components/LargeTitleScreen'
 import { LoadMore } from '@/components/LoadMore'
 import { SegmentedControl } from '@/components/SegmentedControl'
@@ -34,31 +35,30 @@ const newSeed = () => crypto.randomUUID()
 export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, onGoSearch, onOpenActivity, unread }: Props) {
   const [mode, setMode] = useState<FeedMode>('foryou')
   const [seed, setSeed] = useState(newSeed)
-  const feed = usePaged((offset, limit) => backend.feed(mode, seed, offset, limit), [mode, seed], 8)
+  // Przepisy tego samego autora nie idą jeden po drugim (także na granicy stron; wyświetlone karty się nie przestawiają)
+  const lastAuthor = useRef<string | undefined>(undefined)
+  const feed = usePaged(
+    async (offset, limit) => {
+      const rows = await backend.feed(mode, seed, offset, limit)
+      const ordered = spreadAuthors(rows, (r) => r.user_id, offset === 0 ? undefined : lastAuthor.current)
+      lastAuthor.current = ordered.at(-1)?.user_id ?? (offset === 0 ? undefined : lastAuthor.current)
+      return ordered
+    },
+    [mode, seed],
+    8,
+  )
   const { stats, set: setStats, refresh: refreshStats } = useRecipeStats(feed.items)
 
-  // Obserwowanie z karty w feedzie: karta od razu chowa przycisk, a lista nie przeładowuje się pod palcem
+  // Obserwowanie z karty w feedzie: przycisk zmienia się w szary „Obserwujesz” i zostaje do odświeżenia feedu;
+  // przycisk w feedzie nie wysyła zdarzenia, więc lista nie przeładowuje się pod palcem
   const [followed, setFollowed] = useState<Record<string, boolean>>({})
-  const ownFollow = useRef(false)
   useEffect(() => setFollowed({}), [mode, seed])
   const changeFollow = (userId: string | undefined, next: boolean) => {
-    if (!userId) return
-    ownFollow.current = next // udany zapis wyśle 'follows-changed'; nie odświeżamy wtedy listy
-    setFollowed((f) => ({ ...f, [userId]: next }))
+    if (userId) setFollowed((f) => ({ ...f, [userId]: next }))
   }
 
   // Zmiana listy obserwowanych (np. na profilu) lub zainteresowań → nowe ułożenie z aktualnymi danymi
-  useEffect(
-    () =>
-      on('follows-changed', () => {
-        if (ownFollow.current) {
-          ownFollow.current = false
-          return
-        }
-        setSeed(newSeed())
-      }),
-    [],
-  )
+  useEffect(() => on('follows-changed', () => setSeed(newSeed())), [])
   useEffect(() => on('interests-changed', () => setSeed(newSeed())), [])
   // Admin włączył lub wyłączył konta testowe
   useEffect(() => on('visibility-changed', () => setSeed(newSeed())), [])
@@ -72,16 +72,6 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, onGoSe
       title="Feed"
       right={
         <div className="flex items-center gap-2">
-          {mode === 'foryou' && (
-            <motion.button
-              whileTap={{ scale: 0.88, rotate: 90 }}
-              onClick={() => setSeed(newSeed())}
-              aria-label="Odśwież polecane"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-2 text-label-2"
-            >
-              <ShuffleIcon width={18} height={18} />
-            </motion.button>
-          )}
           <motion.button
             whileTap={{ scale: 0.88 }}
             onClick={onOpenActivity}
@@ -128,6 +118,7 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, onGoSe
               key={r.id}
               recipe={r}
               stats={stats[r.id]}
+              showFollow={!r.author?.followed}
               following={followed[r.user_id ?? ''] ?? r.author?.followed ?? false}
               onFollowChange={(next) => changeFollow(r.user_id, next)}
               onStatsChange={(next) => setStats(r.id, next)}

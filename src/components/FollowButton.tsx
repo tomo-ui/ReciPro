@@ -10,10 +10,12 @@ interface Props {
   /** Wywoływane po udanej zmianie (żeby rodzic zaktualizował licznik) */
   onChange: (following: boolean) => void
   compact?: boolean
+  /** Bez zdarzenia „follows-changed” (np. w feedzie, który ma się nie przeładowywać pod palcem) */
+  silent?: boolean
 }
 
 /** Przycisk „Obserwuj / Obserwujesz” z natychmiastową reakcją i cofnięciem przy błędzie */
-export function FollowButton({ userId, following, onChange, compact }: Props) {
+export function FollowButton({ userId, following, onChange, compact, silent }: Props) {
   const [busy, setBusy] = useState(false)
 
   async function toggle(e: React.MouseEvent) {
@@ -24,7 +26,7 @@ export function FollowButton({ userId, following, onChange, compact }: Props) {
     onChange(next) // optymistycznie
     try {
       await (next ? backend.follow(userId) : backend.unfollow(userId))
-      emit('follows-changed') // feed odświeży się przy następnym wejściu
+      if (!silent) emit('follows-changed') // feed odświeży się przy następnym wejściu
     } catch (err) {
       onChange(following) // cofamy
       alert(err instanceof Error ? err.message : 'Nie udało się zmienić obserwowania.')
