@@ -249,8 +249,9 @@ describe('obserwowanie i feed', () => {
     expect(await asOk(ANNA, `insert into public.follows (follower_id, followee_id) values ('${ANNA}', '${JAN}')`)).toMatch(/duplicate|unique/i)
   })
 
-  it('pusty feed bez obserwowanych', async () => {
-    expect(await feed(JAN, 'random', 's')).toHaveLength(0)
+  it('bez obserwowanych „Najnowsze” jest puste, a Dla Ciebie pokazuje cudze publiczne przepisy (nie własne, nie prywatne)', async () => {
+    expect(await feed(JAN, 'newest', 's')).toHaveLength(0)
+    expect(titles(await feed(JAN, 'foryou', 's')).sort()).toEqual(['Bigos', 'Pierogi ruskie', 'Placki ziemniaczane', 'Żurek staropolski'])
   })
 
   it('feed pokazuje tylko przepisy obserwowanych, nie własne, nie prywatne', async () => {
@@ -261,26 +262,26 @@ describe('obserwowanie i feed', () => {
     expect(r.map((x) => x.author_username)).toEqual(['kuchnia.zosi', 'kuchnia.zosi', 'jan.kucharz', 'jan.kucharz'])
   })
 
-  it('tryb losowy: ta sama kolejność dla tego samego ziarna, inna dla innego', async () => {
-    const a1 = titles(await feed(ANNA, 'random', 'ziarno-1'))
-    const a2 = titles(await feed(ANNA, 'random', 'ziarno-1'))
+  it('Dla Ciebie: ta sama kolejność dla tego samego ziarna, inna dla innego', async () => {
+    const a1 = titles(await feed(ANNA, 'foryou', 'ziarno-1'))
+    const a2 = titles(await feed(ANNA, 'foryou', 'ziarno-1'))
     expect(a1).toEqual(a2)
     expect([...a1].sort()).toEqual(['Bigos', 'Pierogi ruskie', 'Sernik na zimno', 'Szybka zupa pomidorowa'])
     const orders = new Set<string>()
-    for (let i = 0; i < 12; i++) orders.add(titles(await feed(ANNA, 'random', `ziarno-${i}`)).join('|'))
+    for (let i = 0; i < 12; i++) orders.add(titles(await feed(ANNA, 'foryou', `ziarno-${i}`)).join('|'))
     expect(orders.size).toBeGreaterThan(2) // kolejność faktycznie zależy od ziarna
   })
 
-  it('tryb losowy: kolejność nie jest chronologiczna', async () => {
+  it('Dla Ciebie: kolejność nie jest chronologiczna', async () => {
     const chronological = titles(await feed(ANNA, 'newest', '')).join('|')
     let differs = false
-    for (let i = 0; i < 12 && !differs; i++) differs = titles(await feed(ANNA, 'random', `s${i}`)).join('|') !== chronological
+    for (let i = 0; i < 12 && !differs; i++) differs = titles(await feed(ANNA, 'foryou', `s${i}`)).join('|') !== chronological
     expect(differs).toBe(true)
   })
 
   it('stronicowanie bez powtórzeń i braków', async () => {
-    const all = titles(await feed(ANNA, 'random', 'ziarno-x'))
-    const pages = [...titles(await feed(ANNA, 'random', 'ziarno-x', 3, 0)), ...titles(await feed(ANNA, 'random', 'ziarno-x', 3, 3))]
+    const all = titles(await feed(ANNA, 'foryou', 'ziarno-x'))
+    const pages = [...titles(await feed(ANNA, 'foryou', 'ziarno-x', 3, 0)), ...titles(await feed(ANNA, 'foryou', 'ziarno-x', 3, 3))]
     expect(pages).toEqual(all)
   })
 
@@ -341,5 +342,86 @@ describe('zdjęcia w Storage (polityki)', () => {
     expect(foreign).toHaveLength(0) // Jan nie usunie cudzego zdjęcia
     const own = await as(ANNA, `delete from storage.objects where name = '${ANNA}/do-usuniecia.jpg' returning name`)
     expect(own).toHaveLength(1)
+  })
+})
+
+describe('feed Dla Ciebie: zainteresowania, polubienia i polecane konta', () => {
+  const feed = (uid: string, mode: string, seed = 's', limit = 50, offset = 0) =>
+    as<{ title: string; author_followed: boolean }>(uid, 'select * from public.feed($1, $2, $3, $4)', [mode, seed, limit, offset])
+
+  // Dane własne tego bloku (wcześniejsze testy usuwają część kont): dwa przepisy Anny + dwa dodatkowe, starsze
+  const TIRAMISU = '10000000-0000-0000-0000-0000000000f1'
+  const GOLABKI = '10000000-0000-0000-0000-0000000000f2'
+  const NOWY = '00000000-0000-0000-0000-0000000000f0'
+  const NOWY_RECIPE = '10000000-0000-0000-0000-0000000000f3'
+  const addRecipe = (id: string, user: string, title: string, tags: string[], at: string) =>
+    db.query(`insert into public.recipes (id, user_id, title, tags, ingredients, created_at) values ($1, $2, $3, $4, '[]'::jsonb, $5)`, [id, user, title, tags, at])
+
+  beforeAll(async () => {
+    await addRecipe(TIRAMISU, ANNA, 'Tiramisu', ['deser', 'włoskie'], '2026-08-01T10:00:00Z')
+    await addRecipe(GOLABKI, ANNA, 'Gołąbki', ['kapusta', 'mięso'], '2026-08-15T10:00:00Z')
+    await db.query('insert into auth.users (id, email) values ($1, $2)', [NOWY, 'nowy@x.pl'])
+    await db.query("insert into public.profiles (id, username, full_name, is_public) values ($1, 'nowy_kucharz', 'Nowy Kucharz', true)", [NOWY])
+    await addRecipe(NOWY_RECIPE, NOWY, 'Zapiekanka', ['obiad'], '2026-09-10T10:00:00Z')
+  })
+
+  it('zainteresowania są prywatne: widzi je tylko właściciel; limity', async () => {
+    expect(await asOk(JAN, `insert into public.user_interests (interests) values (array['kapusta'])`)).toBeNull()
+    expect(await as(JAN, 'select * from public.user_interests')).toHaveLength(1)
+    expect(await as(ANNA, 'select * from public.user_interests')).toHaveLength(0)
+    expect(await asOk(ANNA, `update public.user_interests set interests = array['x'] where user_id = '${JAN}'`)).toBeNull() // 0 wierszy przez RLS
+    expect((await as<{ interests: string[] }>(JAN, 'select * from public.user_interests'))[0].interests).toEqual(['kapusta'])
+    expect(await asOk(JAN, `insert into public.user_interests (user_id, interests) values ('${ANNA}', array['a'])`)).toMatch(/row-level security/i)
+    expect(await asOk(JAN, `update public.user_interests set interests = array['${'x'.repeat(31)}']`)).toMatch(/user_interests_valid|check/i)
+    expect(await asOk(JAN, `update public.user_interests set interests = array['']`)).toMatch(/user_interests_valid|check/i)
+    expect(await asOk(JAN, `update public.user_interests set interests = (select array_agg(g::text) from generate_series(1, 31) g)`)).toMatch(/user_interests_valid|check/i)
+    expect(await asOk(null, 'select * from public.user_interests')).toMatch(/permission denied/i)
+  })
+
+  it('pasujące do zainteresowań przepisy nieobserwowanych idą na początek, reszta chronologicznie', async () => {
+    // Jan lubi „kapusta”: Gołąbki (Anna, której nie obserwuje) pierwsze, potem pozostałe od najnowszych
+    expect(titles(await feed(JAN, 'foryou'))).toEqual(['Gołąbki', 'Zapiekanka', 'Placki ziemniaczane', 'Żurek staropolski', 'Tiramisu'])
+    await as(JAN, `update public.user_interests set interests = '{}'`)
+    expect(titles(await feed(JAN, 'foryou'))).toEqual(['Zapiekanka', 'Placki ziemniaczane', 'Żurek staropolski', 'Gołąbki', 'Tiramisu']) // bez dopasowań: chronologicznie
+  })
+
+  it('dopasowanie działa bez polskich znaków i po tytule, wielkość liter bez znaczenia', async () => {
+    await as(JAN, `update public.user_interests set interests = array['ZURek']`)
+    expect(titles(await feed(JAN, 'foryou'))[0]).toBe('Żurek staropolski') // po tytule
+    await as(JAN, `update public.user_interests set interests = array['Kapusta']`)
+    expect(titles(await feed(JAN, 'foryou'))[0]).toBe('Gołąbki')
+    await as(JAN, `update public.user_interests set interests = '{}'`)
+  })
+
+  it('polubienia też kształtują feed: tagi polubionych przepisów podnoszą podobne', async () => {
+    expect(titles(await feed(JAN, 'foryou')).at(-1)).toBe('Tiramisu') // najstarsze, więc bez polubień na końcu
+    // Jan lubi swój Sernik (tag „deser”) → Tiramisu trafia do polecanych, przed resztę
+    await as(JAN, `insert into public.recipe_likes (recipe_id, user_id) values ('10000000-0000-0000-0000-000000000003', '${JAN}')`)
+    expect(titles(await feed(JAN, 'foryou'))[0]).toBe('Tiramisu')
+    await as(JAN, `delete from public.recipe_likes where user_id = '${JAN}'`)
+    expect(titles(await feed(JAN, 'foryou')).at(-1)).toBe('Tiramisu')
+  })
+
+  it('obserwowani są przed nieobserwowanymi; author_followed wskazuje, kogo obserwuję', async () => {
+    await as(JAN, `insert into public.follows (follower_id, followee_id) values ('${JAN}', '${NOWY}')`)
+    const rows = await feed(JAN, 'foryou')
+    expect(titles(rows)[0]).toBe('Zapiekanka') // jedyny obserwowany autor jest pierwszy
+    expect(rows[0].author_followed).toBe(true)
+    expect(rows.slice(1).every((r) => !r.author_followed)).toBe(true)
+    expect(titles(await feed(JAN, 'newest'))).toEqual(['Zapiekanka']) // „Najnowsze”: tylko obserwowani
+    await as(JAN, `delete from public.follows where follower_id = '${JAN}'`)
+  })
+
+  it('stronicowanie Dla Ciebie: bez powtórzeń i braków; cudze prywatne przepisy się nie pojawiają', async () => {
+    const all = titles(await feed(JAN, 'foryou', 'x'))
+    const paged = [...titles(await feed(JAN, 'foryou', 'x', 2, 0)), ...titles(await feed(JAN, 'foryou', 'x', 2, 2)), ...titles(await feed(JAN, 'foryou', 'x', 2, 4))]
+    expect(paged).toEqual(all)
+    expect(all).not.toContain('Tajny przepis babci')
+    expect(all).not.toContain('Przepis bez profilu')
+    expect(all).not.toContain('Sernik na zimno') // własne przepisy nie wracają w feedzie
+  })
+
+  it('feed niedostępny dla anon', async () => {
+    expect(await asOk(null, "select * from public.feed('foryou', 's')")).toMatch(/permission denied/i)
   })
 })

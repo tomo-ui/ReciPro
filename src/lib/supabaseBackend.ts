@@ -12,6 +12,7 @@ import {
   type RecipeRow,
   type RecipeWithAuthorRow,
 } from './supabaseRepository'
+import { normalizeInterests } from './interests'
 import { normalizeBio, normalizeFullName, normalizeUsername, validateUsername } from './username'
 
 interface ProfileRow {
@@ -413,6 +414,37 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       const { data, error } = await client().rpc('feed', { p_mode: mode, p_seed: seed, p_limit: limit, p_offset: offset })
       if (error) fail(error)
       return (data as RecipeWithAuthorRow[]).map(rowWithAuthorToRecipe)
+    },
+
+    async getAdminSettings() {
+      const id = await currentUserId()
+      const { data, error } = await client().from('app_admins').select('show_test_accounts').eq('user_id', id).maybeSingle()
+      if (error || !data) return null // zwykły użytkownik albo baza jeszcze bez panelu admina
+      const { data: n } = await client().rpc('admin_test_account_count')
+      return { show_test_accounts: (data as { show_test_accounts: boolean }).show_test_accounts, test_accounts: typeof n === 'number' ? n : 0 }
+    },
+
+    async setShowTestAccounts(show) {
+      const id = await currentUserId()
+      const { error } = await client().from('app_admins').update({ show_test_accounts: show }).eq('user_id', id)
+      if (error) fail(error)
+    },
+
+    async getInterests() {
+      const id = await currentUserId()
+      const { data, error } = await client().from('user_interests').select('interests').eq('user_id', id).maybeSingle()
+      if (error) fail(error)
+      return normalizeInterests((data as { interests: string[] } | null)?.interests ?? [])
+    },
+
+    async setInterests(list) {
+      const interests = normalizeInterests(list)
+      const id = await currentUserId()
+      const { error } = await client()
+        .from('user_interests')
+        .upsert({ user_id: id, interests, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      if (error) fail(error)
+      return interests
     },
 
     async popularTags(limit) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { Recipe } from '@/types/recipe'
 import type { FeedMode } from '@/lib/backend'
@@ -15,6 +15,8 @@ import { SegmentedControl } from '@/components/SegmentedControl'
 interface Props {
   onOpenRecipe: (r: Recipe) => void
   onOpenProfile: (username: string) => void
+  /** Otwiera komentarze pod przepisem; `focus` = z kursorem w polu nowego komentarza */
+  onOpenComments: (recipe: Recipe, focus: boolean) => void
   onGoSearch: () => void
   /** Centrum powiadomień i liczba nieprzeczytanych */
   onOpenActivity: () => void
@@ -24,18 +26,42 @@ interface Props {
 const newSeed = () => crypto.randomUUID()
 
 /**
- * Feed jak na Instagramie: przepisy osób, które obserwujesz. Domyślnie w losowej kolejności
- * (stabilnej w obrębie jednego „tasowania”, więc doładowywanie nie powtarza pozycji),
- * a filtr „Najnowsze” pokazuje je chronologicznie.
+ * „Dla Ciebie”: najpierw przepisy obserwowanych oraz polecane od kont pasujących do Twoich zainteresowań
+ * i polubień (też tych, których nie obserwujesz), potem reszta od najnowszych. Kolejność jest stabilna
+ * w obrębie jednego odświeżenia (ziarno), więc doładowywanie nie powtarza pozycji.
+ * „Najnowsze” pokazuje chronologicznie tylko obserwowanych.
  */
-export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch, onOpenActivity, unread }: Props) {
-  const [mode, setMode] = useState<FeedMode>('random')
+export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, onGoSearch, onOpenActivity, unread }: Props) {
+  const [mode, setMode] = useState<FeedMode>('foryou')
   const [seed, setSeed] = useState(newSeed)
   const feed = usePaged((offset, limit) => backend.feed(mode, seed, offset, limit), [mode, seed], 8)
   const { stats, set: setStats, refresh: refreshStats } = useRecipeStats(feed.items)
 
-  // Zmiana listy obserwowanych (na profilu) → nowe losowanie z aktualnymi danymi
-  useEffect(() => on('follows-changed', () => setSeed(newSeed())), [])
+  // Obserwowanie z karty w feedzie: karta od razu chowa przycisk, a lista nie przeładowuje się pod palcem
+  const [followed, setFollowed] = useState<Record<string, boolean>>({})
+  const ownFollow = useRef(false)
+  useEffect(() => setFollowed({}), [mode, seed])
+  const changeFollow = (userId: string | undefined, next: boolean) => {
+    if (!userId) return
+    ownFollow.current = next // udany zapis wyśle 'follows-changed'; nie odświeżamy wtedy listy
+    setFollowed((f) => ({ ...f, [userId]: next }))
+  }
+
+  // Zmiana listy obserwowanych (np. na profilu) lub zainteresowań → nowe ułożenie z aktualnymi danymi
+  useEffect(
+    () =>
+      on('follows-changed', () => {
+        if (ownFollow.current) {
+          ownFollow.current = false
+          return
+        }
+        setSeed(newSeed())
+      }),
+    [],
+  )
+  useEffect(() => on('interests-changed', () => setSeed(newSeed())), [])
+  // Admin włączył lub wyłączył konta testowe
+  useEffect(() => on('visibility-changed', () => setSeed(newSeed())), [])
   // Nowy lub usunięty komentarz: ostatni komentarz na karcie ma być aktualny
   useEffect(() => on('comments-changed', refreshStats), [refreshStats])
 
@@ -46,11 +72,11 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch, onOpenActi
       title="Feed"
       right={
         <div className="flex items-center gap-2">
-          {mode === 'random' && (
+          {mode === 'foryou' && (
             <motion.button
               whileTap={{ scale: 0.88, rotate: 90 }}
               onClick={() => setSeed(newSeed())}
-              aria-label="Wymieszaj ponownie"
+              aria-label="Odśwież polecane"
               className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-2 text-label-2"
             >
               <ShuffleIcon width={18} height={18} />
@@ -77,7 +103,7 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch, onOpenActi
           value={mode}
           onChange={setMode}
           options={[
-            { value: 'random', label: 'Losowo' },
+            { value: 'foryou', label: 'Dla Ciebie' },
             { value: 'newest', label: 'Najnowsze' },
           ]}
         />
@@ -85,9 +111,11 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch, onOpenActi
 
       {empty ? (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-2 pt-14 text-center">
-          <p className="text-[20px] font-semibold">Twój feed jest pusty</p>
+          <p className="text-[20px] font-semibold">{mode === 'foryou' ? 'Na razie nic tu nie ma' : 'Nie obserwujesz nikogo'}</p>
           <p className="max-w-[18rem] text-[15px] text-label-2">
-            Obserwuj osoby, żeby zobaczyć tu ich przepisy. Znajdziesz je po nazwie użytkownika albo imieniu i nazwisku.
+            {mode === 'foryou'
+              ? 'Gdy w aplikacji pojawią się publiczne przepisy, zobaczysz tu te pasujące do Ciebie. Obserwuj osoby i ustaw zainteresowania w ustawieniach profilu.'
+              : 'Obserwuj osoby, żeby zobaczyć tu ich przepisy. Znajdziesz je po nazwie użytkownika albo imieniu i nazwisku.'}
           </p>
           <motion.button whileTap={{ scale: 0.95 }} onClick={onGoSearch} className="mt-3 rounded-full bg-accent px-5 py-2.5 text-[15px] font-semibold text-white">
             Znajdź osoby
@@ -100,9 +128,12 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onGoSearch, onOpenActi
               key={r.id}
               recipe={r}
               stats={stats[r.id]}
+              following={followed[r.user_id ?? ''] ?? r.author?.followed ?? false}
+              onFollowChange={(next) => changeFollow(r.user_id, next)}
               onStatsChange={(next) => setStats(r.id, next)}
               onOpen={() => onOpenRecipe(r)}
               onOpenAuthor={onOpenProfile}
+              onOpenComments={(focus) => onOpenComments(r, focus)}
             />
           ))}
           <LoadMore loading={feed.loading} done={feed.done} error={feed.error} onLoadMore={feed.loadMore} onRetry={feed.retry} />

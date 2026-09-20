@@ -16,7 +16,8 @@ import type {
  * implementacje: supabaseBackend (produkcja) i localBackend (bez Supabase / tryb demo).
  */
 
-export type FeedMode = 'random' | 'newest'
+/** `foryou` = Dla Ciebie (polecane wg zainteresowań i polubień + obserwowani), `newest` = chronologicznie obserwowani */
+export type FeedMode = 'foryou' | 'newest'
 export type RecipeSort = 'relevance' | 'newest'
 
 export interface ProfilePatch {
@@ -29,6 +30,14 @@ export interface ProfilePatch {
   is_public?: boolean
   /** Adres nowego zdjęcia profilowego; null usuwa zdjęcie */
   avatar_url?: string | null
+}
+
+/** Ustawienia panelu admina; tylko dla administratora (konto twórcy) */
+export interface AdminSettings {
+  /** Czy konta testowe są widoczne dla tego admina (tylko on je widzi) */
+  show_test_accounts: boolean
+  /** Ile kont testowych jest w bazie, niezależnie od widoczności */
+  test_accounts: number
 }
 
 export interface Backend {
@@ -80,6 +89,17 @@ export interface Backend {
   searchRecipes(query: string, sort: RecipeSort, offset: number, limit: number): Promise<Recipe[]>
   feed(mode: FeedMode, seed: string, offset: number, limit: number): Promise<Recipe[]>
   popularTags(limit: number): Promise<{ tag: string; uses: number }[]>
+
+  /* — panel admina — */
+  /** null = zwykły użytkownik (bez panelu admina) */
+  getAdminSettings(): Promise<AdminSettings | null>
+  /** Włącza/wyłącza widoczność kont testowych (tylko dla siebie jako admina) */
+  setShowTestAccounts(show: boolean): Promise<void>
+
+  /* — zainteresowania (prywatne; kształtują feed Dla Ciebie) — */
+  getInterests(): Promise<string[]>
+  /** Zapisuje listę po normalizacji i zwraca ją w zapisanej postaci */
+  setInterests(list: string[]): Promise<string[]>
 
   /* — polubienia i komentarze — */
   getRecipeStats(ids: string[]): Promise<Record<string, RecipeStats>>

@@ -15,7 +15,7 @@ export async function createDb(): Promise<PGlite> {
     create extension pg_trgm with schema extensions;
     create extension unaccent with schema extensions;
     create schema auth;
-    create table auth.users (id uuid primary key, email text);
+    create table auth.users (id uuid primary key, email text, aud text, role text, created_at timestamptz, updated_at timestamptz);
     create function auth.uid() returns uuid language sql stable
       as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     create role anon nologin;

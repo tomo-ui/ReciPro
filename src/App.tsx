@@ -22,6 +22,8 @@ import { TabBar, type Tab } from '@/components/TabBar'
 import { ActivityScreen } from '@/screens/ActivityScreen'
 import { AddRecipeScreen } from '@/screens/AddRecipeScreen'
 import { EditProfileScreen } from '@/screens/EditProfileScreen'
+import { InterestsScreen } from '@/screens/InterestsScreen'
+import { CommentsSheet } from '@/components/CommentsSheet'
 import { EditRecipeScreen } from '@/screens/EditRecipeScreen'
 import { FeedScreen } from '@/screens/FeedScreen'
 import { LoginScreen } from '@/screens/LoginScreen'
@@ -99,7 +101,14 @@ type Entry =
   | { kind: 'activity' }
   | { kind: 'diet'; id: string }
 
-type SheetState = { kind: 'add' } | { kind: 'menu' } | { kind: 'edit'; recipe: Recipe } | { kind: 'edit-profile' } | null
+type SheetState =
+  | { kind: 'add' }
+  | { kind: 'menu' }
+  | { kind: 'edit'; recipe: Recipe }
+  | { kind: 'edit-profile' }
+  | { kind: 'interests' }
+  | { kind: 'comments'; recipe: Recipe; focus: boolean }
+  | null
 
 function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Profile) => void; onSignOut?: () => void }) {
   const mine = useRecipes()
@@ -172,6 +181,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onOpenProfile={openProfile}
             onGoSearch={() => changeTab('search')}
             onOpenActivity={openActivity}
+            onOpenComments={(recipe, focus) => setSheet({ kind: 'comments', recipe, focus })}
             unread={notes.unread}
           />)}
         {screen('search', <SearchScreen onOpenRecipe={openRecipe} onOpenProfile={openProfile} />)}
@@ -295,6 +305,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onClose={() => setSheet(null)}
             onActivity={openActivity}
             onEditProfile={() => setSheet({ kind: 'edit-profile' })}
+            onInterests={() => setSheet({ kind: 'interests' })}
             onSignOut={onSignOut}
           />
         )}
@@ -322,6 +333,27 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
                 // Otwarty ekran szczegółów pokazuje od razu zmienioną wersję
                 setStack((s) => s.map((e) => (e.kind === 'recipe' && e.recipe.id === id ? { kind: 'recipe', recipe: updated } : e)))
                 return updated
+              }}
+            />
+          </Sheet>
+        )}
+        {sheet?.kind === 'interests' && (
+          <Sheet key="interests" onClose={() => setSheet(null)}>
+            <InterestsScreen onClose={() => setSheet(null)} />
+          </Sheet>
+        )}
+        {sheet?.kind === 'comments' && (
+          <Sheet key={`comments-${sheet.recipe.id}`} onClose={() => setSheet(null)}>
+            <CommentsSheet
+              recipeId={sheet.recipe.id}
+              recipeTitle={sheet.recipe.title}
+              isRecipeOwner={sheet.recipe.user_id === me.id}
+              me={me}
+              autoFocus={sheet.focus}
+              onClose={() => setSheet(null)}
+              onOpenAuthor={(username) => {
+                setSheet(null) // arkusz jest ponad ekranami stosu, więc zamykamy go przed wejściem w profil
+                openProfile(username)
               }}
             />
           </Sheet>

@@ -71,7 +71,7 @@ function Row({ n, onClick }: { n: AppNotification; onClick: () => void }) {
         <Avatar name={n.actor.username} src={n.actor.avatar_url} size={44} />
         <span className="min-w-0 flex-1 text-[14px] leading-snug">
           <span className="font-semibold">{n.actor.username}</span>
-          <VerifiedBadge username={n.actor.username} size={14} className="mr-1" /> {action}
+          <VerifiedBadge username={n.actor.username} size={12} className="mr-1" /> {action}
           {detail && <span className="block truncate text-label-2">{detail}</span>}
           <span className="block text-[12px] text-label-2">{timeAgo(n.created_at)}</span>
         </span>

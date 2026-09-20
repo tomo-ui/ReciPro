@@ -3,6 +3,7 @@ import { newMeals, itemFromRecipe, sanitizeDiet, withPortions } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
 import type { Backend, FeedMode, ProfilePatch, RecipeSort } from './backend'
 import { emit, on } from './events'
+import { normalizeInterests } from './interests'
 import { seedRecipes } from './seed'
 import { fold } from './text'
 import { normalizeBio, normalizeFullName, normalizeUsername, validateUsername } from './username'
@@ -24,6 +25,8 @@ const KEYS = {
   comments: 'przepisy:v2:comments',
   notifications: 'przepisy:v2:notifications',
   diets: 'przepisy:v2:diets',
+  interests: 'przepisy:v2:interests',
+  hideTestAccounts: 'przepisy:v2:hide-test-accounts',
 }
 
 /* — magazyn: localStorage, a gdy go brak (testy, tryb prywatny) — pamięć — */
@@ -225,7 +228,10 @@ function demoDiets(): Diet[] {
 
 const demo = buildDemo()
 const demoById = new Map(demo.map((d) => [d.profile.id, d]))
-const publicDemoRecipes = () => demo.filter((d) => d.profile.is_public).flatMap((d) => d.recipes.map((r) => withAuthor(r, d.profile)))
+/** Tryb demo: dla admina („tk”) przykładowi użytkownicy udają konta testowe i można je wyłączyć w panelu admina */
+const isAdmin = () => loadMe().username === 'tk'
+const visibleDemo = () => (isAdmin() && read<boolean>(KEYS.hideTestAccounts, () => false) ? [] : demo)
+const publicDemoRecipes = () => visibleDemo().filter((d) => d.profile.is_public).flatMap((d) => d.recipes.map((r) => withAuthor(r, d.profile)))
 
 const withAuthor = (r: Recipe, p: Profile): Recipe => ({
   ...r,
@@ -248,7 +254,7 @@ function loadOwn(): Recipe[] {
 const saveOwn = (list: Recipe[]) => write(KEYS.recipes, list)
 const newestFirst = (a: Recipe, b: Recipe) => b.created_at.localeCompare(a.created_at)
 
-const allProfiles = (): Profile[] => [loadMe(), ...demo.map((d) => d.profile)]
+const allProfiles = (): Profile[] => [loadMe(), ...visibleDemo().map((d) => d.profile)]
 
 function summary(p: Profile): ProfileSummary {
   const me = loadMe()
@@ -268,6 +274,7 @@ function summary(p: Profile): ProfileSummary {
 
 const page = <T,>(list: T[], offset: number, limit: number) => list.slice(offset, offset + limit)
 
+const loadInterests = () => normalizeInterests(read<string[]>(KEYS.interests, () => []))
 const loadLikes = () => new Set(read<string[]>(KEYS.likes, () => []))
 
 /** Kilka komentarzy pod przykładowymi przepisami, żeby sekcja komentarzy nie była pusta */
@@ -311,9 +318,9 @@ function demoPeople(target: Profile, kind: 'followers' | 'following'): Profile[]
   const me = loadMe()
   if (!target.is_public && target.id !== me.id) return []
   const follows = loadFollows()
-  const others = demo.map((d) => d.profile).filter((p) => p.id !== target.id && p.is_public)
+  const others = visibleDemo().map((d) => d.profile).filter((p) => p.id !== target.id && p.is_public)
   if (kind === 'following') {
-    return target.id === me.id ? demo.map((d) => d.profile).filter((p) => follows.has(p.id)) : others.slice(0, 2)
+    return target.id === me.id ? visibleDemo().map((d) => d.profile).filter((p) => follows.has(p.id)) : others.slice(0, 2)
   }
   if (target.id === me.id) return []
   return [...(follows.has(target.id) ? [me] : []), ...others]
@@ -441,11 +448,52 @@ export const localBackend: Backend = {
     return page(scored.map((s) => s.r), offset, limit)
   },
 
+  /** Odpowiednik supabase/engagement.sql (public.feed): obserwowani i pasujący do zainteresowań/polubień, potem reszta */
   async feed(mode: FeedMode, seed: string, offset, limit) {
     const followed = loadFollows()
-    const list = publicDemoRecipes().filter((r) => followed.has(r.user_id ?? ''))
-    list.sort(mode === 'newest' ? newestFirst : (a, b) => hash(a.id + seed) - hash(b.id + seed))
-    return page(list, offset, limit)
+    const flagged = publicDemoRecipes().map((r) => ({ ...r, author: { ...r.author!, followed: followed.has(r.user_id ?? '') } }))
+    if (mode === 'newest') return page(flagged.filter((r) => r.author.followed).sort(newestFirst), offset, limit)
+
+    const interests = loadInterests().map(fold)
+    const liked = loadLikes()
+    const likedTags = new Map<string, number>()
+    for (const r of [...loadOwn(), ...publicDemoRecipes()]) {
+      if (liked.has(r.id)) for (const t of r.tags) likedTags.set(fold(t), Math.min(3, (likedTags.get(fold(t)) ?? 0) + 1))
+    }
+    const now = Date.now()
+    const scored = flagged.map((r) => {
+      const tags = r.tags.map(fold)
+      const title = fold(r.title)
+      const match =
+        tags.filter((t) => interests.includes(t)).length * 3 +
+        interests.filter((i) => i && title.includes(i)).length * 2 +
+        tags.reduce((sum, t) => sum + (likedTags.get(t) ?? 0), 0)
+      const recommended = r.author.followed || match > 0
+      const ageDays = Math.max(0, now - new Date(r.created_at).getTime()) / 86_400_000
+      const rank = (r.author.followed ? 2 : 0) + match + (hash(r.id + seed) % 1000) / 1000 * 1.5 + 2 * Math.exp(-ageDays / 14)
+      return { r, recommended, rank }
+    })
+    scored.sort((a, b) => Number(b.recommended) - Number(a.recommended) || (a.recommended ? b.rank - a.rank : newestFirst(a.r, b.r)))
+    return page(scored.map((s) => s.r), offset, limit)
+  },
+
+  async getAdminSettings() {
+    if (!isAdmin()) return null
+    return { show_test_accounts: !read<boolean>(KEYS.hideTestAccounts, () => false), test_accounts: demo.length }
+  },
+
+  async setShowTestAccounts(show) {
+    if (isAdmin()) write(KEYS.hideTestAccounts, !show)
+  },
+
+  async getInterests() {
+    return loadInterests()
+  },
+
+  async setInterests(list) {
+    const next = normalizeInterests(list)
+    write(KEYS.interests, next)
+    return next
   },
 
   async popularTags(limit) {

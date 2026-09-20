@@ -211,6 +211,41 @@ describe('profile, listy i zdjęcie profilowe', () => {
     expect((await f.backend.getMyProfile())?.allow_avatar_zoom).toBe(true) // baza sprzed migracji
   })
 
+  it('zainteresowania: odczyt z tabeli user_interests, zapis przez upsert po normalizacji', async () => {
+    const f = fake({ results: (call) => ok(call.ops.some(([op]) => op === 'maybeSingle') ? { interests: ['Zupa', 'zupa', 'deser'] } : null) })
+    expect(await f.backend.getInterests()).toEqual(['zupa', 'deser'])
+    expect(f.calls[0].table).toBe('user_interests')
+    expect(await f.backend.setInterests([' Pizza ', 'pizza', '#Ryby'])).toEqual(['pizza', 'ryby'])
+    const up = f.calls[1].ops.find(([op]) => op === 'upsert')!
+    expect((up[1][0] as { user_id: string; interests: string[] })).toMatchObject({ user_id: 'me', interests: ['pizza', 'ryby'] })
+    expect(up[1][1]).toEqual({ onConflict: 'user_id' })
+  })
+
+  it('feed: przekazuje tryb i mapuje author_followed', async () => {
+    const row = { id: 'r', user_id: 'u', title: 'Bigos', description: null, image_url: null, source_url: null, servings: null, prep_minutes: null, cook_minutes: null, total_minutes: null, ingredients: [], steps: [], tags: [], parse_method: 'manual', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z', author_username: 'zosia', author_full_name: null, author_avatar_url: null, author_followed: true }
+    const f = fake({ rpc: () => ok([row, { ...row, id: 'r2', author_followed: false }, { ...row, id: 'r3', author_followed: undefined }]) })
+    const list = await f.backend.feed('foryou', 'seed', 0, 8)
+    expect(f.rpcCalls[0]).toEqual({ name: 'feed', args: { p_mode: 'foryou', p_seed: 'seed', p_limit: 8, p_offset: 0 } })
+    expect(list.map((r) => r.author?.followed)).toEqual([true, false, undefined])
+  })
+
+  it('panel admina: null dla zwykłego użytkownika, ustawienia i liczba kont dla admina; zapis tylko przełącznika', async () => {
+    const regular = fake({ results: () => ok(null) })
+    expect(await regular.backend.getAdminSettings()).toBeNull()
+    expect(regular.calls[0].table).toBe('app_admins')
+
+    const admin = fake({ results: () => ok({ show_test_accounts: false }), rpc: () => ok(20) })
+    expect(await admin.backend.getAdminSettings()).toEqual({ show_test_accounts: false, test_accounts: 20 })
+    expect(admin.rpcCalls[0].name).toBe('admin_test_account_count')
+    await admin.backend.setShowTestAccounts(true)
+    const upd = admin.calls.at(-1)!
+    expect(upd.table).toBe('app_admins')
+    expect(upd.ops).toContainEqual(['update', [{ show_test_accounts: true }]])
+
+    const oldDb = fake({ results: () => ({ data: null, error: { code: '42P01', message: 'relation does not exist' } }) })
+    expect(await oldDb.backend.getAdminSettings()).toBeNull() // baza sprzed panelu admina: bez panelu, bez błędu
+  })
+
   it('brak migracji daje czytelny komunikat z nazwami plików', async () => {
     const missing = fake({ rpc: () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.list_followers' } }) })
     await expect(missing.backend.listFollowers('a', 0, 10)).rejects.toThrow(/engagement\.sql/)

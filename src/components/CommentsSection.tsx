@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Comment, Profile } from '@/types/recipe'
 import { backend } from '@/lib/data'
@@ -20,13 +20,21 @@ interface Props {
   onOpenAuthor: (username: string) => void
   /** Zmiana liczby komentarzy (+1 / −1), żeby rodzic zaktualizował licznik */
   onCountChange: (delta: number) => void
+  /** Kursor od razu w polu nowego komentarza (klawiatura się wysuwa) */
+  autoFocus?: boolean
 }
 
-export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onCountChange }: Props) {
+export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onCountChange, autoFocus }: Props) {
   const list = usePaged((o, l) => backend.listComments(recipeId, o, l), [recipeId], 15)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Fokus przy montowaniu: atrybut autoFocus działa w gestcie dotknięcia, a to jest zapas dla przeglądarek, które go pomijają
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus({ preventScroll: true })
+  }, [autoFocus])
 
   async function send(e: FormEvent) {
     e.preventDefault()
@@ -70,6 +78,8 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
         {/* Wyraźnie obrysowane pole obok mojego zdjęcia; po dotknięciu podświetla się na kolor akcentu */}
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[20px] border-[1.5px] border-label-3 bg-surface py-0.5 pr-1 pl-3.5 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]">
           <textarea
+            ref={inputRef}
+            autoFocus={autoFocus}
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, MAX))}
             placeholder="Dodaj komentarz…"
@@ -110,7 +120,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
                   <button onClick={() => onOpenAuthor(c.author.username)} className="font-semibold text-label">
                     {c.author.username}
                   </button>
-                  <VerifiedBadge username={c.author.username} size={14} className="align-baseline" />
+                  <VerifiedBadge username={c.author.username} size={12} className="align-baseline" />
                   <span className="ml-1.5">· {timeAgo(c.created_at)}</span>
                 </p>
                 <p className="text-[15px] leading-snug break-words whitespace-pre-wrap" data-selectable>

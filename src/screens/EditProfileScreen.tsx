@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { Profile } from '@/types/recipe'
+import type { AdminSettings } from '@/lib/backend'
 import { backend } from '@/lib/data'
+import { emit } from '@/lib/events'
 import { deleteRecipeImage, fileToAvatarBlob, uploadAvatarImage } from '@/lib/images'
 import { BIO_MAX_LENGTH, BIO_MAX_LINES, normalizeBio, normalizeFullName, normalizeUsername } from '@/lib/username'
 import { useUsernameCheck } from '@/hooks/useUsernameCheck'
@@ -28,6 +30,9 @@ export function EditProfileScreen({ me, onClose, onSaved }: Props) {
   const [bio, setBio] = useState(me.bio ?? '')
   const [isPublic, setIsPublic] = useState(me.is_public)
   const [allowZoom, setAllowZoom] = useState(me.allow_avatar_zoom !== false)
+  // Panel admina (tylko konto twórcy): przełącznik widoczności kont testowych działa od razu, bez „Zapisz”
+  const [admin, setAdmin] = useState<AdminSettings | null>(null)
+  const [adminError, setAdminError] = useState<string | null>(null)
   const [pending, setPending] = useState<{ blob: Blob; preview: string } | null>(null)
   const [removeAvatar, setRemoveAvatar] = useState(false)
   const [avatarBusy, setAvatarBusy] = useState(false)
@@ -36,6 +41,30 @@ export function EditProfileScreen({ me, onClose, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const status = useUsernameCheck(username, me.username)
+
+  useEffect(() => {
+    let alive = true
+    backend
+      .getAdminSettings()
+      .then((s) => alive && setAdmin(s))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  async function toggleTestAccounts(show: boolean) {
+    if (!admin) return
+    setAdminError(null)
+    setAdmin({ ...admin, show_test_accounts: show })
+    try {
+      await backend.setShowTestAccounts(show)
+      emit('visibility-changed') // feed i wyszukiwarka pobierają dane od nowa
+    } catch (e) {
+      setAdmin(admin)
+      setAdminError(e instanceof Error ? e.message : 'Nie udało się zmienić ustawienia.')
+    }
+  }
 
   const canSave = status.state === 'ok' && !saving && !avatarBusy
 
@@ -227,6 +256,25 @@ export function EditProfileScreen({ me, onClose, onSaved }: Props) {
             {allowZoom ? 'Inni mogą dotknąć Twojego zdjęcia profilowego, żeby zobaczyć je w dużym formacie.' : 'Dotknięcie Twojego zdjęcia profilowego nic nie robi. Ty nadal możesz je powiększyć.'}
           </p>
         </div>
+
+        {admin && (
+          <div>
+            <p className="mb-1.5 px-4 text-[13px] text-label-2 uppercase">Panel admina</p>
+            <Group>
+              <Field label="Konta testowe">
+                <span className="flex justify-end">
+                  <Toggle checked={admin.show_test_accounts} onChange={(v) => void toggleTestAccounts(v)} label="Konta testowe" />
+                </span>
+              </Field>
+            </Group>
+            <p className="mt-1.5 px-4 text-[13px] text-label-2">
+              {admin.test_accounts > 0
+                ? `${admin.test_accounts} kont testowych z przepisami do testów aplikacji. Widzisz je tylko Ty, inni użytkownicy nie wiedzą o ich istnieniu. ${admin.show_test_accounts ? 'Wyłącz, żeby je ukryć.' : 'Są teraz ukryte także przed Tobą.'}`
+                : 'W bazie nie ma jeszcze kont testowych. Uruchom supabase/test_accounts.sql w SQL Editorze Supabase.'}
+            </p>
+            {adminError && <p className="mt-1.5 px-4 text-[13px] text-red-500">{adminError}</p>}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -62,6 +62,8 @@ export interface RecipeAuthor {
   username: string
   full_name?: string
   avatar_url?: string
+  /** Tylko w feedzie: czy zalogowany użytkownik już obserwuje autora */
+  followed?: boolean
 }
 
 /** Profil użytkownika (tabela `profiles`) */

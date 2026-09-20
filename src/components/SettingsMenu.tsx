@@ -1,18 +1,19 @@
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { spring } from '@/lib/ui'
-import { HeartIcon, PencilIcon } from './Icons'
+import { HeartIcon, PencilIcon, SlidersIcon } from './Icons'
 
 interface Props {
   unread: number
   onClose: () => void
   onActivity: () => void
   onEditProfile: () => void
+  onInterests: () => void
   onSignOut?: () => void
 }
 
 /** Menu z burgera na profilu: aktywność i ustawienia konta (dolny arkusz, jak w Instagramie) */
-export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onSignOut }: Props) {
+export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onSignOut }: Props) {
   return (
     <>
       <motion.div
@@ -45,6 +46,7 @@ export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onSig
         <ul className="divide-y divide-separator overflow-hidden rounded-[14px] bg-surface">
           <Item icon={<HeartIcon width={22} height={22} />} label="Aktywność" badge={unread} onClick={onActivity} />
           <Item icon={<PencilIcon width={22} height={22} />} label="Edytuj profil" onClick={onEditProfile} />
+          <Item icon={<SlidersIcon width={22} height={22} />} label="Zainteresowania" onClick={onInterests} />
         </ul>
 
         {onSignOut && (

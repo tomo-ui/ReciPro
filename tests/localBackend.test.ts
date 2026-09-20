@@ -25,6 +25,78 @@ describe('tryb lokalny: polubienia', () => {
   })
 })
 
+describe('tryb lokalny: feed Dla Ciebie i zainteresowania', () => {
+  const titlesOf = async (mode: 'foryou' | 'newest', seed = 's') => (await b.feed(mode, seed, 0, 50)).map((r) => r.title)
+
+  it('zainteresowania: zapis po normalizacji i odczyt', async () => {
+    expect(await b.setInterests([' Zupa ', 'zupa', '#Deser'])).toEqual(['zupa', 'deser'])
+    expect(await b.getInterests()).toEqual(['zupa', 'deser'])
+    expect(await b.setInterests([])).toEqual([])
+  })
+
+  it('Dla Ciebie pokazuje też konta, których nie obserwuję, z flagą followed; „Najnowsze” tylko obserwowanych', async () => {
+    const zosia = (await b.getProfile('kuchnia.zosi'))!
+    await b.unfollow(zosia.id)
+    const all = await b.feed('foryou', 's', 0, 50)
+    const zosiaRecipes = all.filter((r) => r.author?.username === 'kuchnia.zosi')
+    expect(zosiaRecipes.length).toBeGreaterThan(0)
+    expect(zosiaRecipes.every((r) => r.author?.followed === false)).toBe(true)
+    expect((await b.feed('newest', 's', 0, 50)).some((r) => r.author?.username === 'kuchnia.zosi')).toBe(false)
+    await b.follow(zosia.id)
+    expect((await b.feed('foryou', 's', 0, 50)).filter((r) => r.author?.username === 'kuchnia.zosi').every((r) => r.author?.followed)).toBe(true)
+    expect((await b.feed('newest', 's', 0, 50)).some((r) => r.author?.username === 'kuchnia.zosi')).toBe(true)
+    if (!zosia.is_following) await b.unfollow(zosia.id)
+  })
+
+  it('pasujące do zainteresowań przepisy nieobserwowanych trafiają na początek; reszta chronologicznie', async () => {
+    const zosia = (await b.getProfile('kuchnia.zosi'))!
+    const anna = (await b.getProfile('anna_gotuje'))!
+    await b.unfollow(zosia.id)
+    await b.unfollow(anna.id)
+    await b.setInterests([])
+    const plain = await b.feed('foryou', 's', 0, 50)
+    const chronological = [...plain].sort((x, y) => y.created_at.localeCompare(x.created_at)).map((r) => r.title)
+    expect(plain.map((r) => r.title)).toEqual(chronological) // bez obserwowanych i zainteresowań: od najnowszych
+
+    const oldest = chronological.at(-1)!
+    const oldestRecipe = plain.find((r) => r.title === oldest)!
+    await b.setInterests([oldestRecipe.tags[0] ?? oldest])
+    expect((await titlesOf('foryou'))[0]).toBe(oldest) // najstarszy przepis z pasującym tagiem wychodzi na czoło
+    await b.setInterests([])
+    // przywracamy stan wyjściowy, żeby nie wpływać na kolejne testy
+    if (zosia.is_following) await b.follow(zosia.id)
+    if (anna.is_following) await b.follow(anna.id)
+  })
+
+  it('stronicowanie: te same pozycje, bez powtórzeń', async () => {
+    const all = await titlesOf('foryou', 'x')
+    const paged = [...(await b.feed('foryou', 'x', 0, 3)), ...(await b.feed('foryou', 'x', 3, 3)), ...(await b.feed('foryou', 'x', 6, 50))].map((r) => r.title)
+    expect(paged).toEqual(all)
+    expect(new Set(all).size).toBe(all.length)
+  })
+})
+
+describe('tryb lokalny: panel admina (przykładowi użytkownicy jako konta testowe)', () => {
+  it('zwykły użytkownik nie ma panelu; admin „tk” może ukryć i pokazać konta testowe', async () => {
+    expect(await b.getAdminSettings()).toBeNull()
+    const original = await b.getMyProfile()
+    await b.updateProfile({ username: 'tk' })
+    try {
+      expect(await b.getAdminSettings()).toEqual({ show_test_accounts: true, test_accounts: expect.any(Number) })
+      expect((await b.searchProfiles('anna', 0, 10)).length).toBeGreaterThan(0)
+      await b.setShowTestAccounts(false)
+      expect((await b.getAdminSettings())?.show_test_accounts).toBe(false)
+      expect(await b.searchProfiles('anna', 0, 10)).toHaveLength(0)
+      expect(await b.feed('foryou', 's', 0, 50)).toHaveLength(0)
+      await b.setShowTestAccounts(true)
+      expect((await b.feed('foryou', 's', 0, 50)).length).toBeGreaterThan(0)
+    } finally {
+      await b.setShowTestAccounts(true)
+      await b.updateProfile({ username: original!.username })
+    }
+  })
+})
+
 describe('tryb lokalny: komentarze', () => {
   it('są przykładowe komentarze, od najnowszych, ze stronicowaniem', async () => {
     const all = await b.listComments('demo-zosia-1', 0, 10)

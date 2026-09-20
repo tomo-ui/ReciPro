@@ -25,6 +25,8 @@ export interface RecipeWithAuthorRow extends RecipeRow {
   author_username: string
   author_full_name: string | null
   author_avatar_url: string | null
+  /** Tylko z funkcji feed */
+  author_followed?: boolean | null
 }
 
 const orUndef = <T>(v: T | null): T | undefined => v ?? undefined
@@ -57,6 +59,7 @@ export function rowWithAuthorToRecipe(r: RecipeWithAuthorRow): Recipe {
       username: r.author_username,
       full_name: orUndef(r.author_full_name),
       avatar_url: orUndef(r.author_avatar_url),
+      followed: r.author_followed ?? undefined,
     },
   }
 }
