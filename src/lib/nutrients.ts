@@ -83,6 +83,7 @@ export function macroShares(n: Nutrients): { protein: number; fat: number; carbs
 /** Liczba do wyświetlenia: całkowite dla dużych wartości, jeden lub dwa miejsca po przecinku dla małych */
 export function formatAmount(v: number): string {
   if (!Number.isFinite(v)) return '–'
+  if (v === 0) return '0'
   const a = Math.abs(v)
   const digits = a >= 100 ? 0 : a >= 10 ? 0 : a >= 1 ? 1 : 2
   return v.toFixed(digits).replace('.', ',')

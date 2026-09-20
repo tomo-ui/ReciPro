@@ -277,3 +277,47 @@ describe('ostatni komentarz w statystykach', () => {
     expect(stats.b.last_comment).toBeUndefined()
   })
 })
+
+describe('diety', () => {
+  const meals = [{ id: 'm', name: 'Obiad', share: 100, items: [] }]
+  const targets = { kcalPerDay: 2000, protein: 20, fat: 30, carbs: 50, preset: 'balanced' as const, lowSalt: false, highFiber: false }
+  const row = { id: 'd1', user_id: 'u', title: 'Dieta', description: null, meals, targets, is_public: true, source: null, created_at: 'a', updated_at: 'b', author: { username: 'anna', full_name: null, avatar_url: null } }
+
+  it('listDiets filtruje po nazwie autora i mapuje wiersze', async () => {
+    const f = fake({ results: () => ok([row]) })
+    const [d] = await f.backend.listDiets('Anna')
+    expect(d).toMatchObject({ id: 'd1', title: 'Dieta', is_public: true, author: { username: 'anna' } })
+    const ops = f.calls[0].ops
+    expect(f.calls[0].table).toBe('diets')
+    expect(ops).toContainEqual(['eq', ['author.username', 'anna']])
+    expect(ops).toContainEqual(['order', ['updated_at', { ascending: false }]])
+  })
+
+  it('getDiet: brak wiersza daje null, a dokument bez pól jest uzupełniany', async () => {
+    expect(await fake({ results: () => ok(null) }).backend.getDiet('x')).toBeNull()
+    const broken = { ...row, targets: {}, meals: [{ id: '', name: '', share: 5, items: [{ id: '', title: 'x', lines: [], portions: 0 }] }] }
+    const d = await fake({ results: () => ok(broken) }).backend.getDiet('d1')
+    expect(d?.targets.kcalPerDay).toBe(2000)
+    expect(d?.meals[0].items[0].portions).toBe(1)
+  })
+
+  it('saveDiet: bez id wstawia, z id aktualizuje tylko dozwolone pola; pusta nazwa jest odrzucana', async () => {
+    const draft = { title: '  Nowa  ', meals, targets, is_public: false }
+    const f = fake({ results: () => ok(row) })
+    await f.backend.saveDiet(draft)
+    expect(f.calls[0].ops).toContainEqual(['insert', [{ title: 'Nowa', description: null, meals, targets, is_public: false, source: null }]])
+    await f.backend.saveDiet({ ...draft, id: 'd1' })
+    expect(f.calls[1].ops.some(([op]) => op === 'update')).toBe(true)
+    expect(f.calls[1].ops).toContainEqual(['eq', ['id', 'd1']])
+    await expect(f.backend.saveDiet({ ...draft, title: '   ' })).rejects.toThrow(/nazwę/)
+    expect(f.calls).toHaveLength(2)
+  })
+
+  it('deleteDiet usuwa po id; brak migracji wskazuje diets.sql', async () => {
+    const f = fake()
+    await f.backend.deleteDiet('d1')
+    expect(f.calls[0].ops).toContainEqual(['delete', []])
+    const missing = fake({ results: () => ({ data: null, error: { code: '42P01', message: 'relation "diets" does not exist' } }) })
+    await expect(missing.backend.listDiets('a')).rejects.toThrow(/diets\.sql/)
+  })
+})

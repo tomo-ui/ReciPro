@@ -18,6 +18,8 @@ export interface ParseResult {
   origin: ParseOrigin
   /** Liczbę porcji oszacowało AI, bo źródło jej nie podawało */
   servingsEstimated: boolean
+  /** Uzasadnienie szacunku porcji (do pokazania użytkownikowi) */
+  servingsBasis?: string
   /** Co się stało z miniaturką filmu z TikToka */
   thumbnail: ThumbnailInfo
 }
@@ -44,6 +46,7 @@ export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
     draft?: RecipeDraft
     origin?: ParseOrigin
     servingsEstimated?: boolean
+    servingsBasis?: string
     thumbnail?: ThumbnailInfo
     error?: string
   } | null
@@ -54,6 +57,7 @@ export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
     draft: body.draft,
     origin: body.origin ?? 'page',
     servingsEstimated: body.servingsEstimated ?? false,
+    servingsBasis: body.servingsBasis,
     thumbnail: body.thumbnail ?? { status: 'none' },
   }
 }

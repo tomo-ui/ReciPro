@@ -48,6 +48,9 @@ export async function createDb(): Promise<PGlite> {
   const notifications = readFileSync('supabase/notifications.sql', 'utf8')
   await db.exec(notifications)
   await db.exec(notifications) // idempotentność
+  const diets = readFileSync('supabase/diets.sql', 'utf8')
+  await db.exec(diets)
+  await db.exec(diets) // idempotentność
   return db
 }
 

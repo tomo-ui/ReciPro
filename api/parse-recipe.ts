@@ -55,12 +55,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { draft, origin, servingsEstimated, thumbnail } = await parseRecipeUrl(url, {
+    const { draft, origin, servingsEstimated, servingsBasis, thumbnail } = await parseRecipeUrl(url, {
       geminiApiKey: process.env.GEMINI_API_KEY,
       geminiModel: process.env.GEMINI_MODEL,
       storage,
     })
-    return res.status(200).json({ draft, origin, servingsEstimated, thumbnail })
+    return res.status(200).json({ draft, origin, servingsEstimated, servingsBasis, thumbnail })
   } catch (e) {
     if (e instanceof FetchError) {
       const status = e.code === 'timeout' ? 504 : e.code === 'invalid_url' || e.code === 'blocked' ? 400 : 502

@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import type { ProfileSummary, Recipe } from '@/types/recipe'
+import type { ProfileSummary, Recipe, RecipeDraft } from '@/types/recipe'
+import { FEATURES } from '@/lib/features'
 import { backend } from '@/lib/data'
 import { usePaged } from '@/hooks/usePaged'
 import { Avatar } from '@/components/Avatar'
+import { DietTab } from '@/components/DietTab'
+import { GoalsTab } from '@/components/GoalsTab'
+import { SegmentedControl } from '@/components/SegmentedControl'
 import { FollowButton } from '@/components/FollowButton'
 import { LockIcon, SpinnerIcon } from '@/components/Icons'
 import { LoadMore } from '@/components/LoadMore'
@@ -18,10 +22,21 @@ interface Props {
   onOpenList?: (kind: 'followers' | 'following') => void
   /** Zmiana wartości wymusza ponowne pobranie profilu (np. po edycji) */
   reloadKey?: number
+  /** Moje przepisy — do zakładki Cele (tylko własny profil) */
+  myRecipes?: Recipe[]
+  /** Zapis dopasowanego przepisu jako nowego (zakładka Cele) */
+  onSaveRecipe?: (draft: RecipeDraft) => Promise<void>
+  /** Otwiera dietę (zakładka Dieta) */
+  onOpenDiet?: (id: string) => void
+  /** Zmiana wymusza odświeżenie listy diet */
+  dietVersion?: number
 }
 
+type Tab = 'recipes' | 'goals' | 'diet'
+
 /** Profil w stylu Instagrama: awatar, liczniki, przycisk obserwowania i siatka przepisów */
-export function ProfileView({ username, onOpenRecipe, onEdit, onOpenList, reloadKey }: Props) {
+export function ProfileView({ username, onOpenRecipe, onEdit, onOpenList, reloadKey, myRecipes, onSaveRecipe, onOpenDiet, dietVersion }: Props) {
+  const [tab, setTab] = useState<Tab>('recipes')
   const [profile, setProfile] = useState<ProfileSummary | null | undefined>(undefined) // undefined = ładowanie
   const [error, setError] = useState<string | null>(null)
 
@@ -66,6 +81,7 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onOpenList, reload
   }, [profileId, username])
 
   const visible = !!profile && (profile.is_public || profile.is_me)
+  const showTabs = FEATURES.diet && !!onOpenDiet
   const recipes = usePaged((o, l) => backend.profileRecipes(profile!, o, l), [profile?.id, reloadKey], 12, visible)
 
   if (profile === undefined) {
@@ -136,18 +152,38 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onOpenList, reload
           <p className="text-[17px] font-semibold">Ten profil jest prywatny</p>
           <p className="text-[14px] text-label-2">Przepisy tej osoby są widoczne tylko dla niej.</p>
         </div>
-      ) : recipes.items.length === 0 && !recipes.loading && !recipes.error ? (
-        <p className="border-t border-separator pt-10 text-center text-[15px] text-label-2">
-          {profile.is_me ? 'Nie masz jeszcze przepisów.' : 'Ta osoba nie dodała jeszcze przepisów.'}
-        </p>
       ) : (
         <div className="border-t border-separator pt-4">
-          <div className="grid grid-cols-2 gap-3">
-            {recipes.items.map((r) => (
-              <RecipeCard key={r.id} recipe={r} onOpen={() => onOpenRecipe(r)} />
-            ))}
-          </div>
-          <LoadMore loading={recipes.loading} done={recipes.done} error={recipes.error} onLoadMore={recipes.loadMore} onRetry={recipes.retry} />
+          {showTabs && (
+            <SegmentedControl<Tab>
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: 'recipes', label: 'Przepisy' },
+                ...(profile.is_me ? [{ value: 'goals' as const, label: 'Cele' }] : []),
+                { value: 'diet', label: 'Dieta' },
+              ]}
+            />
+          )}
+
+          {tab === 'goals' && profile.is_me && myRecipes && onSaveRecipe ? (
+            <GoalsTab recipes={myRecipes} onSaveRecipe={onSaveRecipe} />
+          ) : tab === 'diet' && onOpenDiet ? (
+            <DietTab username={profile.username} isMe={profile.is_me} onOpenDiet={onOpenDiet} reloadKey={dietVersion} />
+          ) : recipes.items.length === 0 && !recipes.loading && !recipes.error ? (
+            <p className="pt-10 text-center text-[15px] text-label-2">
+              {profile.is_me ? 'Nie masz jeszcze przepisów.' : 'Ta osoba nie dodała jeszcze przepisów.'}
+            </p>
+          ) : (
+            <div className="pt-4">
+              <div className="grid grid-cols-2 gap-3">
+                {recipes.items.map((r) => (
+                  <RecipeCard key={r.id} recipe={r} onOpen={() => onOpenRecipe(r)} />
+                ))}
+              </div>
+              <LoadMore loading={recipes.loading} done={recipes.done} error={recipes.error} onLoadMore={recipes.loadMore} onRetry={recipes.retry} />
+            </div>
+          )}
         </div>
       )}
     </div>

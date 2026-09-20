@@ -133,7 +133,7 @@ const STUFF: { test: RegExp; density: number }[] = [
 /** Waga typowej sztuki (g), używana tylko do ułamków: „1/2 cebuli” → „50 g cebuli” */
 const PIECE_WEIGHT: [RegExp, number][] = [
   [/cebul|onion/i, 100],
-  [/jajk|jaja|jajek|egg/i, 55],
+  [/jajk|jaja|jajek|(?:^|\s)jaj(?:\s|$)|egg/i, 55],
   [/ziemniak|potato/i, 150],
   [/marchew|marchwi|carrot/i, 80],
   [/pomidor|tomato/i, 120],

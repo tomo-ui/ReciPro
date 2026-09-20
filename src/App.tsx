@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Session } from '@supabase/supabase-js'
-import type { Profile, Recipe } from '@/types/recipe'
+import type { Profile, Recipe, RecipeDraft } from '@/types/recipe'
 import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { spring } from '@/lib/ui'
@@ -22,6 +22,7 @@ import { EditProfileScreen } from '@/screens/EditProfileScreen'
 import { EditRecipeScreen } from '@/screens/EditRecipeScreen'
 import { FeedScreen } from '@/screens/FeedScreen'
 import { LoginScreen } from '@/screens/LoginScreen'
+import { DietScreen } from '@/screens/DietScreen'
 import { PeopleListScreen, type ListKind } from '@/screens/PeopleListScreen'
 import { ProfileSetupScreen } from '@/screens/ProfileSetupScreen'
 import { ProfileView } from '@/screens/ProfileView'
@@ -79,6 +80,7 @@ type Entry =
   | { kind: 'profile'; username: string }
   | { kind: 'people'; username: string; list: ListKind }
   | { kind: 'activity' }
+  | { kind: 'diet'; id: string }
 
 type SheetState = { kind: 'add' } | { kind: 'menu' } | { kind: 'edit'; recipe: Recipe } | { kind: 'edit-profile' } | null
 
@@ -92,6 +94,9 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
   /** Zmiana wymusza ponowne pobranie własnego profilu (liczniki, siatka) po dodaniu/edycji/usunięciu */
   const [profileVersion, setProfileVersion] = useState(0)
   const bump = () => setProfileVersion((v) => v + 1)
+  /** Zmiana w dietach odświeża ich listy na profilach */
+  const [dietVersion, setDietVersion] = useState(0)
+  const bumpDiets = useCallback(() => setDietVersion((v) => v + 1), [])
 
   function changeTab(next: Tab) {
     setTab(next)
@@ -117,6 +122,14 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
       .getRecipe(id)
       .then((r) => (r ? openRecipe(r) : alert('Ten przepis został usunięty.')))
       .catch((e: unknown) => alert(e instanceof Error ? e.message : 'Nie udało się otworzyć przepisu.'))
+  }
+  const openDiet = (id: string) => setStack((s) => [...s, { kind: 'diet', id }])
+  /** Dieta widziana na cudzym profilu została zapisana u mnie: w tym miejscu stosu pokazujemy moją kopię */
+  const replaceWithOwnDiet = (id: string) => setStack((s) => [...s.slice(0, -1), { kind: 'diet', id }])
+  /** Zapis dopasowanego przepisu jako nowego (zakładka Cele) */
+  const saveAdaptedRecipe = async (draft: RecipeDraft) => {
+    await mine.add(draft)
+    bump()
   }
   const { markRead } = notes
   const onSeen = useCallback(() => void markRead(), [markRead])
@@ -179,6 +192,10 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               onOpenRecipe={openRecipe}
               onEdit={() => setSheet({ kind: 'edit-profile' })}
               onOpenList={(kind) => openList(me.username, kind)}
+              myRecipes={mine.recipes}
+              onSaveRecipe={saveAdaptedRecipe}
+              onOpenDiet={openDiet}
+              dietVersion={dietVersion}
             />
           </LargeTitleScreen>,
         )}
@@ -218,10 +235,24 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
                   username={entry.username}
                   onOpenRecipe={openRecipe}
                   onOpenList={(kind) => openList(entry.username, kind)}
+                  onOpenDiet={openDiet}
+                  dietVersion={dietVersion}
                 />
               </div>
             </PushedScreen>
-          ) : entry.kind === 'activity' ? (
+          ) : entry.kind === 'diet' ? (
+            <PushedScreen key={`diet-${entry.id}-${i}`} title="Dieta" onBack={pop}>
+              <DietScreen
+                dietId={entry.id}
+                me={me}
+                recipes={mine.recipes}
+                onOpenProfile={openProfile}
+                onCopied={(d) => replaceWithOwnDiet(d.id)}
+                onDeleted={pop}
+                onChanged={bumpDiets}
+              />
+            </PushedScreen>
+) : entry.kind === 'activity' ? (
             <PushedScreen key={`activity-${i}`} title="Aktywność" onBack={pop}>
               <ActivityScreen arrivals={notes.arrivals} onSeen={onSeen} onOpenProfile={openProfile} onOpenRecipe={openRecipeById} />
             </PushedScreen>

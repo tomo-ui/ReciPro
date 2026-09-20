@@ -24,6 +24,8 @@ interface ImportInfo {
   method: RecipeDraft['parse_method']
   /** Porcje podane przez AI; komunikat znika, gdy użytkownik zmieni wartość */
   estimatedServings?: number
+  /** Skąd wzięła się liczba porcji */
+  servingsBasis?: string
   thumbnail: ThumbnailInfo
 }
 
@@ -49,12 +51,13 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
     setError(null)
     setFetching(true)
     try {
-      const { draft, origin, servingsEstimated, thumbnail } = await parseRecipeFromUrl(url.trim())
+      const { draft, origin, servingsEstimated, servingsBasis, thumbnail } = await parseRecipeFromUrl(url.trim())
       rf.load(draftToForm({ ...draft, source_url: draft.source_url ?? url.trim() }))
       setInfo({
         origin,
         method: draft.parse_method,
         estimatedServings: servingsEstimated ? draft.servings : undefined,
+        servingsBasis: servingsEstimated ? servingsBasis : undefined,
         thumbnail,
       })
       setMode('manual') // użytkownik weryfikuje wynik parsowania przed zapisem
@@ -93,7 +96,10 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
           : IMPORT_NOTES[info.method]}
       </p>
       {info.estimatedServings !== undefined && form.servings === String(info.estimatedServings) && (
-        <p>Liczba porcji ({info.estimatedServings}) to szacunek AI — źródło jej nie podawało. Popraw, jeśli się nie zgadza.</p>
+        <p>
+          Liczba porcji ({info.estimatedServings}) to szacunek — źródło jej nie podawało
+          {info.servingsBasis ? ` (${info.servingsBasis})` : ''}. Popraw, jeśli się nie zgadza.
+        </p>
       )}
       {info.thumbnail.status === 'failed' && (
         <p>Nie udało się zapisać miniaturki filmu ({info.thumbnail.reason ?? 'nieznany powód'}). Możesz dodać własne zdjęcie.</p>

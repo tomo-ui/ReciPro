@@ -1,6 +1,7 @@
 import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '../../src/types/recipe.js'
 import { fetchHtml, type FetchHtmlOptions } from './fetchHtml.js'
-import { estimateServings, extractRecipeFromText, GeminiError, parseWithGemini } from './gemini.js'
+import { estimateDish, extractRecipeFromText, GeminiError, parseWithGemini } from './gemini.js'
+import { chooseServings, kindFromTitle, totalWeight, type DishKind } from './servings.js'
 import { parseHeuristic } from './heuristic.js'
 import { parseJsonLd } from './jsonld.js'
 import { hasAnyContent, isComplete, servingsFromText, totalMinutesFromText } from './normalize.js'
@@ -39,6 +40,8 @@ export interface ParseOutcome {
   origin: ParseOrigin
   /** Liczbę porcji oszacowało AI (w źródle jej nie było) */
   servingsEstimated: boolean
+  /** Skąd wzięła się liczba porcji, np. „ok. 1,6 kg składników; danie główne to zwykle ok. 400 g na porcję” */
+  servingsBasis?: string
   /** Wynik zapisu miniaturki filmu (dla stron WWW zawsze status „none”) */
   thumbnail: ThumbnailInfo
 }
@@ -204,27 +207,26 @@ async function persistThumbnail(
 }
 
 /**
- * Gdy źródło nie podaje liczby porcji, prosimy AI o oszacowanie z ilości składników.
- * Błąd lub brak czasu nie psuje importu — porcje zostają puste.
+ * Gdy źródło nie podaje liczby porcji, szacujemy ją z wagi składników i rodzaju dania, a odpowiedź AI
+ * (jeśli jest) służy do porównania (patrz servings.ts). Błąd AI lub brak czasu nie psuje importu.
  */
 async function withEstimatedServings(
   draft: RecipeDraft,
   { geminiApiKey, geminiModel, geminiRetryDelayMs, deadlineAt, fetchImpl }: PipelineOptions,
-): Promise<{ draft: RecipeDraft; estimated: boolean }> {
-  if (draft.servings || !geminiApiKey || draft.ingredients.length < 2) return { draft, estimated: false }
-  if (deadlineAt !== undefined && deadlineAt - Date.now() < 6000) return { draft, estimated: false }
-  try {
-    const servings = await estimateServings(draft, {
-      apiKey: geminiApiKey,
-      model: geminiModel,
-      retryDelayMs: geminiRetryDelayMs,
-      deadlineAt,
-      fetchImpl,
-    })
-    if (servings) return { draft: { ...draft, servings }, estimated: true }
-  } catch (e) {
-    console.warn('[parse] szacowanie porcji:', e instanceof Error ? e.message : e)
+): Promise<{ draft: RecipeDraft; estimated: boolean; basis?: string }> {
+  if (draft.servings || draft.ingredients.length < 2) return { draft, estimated: false }
+
+  let ai: { servings?: number; kind?: DishKind } = {}
+  if (geminiApiKey && (deadlineAt === undefined || deadlineAt - Date.now() >= 6000)) {
+    try {
+      ai = await estimateDish(draft, { apiKey: geminiApiKey, model: geminiModel, retryDelayMs: geminiRetryDelayMs, deadlineAt, fetchImpl })
+    } catch (e) {
+      console.warn('[parse] szacowanie porcji:', e instanceof Error ? e.message : e)
+    }
   }
+  const kind = ai.kind ?? kindFromTitle(draft.title, draft.tags)
+  const choice = chooseServings({ ai: ai.servings, kind, weight: totalWeight(draft.ingredients, kind) })
+  if (choice) return { draft: { ...draft, servings: choice.servings }, estimated: true, basis: choice.basis }
   return { draft, estimated: false }
 }
 
@@ -240,7 +242,7 @@ export async function parseRecipeUrl(
   if (isTikTokUrl(url)) {
     const { draft, thumbnail } = await parseTikTokCaption(url, options)
     const withServings = await withEstimatedServings(draft, options)
-    return { draft: withServings.draft, origin: 'tiktok-caption', servingsEstimated: withServings.estimated, thumbnail }
+    return { draft: withServings.draft, origin: 'tiktok-caption', servingsEstimated: withServings.estimated, servingsBasis: withServings.basis, thumbnail }
   }
 
   const { html, finalUrl } = await fetchHtml(url, { fetchImpl: opts.fetchImpl, ...opts.fetch })
@@ -249,6 +251,7 @@ export async function parseRecipeUrl(
     draft: withServings.draft,
     origin: 'page',
     servingsEstimated: withServings.estimated,
+    servingsBasis: withServings.basis,
     thumbnail: { status: 'none' },
   }
 }

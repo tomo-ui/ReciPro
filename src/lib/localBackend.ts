@@ -1,3 +1,5 @@
+import type { Diet } from '@/types/diet'
+import { newMeals, itemFromRecipe, sanitizeDiet, withPortions } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
 import type { Backend, FeedMode, ProfilePatch, RecipeSort } from './backend'
 import { emit, on } from './events'
@@ -21,6 +23,7 @@ const KEYS = {
   likes: 'przepisy:v2:likes',
   comments: 'przepisy:v2:comments',
   notifications: 'przepisy:v2:notifications',
+  diets: 'przepisy:v2:diets',
 }
 
 /* — magazyn: localStorage, a gdy go brak (testy, tryb prywatny) — pamięć — */
@@ -180,6 +183,42 @@ function visibleNotifications(): AppNotification[] {
         },
       ]
     })
+}
+
+/* — diety: własne w localStorage, przykładowe u użytkowników demo — */
+
+const loadMyDiets = () => read<Diet[]>(KEYS.diets, () => []).map(sanitizeDiet)
+const saveMyDiets = (list: Diet[]) => write(KEYS.diets, list)
+
+let demoDietCache: Diet[] | undefined
+/** Jedna przykładowa, udostępniona dieta Anny, żeby dało się wypróbować oglądanie i zapisywanie cudzej diety */
+function demoDiets(): Diet[] {
+  if (demoDietCache) return demoDietCache
+  const anna = demo.find((d) => d.profile.username === 'anna_gotuje')
+  if (!anna) return (demoDietCache = [])
+  const meals = newMeals(4)
+  const [r1, r2, r3] = anna.recipes
+  const put = (i: number, recipe: Recipe | undefined, portions = 1) => recipe && meals[i].items.push(withPortions(itemFromRecipe(recipe), portions))
+  put(0, r2)
+  put(1, r1, 1.25)
+  put(2, r3, 0.5)
+  put(3, r2, 0.75)
+  const at = new Date(Date.now() - 2 * 86_400_000).toISOString()
+  demoDietCache = [
+    {
+      id: 'demo-diet-anna-1',
+      user_id: anna.profile.id,
+      title: 'Dieta 1800 kcal na cztery posiłki',
+      description: 'Prosta rozpiska z moich przepisów. Możesz ją zapisać u siebie i dopasować pod siebie.',
+      meals,
+      targets: { kcalPerDay: 1800, protein: 25, fat: 30, carbs: 45, preset: 'custom', lowSalt: false, highFiber: true },
+      is_public: true,
+      created_at: at,
+      updated_at: at,
+      author: { username: anna.profile.username, full_name: anna.profile.full_name },
+    },
+  ]
+  return demoDietCache
 }
 
 /* — implementacja — */
@@ -456,6 +495,40 @@ export const localBackend: Backend = {
     const own = loadOwn().find((r) => r.id === id)
     if (own) return withAuthor(own, loadMe())
     return publicDemoRecipes().find((r) => r.id === id) ?? null
+  },
+
+  async listDiets(username) {
+    const name = normalizeUsername(username)
+    if (name === loadMe().username) return loadMyDiets().sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    const owner = demo.find((d) => d.profile.username === name)
+    if (!owner?.profile.is_public) return []
+    return demoDiets().filter((d) => d.user_id === owner.profile.id && d.is_public)
+  },
+
+  async getDiet(id) {
+    return loadMyDiets().find((d) => d.id === id) ?? demoDiets().find((d) => d.id === id) ?? null
+  },
+
+  async saveDiet(draft) {
+    if (!draft.title.trim()) throw new Error('Podaj nazwę diety.')
+    const now = new Date().toISOString()
+    const mine = loadMyDiets()
+    const existing = draft.id ? mine.find((d) => d.id === draft.id) : undefined
+    if (draft.id && !existing) throw new Error('Brak uprawnień do tej diety.')
+    const saved: Diet = {
+      ...draft,
+      title: draft.title.trim(),
+      id: existing?.id ?? crypto.randomUUID(),
+      user_id: LOCAL_USER_ID,
+      created_at: existing?.created_at ?? now,
+      updated_at: now,
+    }
+    saveMyDiets(existing ? mine.map((d) => (d.id === saved.id ? saved : d)) : [saved, ...mine])
+    return saved
+  },
+
+  async deleteDiet(id) {
+    saveMyDiets(loadMyDiets().filter((d) => d.id !== id))
   },
 
   async getRecipeStats(ids) {

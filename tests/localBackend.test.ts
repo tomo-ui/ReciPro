@@ -170,3 +170,44 @@ describe('tryb lokalny: ostatni komentarz w statystykach', () => {
     expect((await b.getRecipeStats([id]))[id].last_comment?.body).toBe('pierwszy')
   })
 })
+
+describe('tryb lokalny: diety', () => {
+  const targets = { kcalPerDay: 2000, protein: 20, fat: 30, carbs: 50, preset: 'balanced' as const, lowSalt: false, highFiber: false }
+  const draft = { title: 'Moja dieta', meals: [{ id: 'm1', name: 'Obiad', share: 100, items: [] }], targets, is_public: false }
+
+  it('tworzenie, zmiana i usuwanie własnej diety', async () => {
+    const created = await b.saveDiet(draft)
+    expect(created).toMatchObject({ title: 'Moja dieta', user_id: LOCAL_USER_ID })
+    expect((await b.listDiets('ty')).map((d) => d.id)).toContain(created.id)
+
+    const updated = await b.saveDiet({ ...created, title: 'Zmieniona', is_public: true })
+    expect(updated.id).toBe(created.id)
+    expect(updated.created_at).toBe(created.created_at)
+    expect((await b.getDiet(created.id))?.title).toBe('Zmieniona')
+
+    await b.deleteDiet(created.id)
+    expect(await b.getDiet(created.id)).toBeNull()
+    await expect(b.saveDiet({ ...draft, title: ' ' })).rejects.toThrow(/nazwę/)
+    await expect(b.saveDiet({ ...draft, id: 'cudza' })).rejects.toThrow(/uprawnień/)
+  })
+
+  it('cudza dieta: widać tylko udostępnione u osób z profilem publicznym', async () => {
+    const anna = await b.listDiets('anna_gotuje')
+    expect(anna).toHaveLength(1)
+    expect(anna[0].is_public).toBe(true)
+    expect(anna[0].meals.some((m) => m.items.length > 0)).toBe(true)
+    expect(await b.listDiets('sekret')).toEqual([])
+    expect(await b.listDiets('nie.ma')).toEqual([])
+  })
+
+  it('cudzą dietę można pobrać po id i zapisać jako własną kopię', async () => {
+    const { copyDiet } = await import('../src/lib/diet')
+    const [orig] = await b.listDiets('anna_gotuje')
+    const saved = await b.saveDiet(copyDiet((await b.getDiet(orig.id))!))
+    expect(saved.id).not.toBe(orig.id)
+    expect(saved.source).toMatchObject({ diet_id: orig.id, username: 'anna_gotuje' })
+    expect(saved.is_public).toBe(false)
+    expect(saved.meals[0].id).not.toBe(orig.meals[0].id)
+    await b.deleteDiet(saved.id)
+  })
+})

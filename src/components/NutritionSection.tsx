@@ -5,7 +5,7 @@ import { IDX, MICROS, NUTRIENTS, formatAmount, formatNutrient, macroShares, salt
 import { kcalPerServing, lineName, type LineAnalysis } from '@/lib/nutrition'
 import { useRecipeNutrition } from '@/hooks/useFoodDb'
 import { ChevronDownIcon, FlameIcon, SlidersIcon, SpinnerIcon } from './Icons'
-import { AdaptSheet } from './AdaptSheet'
+import { RecipeAdaptSheet } from './RecipeAdaptSheet'
 
 interface Props {
   recipe: Recipe
@@ -104,7 +104,7 @@ export function NutritionSection({ recipe, onSaveCopy }: Props) {
         <SlidersIcon width={18} height={18} /> Dostosuj do moich celów
       </motion.button>
 
-      <AnimatePresence>{adapting && <AdaptSheet recipe={recipe} onClose={() => setAdapting(false)} onSaveCopy={onSaveCopy} />}</AnimatePresence>
+      <AnimatePresence>{adapting && <RecipeAdaptSheet recipe={recipe} onClose={() => setAdapting(false)} onSaveCopy={onSaveCopy} />}</AnimatePresence>
     </div>
   )
 }

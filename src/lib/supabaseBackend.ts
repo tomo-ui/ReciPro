@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Diet, DietDraft } from '@/types/diet'
+import { sanitizeDiet } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeStats } from '@/types/recipe'
 import type { Backend } from './backend'
 import { deleteRecipeImage } from './images'
@@ -86,6 +88,43 @@ const toNotification = (r: NotificationRow): AppNotification => ({
   recipe: r.recipe_id ? { id: r.recipe_id, title: r.recipe_title ?? '', image_url: r.recipe_image_url ?? undefined } : undefined,
   comment_body: r.comment_body ?? undefined,
 })
+interface DietRow {
+  id: string
+  user_id: string
+  title: string
+  description: string | null
+  meals: Diet['meals']
+  targets: Diet['targets']
+  is_public: boolean
+  source: Diet['source'] | null
+  created_at: string
+  updated_at: string
+  author?: { username: string; full_name: string | null; avatar_url: string | null } | null
+}
+const DIET_COLUMNS = '*, author:profiles(username, full_name, avatar_url)'
+const toDiet = (r: DietRow): Diet =>
+  sanitizeDiet({
+    id: r.id,
+    user_id: r.user_id,
+    title: r.title,
+    description: r.description ?? undefined,
+    meals: r.meals,
+    targets: r.targets,
+    is_public: r.is_public,
+    source: r.source ?? undefined,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    author: r.author ? { username: r.author.username, full_name: r.author.full_name ?? undefined, avatar_url: r.author.avatar_url ?? undefined } : undefined,
+  })
+const dietPayload = (d: DietDraft) => ({
+  title: d.title.trim(),
+  description: d.description?.trim() || null,
+  meals: d.meals,
+  targets: d.targets,
+  is_public: d.is_public,
+  source: d.source ?? null,
+})
+
 const toComment = (r: CommentRow): Comment => ({
   id: r.id,
   recipe_id: r.recipe_id,
@@ -106,7 +145,7 @@ function fail(error: { code?: string; message: string }, context?: 'profile'): n
     /could not find the (function|table)/i.test(error.message)
   if (migrationMissing) {
     throw new Error(
-      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql, engagement.sql i notifications.sql w SQL Editorze Supabase.',
+      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql, engagement.sql, notifications.sql i diets.sql w SQL Editorze Supabase.',
     )
   }
   if (context === 'profile' && error.code === '23505') throw new Error('Ta nazwa użytkownika jest już zajęta.')
@@ -318,6 +357,42 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       const { data, error } = await client().from('recipes').select('*').eq('id', id).maybeSingle()
       if (error) fail(error)
       return data ? rowToRecipe(data as RecipeRow) : null
+    },
+
+    /* — diety — */
+
+    async listDiets(username) {
+      // !inner: tylko diety osoby o tej nazwie; RLS zostawia własne oraz udostępnione
+      const { data, error } = await client()
+        .from('diets')
+        .select('*, author:profiles!inner(username, full_name, avatar_url)')
+        .eq('author.username', normalizeUsername(username))
+        .order('updated_at', { ascending: false })
+        .limit(50)
+      if (error) fail(error)
+      return (data as DietRow[]).map(toDiet)
+    },
+
+    async getDiet(id) {
+      const { data, error } = await client().from('diets').select(DIET_COLUMNS).eq('id', id).maybeSingle()
+      if (error) fail(error)
+      return data ? toDiet(data as DietRow) : null
+    },
+
+    async saveDiet(diet) {
+      if (!diet.title.trim()) throw new Error('Podaj nazwę diety.')
+      const payload = dietPayload(diet)
+      const query = diet.id
+        ? client().from('diets').update(payload).eq('id', diet.id)
+        : client().from('diets').insert(payload)
+      const { data, error } = await query.select(DIET_COLUMNS).single()
+      if (error) fail(error)
+      return toDiet(data as DietRow)
+    },
+
+    async deleteDiet(id) {
+      const { error } = await client().from('diets').delete().eq('id', id)
+      if (error) fail(error)
     },
 
     /* — odkrywanie — */

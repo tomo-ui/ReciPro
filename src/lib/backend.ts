@@ -1,3 +1,4 @@
+import type { Diet, DietDraft } from '@/types/diet'
 import type {
   AppNotification,
   Comment,
@@ -62,6 +63,14 @@ export interface Backend {
   subscribeNotifications(userId: string, onNew: () => void): () => void
   /** Przepis po id (widoczny dla zalogowanego) albo null */
   getRecipe(id: string): Promise<Recipe | null>
+
+  /* — diety — */
+  /** Własne diety (wszystkie) albo diety innej osoby (tylko udostępnione), od ostatnio zmienianej */
+  listDiets(username: string): Promise<Diet[]>
+  getDiet(id: string): Promise<Diet | null>
+  /** Bez `id` tworzy nową dietę, z `id` zapisuje zmiany we własnej */
+  saveDiet(diet: DietDraft): Promise<Diet>
+  deleteDiet(id: string): Promise<void>
 
   /* — odkrywanie — */
   searchRecipes(query: string, sort: RecipeSort, offset: number, limit: number): Promise<Recipe[]>
