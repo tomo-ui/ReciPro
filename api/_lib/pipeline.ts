@@ -34,6 +34,8 @@ export interface PipelineOptions {
   /** Dane do zapisu miniaturek w Supabase Storage (jako zalogowany użytkownik). Brak = tryb lokalny. */
   storage?: StorageConfig
   fetchImpl?: typeof fetch
+  /** Klucz YouTube Data API v3 (opcjonalny): pewniejszy odczyt opisów filmów z serwera w chmurze */
+  youtubeApiKey?: string
 }
 
 export interface ParseOutcome {
@@ -310,7 +312,10 @@ export async function parseRecipeUrl(
   const options = { ...opts, deadlineAt: opts.deadlineAt ?? Date.now() + TOTAL_BUDGET_MS }
 
   if (socialPlatform(url)) {
-    const { draft, thumbnail, origin } = await parseSocialCaption(await fetchSocialInfo(url, options.fetchImpl), options)
+    const { draft, thumbnail, origin } = await parseSocialCaption(
+      await fetchSocialInfo(url, options.fetchImpl, { youtubeApiKey: options.youtubeApiKey }),
+      options,
+    )
     const withServings = await withEstimatedServings(draft, options)
     return { draft: withServings.draft, origin, servingsEstimated: withServings.estimated, servingsBasis: withServings.basis, thumbnail }
   }

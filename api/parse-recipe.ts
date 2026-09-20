@@ -58,6 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { draft, origin, servingsEstimated, servingsBasis, thumbnail } = await parseRecipeUrl(url, {
       geminiApiKey: process.env.GEMINI_API_KEY,
       geminiModel: process.env.GEMINI_MODEL,
+      youtubeApiKey: process.env.YOUTUBE_API_KEY,
       storage,
     })
     return res.status(200).json({ draft, origin, servingsEstimated, servingsBasis, thumbnail })

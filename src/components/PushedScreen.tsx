@@ -5,12 +5,14 @@ import { ChevronLeftIcon } from './Icons'
 
 interface Props {
   title: string
+  /** Element po tytule (np. znaczek weryfikacji) */
+  titleBadge?: ReactNode
   onBack: () => void
   children: ReactNode
 }
 
 /** Ekran „wepchnięty” na stos (np. cudzy profil): wjazd z prawej, przycisk wstecz i swipe od lewej krawędzi */
-export function PushedScreen({ title, onBack, children }: Props) {
+export function PushedScreen({ title, titleBadge, onBack, children }: Props) {
   const controls = useDragControls()
   return (
     <motion.div
@@ -40,7 +42,10 @@ export function PushedScreen({ title, onBack, children }: Props) {
           >
             <ChevronLeftIcon />
           </motion.button>
-          <h2 className="max-w-[60%] truncate text-[17px] font-semibold">{title}</h2>
+          <h2 className="flex max-w-[60%] items-center gap-1.5 text-[17px] font-semibold">
+            <span className="truncate">{title}</span>
+            {titleBadge}
+          </h2>
         </div>
       </div>
 

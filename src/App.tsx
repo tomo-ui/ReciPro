@@ -12,6 +12,7 @@ import { useSession } from '@/hooks/useSession'
 import { MenuIcon } from '@/components/Icons'
 import { LargeTitleScreen } from '@/components/LargeTitleScreen'
 import { NotificationToast } from '@/components/NotificationToast'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { PushedScreen } from '@/components/PushedScreen'
 import { SettingsMenu } from '@/components/SettingsMenu'
 import { Sheet } from '@/components/Sheet'
@@ -173,6 +174,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
           'profile',
           <LargeTitleScreen
             title={me.username}
+            titleBadge={<VerifiedBadge username={me.username} size={16} />}
             variant="inline"
             right={
               <motion.button
@@ -192,6 +194,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               onOpenRecipe={openRecipe}
               onEdit={() => setSheet({ kind: 'edit-profile' })}
               onOpenList={(kind) => openList(me.username, kind)}
+              onAddRecipe={() => setSheet({ kind: 'add' })}
               myRecipes={mine.recipes}
               onSaveRecipe={saveAdaptedRecipe}
               onOpenDiet={openDiet}
@@ -229,7 +232,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               }}
             />
           ) : entry.kind === 'profile' ? (
-            <PushedScreen key={`profile-${entry.username}-${i}`} title={`@${entry.username}`} onBack={pop}>
+            <PushedScreen key={`profile-${entry.username}-${i}`} title={`@${entry.username}`} titleBadge={<VerifiedBadge username={entry.username} />} onBack={pop}>
               <div className="px-[max(16px,env(safe-area-inset-left))]">
                 <ProfileView
                   username={entry.username}

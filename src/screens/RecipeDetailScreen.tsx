@@ -6,6 +6,7 @@ import { scaleFactor, scaleIngredient } from '@/lib/scale'
 import { formatMinutes, spring, totalTime } from '@/lib/ui'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { Avatar } from '@/components/Avatar'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { ChevronLeftIcon, ClockIcon, CommentIcon, MinusIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
 import { CommentsSection } from '@/components/CommentsSection'
 import { LikeButton } from '@/components/LikeButton'
@@ -83,7 +84,10 @@ export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDele
             <button onClick={() => onOpenAuthor(recipe.author!.username)} className="mt-3 flex items-center gap-2.5 text-left">
               <Avatar name={recipe.author.username} src={recipe.author.avatar_url} size={30} />
               <span>
-                <span className="block text-[15px] leading-tight font-semibold">{recipe.author.username}</span>
+                <span className="flex items-center gap-1 text-[15px] leading-tight font-semibold">
+                  {recipe.author.username}
+                  <VerifiedBadge username={recipe.author.username} size={14} />
+                </span>
                 {recipe.author.full_name && <span className="block text-[12px] text-label-2">{recipe.author.full_name}</span>}
               </span>
             </button>

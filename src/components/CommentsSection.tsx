@@ -6,6 +6,7 @@ import { emit } from '@/lib/events'
 import { timeAgo } from '@/lib/ui'
 import { usePaged } from '@/hooks/usePaged'
 import { Avatar } from './Avatar'
+import { VerifiedBadge } from './VerifiedBadge'
 import { SendIcon, SpinnerIcon, TrashIcon } from './Icons'
 import { LoadMore } from './LoadMore'
 
@@ -108,7 +109,8 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
                 <p className="text-[13px] text-label-2">
                   <button onClick={() => onOpenAuthor(c.author.username)} className="font-semibold text-label">
                     {c.author.username}
-                  </button>{' '}
+                  </button>
+                  <VerifiedBadge username={c.author.username} size={12} className="mx-0.5" />{' '}
                   · {timeAgo(c.created_at)}
                 </p>
                 <p className="text-[15px] leading-snug break-words whitespace-pre-wrap" data-selectable>

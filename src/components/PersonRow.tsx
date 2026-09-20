@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import type { ProfileSummary } from '@/types/recipe'
 import { Avatar } from './Avatar'
+import { VerifiedBadge } from './VerifiedBadge'
 import { FollowButton } from './FollowButton'
 import { LockIcon } from './Icons'
 
@@ -18,7 +19,8 @@ export function PersonRow({ person, onOpen, onFollowChange }: Props) {
         <Avatar name={person.username} src={person.avatar_url} size={46} />
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 truncate text-[16px] font-semibold">
-            {person.username}
+            <span className="truncate">{person.username}</span>
+            <VerifiedBadge username={person.username} size={14} />
             {!person.is_public && <LockIcon width={13} height={13} className="shrink-0 text-label-2" />}
           </p>
           {person.full_name && <p className="truncate text-[14px] text-label-2">{person.full_name}</p>}

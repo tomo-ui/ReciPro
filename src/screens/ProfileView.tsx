@@ -5,11 +5,12 @@ import { FEATURES } from '@/lib/features'
 import { backend } from '@/lib/data'
 import { usePaged } from '@/hooks/usePaged'
 import { Avatar } from '@/components/Avatar'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { DietTab } from '@/components/DietTab'
 import { GoalsTab } from '@/components/GoalsTab'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { FollowButton } from '@/components/FollowButton'
-import { LockIcon, SpinnerIcon } from '@/components/Icons'
+import { LockIcon, PlusIcon, SpinnerIcon } from '@/components/Icons'
 import { LoadMore } from '@/components/LoadMore'
 import { RecipeCard } from '@/components/RecipeCard'
 
@@ -18,6 +19,8 @@ interface Props {
   onOpenRecipe: (r: Recipe) => void
   /** Tylko na własnym profilu */
   onEdit?: () => void
+  /** Tylko na własnym profilu: plus przy zdjęciu profilowym otwiera dodawanie przepisu */
+  onAddRecipe?: () => void
   /** Otwiera listę obserwujących / obserwowanych tego profilu */
   onOpenList?: (kind: 'followers' | 'following') => void
   /** Zmiana wartości wymusza ponowne pobranie profilu (np. po edycji) */
@@ -35,7 +38,7 @@ interface Props {
 type Tab = 'recipes' | 'goals' | 'diet'
 
 /** Profil w stylu Instagrama: awatar, liczniki, przycisk obserwowania i siatka przepisów */
-export function ProfileView({ username, onOpenRecipe, onEdit, onOpenList, reloadKey, myRecipes, onSaveRecipe, onOpenDiet, dietVersion }: Props) {
+export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpenList, reloadKey, myRecipes, onSaveRecipe, onOpenDiet, dietVersion }: Props) {
   const [tab, setTab] = useState<Tab>('recipes')
   const [profile, setProfile] = useState<ProfileSummary | null | undefined>(undefined) // undefined = ładowanie
   const [error, setError] = useState<string | null>(null)
@@ -106,7 +109,19 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onOpenList, reload
     <div>
       <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pt-4 pb-5">
         <div className="flex items-center gap-4">
-          <Avatar name={profile.username} src={profile.avatar_url} size={84} />
+          <div className="relative shrink-0">
+            <Avatar name={profile.username} src={profile.avatar_url} size={84} />
+            {profile.is_me && onAddRecipe && (
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={onAddRecipe}
+                aria-label="Dodaj przepis"
+                className="absolute -right-0.5 -bottom-0.5 flex h-7 w-7 items-center justify-center rounded-full border-[2.5px] border-bg bg-accent text-white shadow-sm"
+              >
+                <PlusIcon width={15} height={15} strokeWidth={3} />
+              </motion.button>
+            )}
+          </div>
           <div className="grid flex-1 grid-cols-3 text-center">
             <Stat value={visible ? profile.recipe_count : '–'} label="przepisów" />
             <Stat value={profile.followers_count} label="obserwujących" onClick={visible && onOpenList ? () => onOpenList('followers') : undefined} />
@@ -117,6 +132,7 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onOpenList, reload
         <div className="mt-3">
           <p className="flex items-center gap-1.5 text-[17px] font-semibold">
             @{profile.username}
+            <VerifiedBadge username={profile.username} />
             {!profile.is_public && <LockIcon width={15} height={15} className="text-label-2" aria-label="Profil prywatny" />}
           </p>
           {profile.full_name && <p className="text-[15px] text-label-2">{profile.full_name}</p>}

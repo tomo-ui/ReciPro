@@ -4,6 +4,7 @@ import { formatMinutes, timeAgo, totalTime } from '@/lib/ui'
 import { kcalPerServing } from '@/lib/nutrition'
 import { useRecipeNutrition } from '@/hooks/useFoodDb'
 import { Avatar } from './Avatar'
+import { VerifiedBadge } from './VerifiedBadge'
 import { ClockIcon, CommentIcon, FlameIcon, UsersIcon } from './Icons'
 import { LikeButton } from './LikeButton'
 import { Cover } from './RecipeCard'
@@ -36,7 +37,10 @@ export function FeedCard({ recipe, stats, onStatsChange, onOpen, onOpenAuthor }:
         <button onClick={() => onOpenAuthor(author.username)} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left">
           <Avatar name={author.username} src={author.avatar_url} size={34} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[15px] leading-tight font-semibold">{author.username}</span>
+            <span className="flex items-center gap-1 text-[15px] leading-tight font-semibold">
+              <span className="truncate">{author.username}</span>
+              <VerifiedBadge username={author.username} size={14} />
+            </span>
             {author.full_name && <span className="block truncate text-[12px] text-label-2">{author.full_name}</span>}
           </span>
           <span className="shrink-0 text-[12px] text-label-2">{timeAgo(recipe.created_at)}</span>
@@ -87,7 +91,8 @@ export function FeedCard({ recipe, stats, onStatsChange, onOpen, onOpenAuthor }:
             <Avatar name={last.author.username} src={last.author.avatar_url} size={26} />
             <span className="min-w-0 flex-1 text-[14px] leading-snug">
               <span className="line-clamp-2 break-words whitespace-pre-line">
-                <span className="font-semibold">{last.author.username}</span> {last.body}
+                <span className="font-semibold">{last.author.username}</span>
+                <VerifiedBadge username={last.author.username} size={12} /> {last.body}
               </span>
               <span className="mt-0.5 block text-[12px] text-label-2">{timeAgo(last.created_at)}</span>
             </span>

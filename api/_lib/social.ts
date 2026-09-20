@@ -115,8 +115,13 @@ export function parseYouTubeHtml(html: string, id: string): Omit<SocialInfo, 'pl
     const m = html.match(new RegExp(`"${key}":"((?:[^"\\\\]|\\\\.)*)"`))
     return m ? decodeJsonString(m[1]) : undefined
   }
-  const description = grab('shortDescription')
   const meta = (name: string) => metaContent(html, name)
+  // Opis bywa w kilku miejscach: dane odtwarzacza, mikroformat i panel opisu pod filmem. Gdy YouTube utnie dane
+  // odtwarzacza (np. „potwierdź, że nie jesteś botem” dla serwerów w chmurze), opis zostaje w danych strony.
+  const attributed = html.match(/"attributedDescription":\{"content":"((?:[^"\\]|\\.)*)"/)?.[1]
+  const micro = html.match(/"playerMicroformatRenderer":[\s\S]{0,6000}?"description":\{"simpleText":"((?:[^"\\]|\\.)*)"/)?.[1]
+  const description =
+    grab('shortDescription') ?? (micro ? decodeJsonString(micro) : undefined) ?? (attributed ? decodeJsonString(attributed) : undefined) ?? meta('og:description')
 
   const title = html.match(/"videoDetails":\{[^{}]*?"title":"((?:[^"\\]|\\.)*)"/)?.[1]
   // videoDetails ma zagnieżdżone obiekty (miniatury), więc autora szukamy po samym kluczu
@@ -125,27 +130,64 @@ export function parseYouTubeHtml(html: string, id: string): Omit<SocialInfo, 'pl
   if (!caption && !title) return null
   return {
     caption,
-    title: title ? decodeJsonString(title) : meta('og:title') ?? meta('title'),
+    title: title ? decodeJsonString(title) : meta('og:title') ?? meta('title') ?? html.match(/<title>([^<]*)<\/title>/i)?.[1]?.replace(/ - YouTube$/, ''),
     author: author ? decodeJsonString(author) : undefined,
     thumbnailUrl: meta('og:image') ?? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
   }
 }
 
-export async function fetchYouTubeInfo(rawUrl: string, fetchImpl: typeof fetch = fetch): Promise<SocialInfo> {
+/** Oficjalne API YouTube Data v3 (klucz YOUTUBE_API_KEY): działa też z serwerów w chmurze, których strona filmu nie wpuszcza */
+async function fromYouTubeApi(id: string, apiKey: string, fetchImpl: typeof fetch): Promise<Omit<SocialInfo, 'platform' | 'canonicalUrl'> | null> {
+  try {
+    const res = await fetchImpl(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${id}&key=${encodeURIComponent(apiKey)}`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const j = (await res.json()) as { items?: { snippet?: { title?: string; description?: string; channelTitle?: string; thumbnails?: Record<string, { url?: string; width?: number }> } }[] }
+    const sn = j.items?.[0]?.snippet
+    if (!sn) return null
+    const thumbs = Object.values(sn.thumbnails ?? {}).filter((t) => t.url).sort((a, b) => (b.width ?? 0) - (a.width ?? 0))
+    return {
+      caption: (sn.description ?? '').trim(),
+      title: sn.title,
+      author: sn.channelTitle,
+      thumbnailUrl: thumbs[0]?.url ?? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function fetchYouTubeInfo(rawUrl: string, fetchImpl: typeof fetch = fetch, apiKey?: string): Promise<SocialInfo> {
   const id = youtubeId(rawUrl)
   if (!id) throw new FetchError('invalid_url', 'To nie wygląda na link do filmu z YouTube (np. youtube.com/watch?v=… albo youtu.be/…).')
   const canonicalUrl = `https://www.youtube.com/watch?v=${id}`
 
+  if (apiKey) {
+    const viaApi = await fromYouTubeApi(id, apiKey, fetchImpl)
+    if (viaApi?.caption) return { platform: 'youtube', canonicalUrl, ...viaApi }
+  }
+
   let html: string
   try {
-    ;({ html } = await fetchHtml(canonicalUrl, { fetchImpl, timeoutMs: 9000, maxBytes: 4_000_000, headers: { 'accept-language': 'pl,en;q=0.8' } }))
+    ;({ html } = await fetchHtml(canonicalUrl, {
+      fetchImpl,
+      timeoutMs: 9000,
+      maxBytes: 4_000_000,
+      // SOCS/CONSENT: potwierdzona zgoda, żeby serwer w UE nie dostał ekranu zgody zamiast strony filmu
+      headers: { 'accept-language': 'pl,en;q=0.8', cookie: 'SOCS=CAI; CONSENT=YES+1' },
+    }))
   } catch (e) {
     if (e instanceof FetchError) throw e
     throw new FetchError('network', 'Nie udało się połączyć z YouTube.')
   }
   const parsed = parseYouTubeHtml(html, id)
-  if (!parsed) {
-    throw new FetchError('http_error', 'Nie udało się odczytać opisu filmu. Może być prywatny, usunięty albo niedostępny.')
+  if (!parsed?.caption) {
+    throw new FetchError(
+      'http_error',
+      'Nie udało się odczytać opisu filmu: jest prywatny albo usunięty, nie ma opisu, albo YouTube zablokował odczyt z serwera. Wklej link do przepisu z opisu filmu albo dodaj przepis ręcznie.',
+    )
   }
   return { platform: 'youtube', canonicalUrl, ...parsed }
 }
@@ -201,9 +243,9 @@ export async function fetchInstagramInfo(rawUrl: string, fetchImpl: typeof fetch
 }
 
 /** Opis posta lub filmu z dowolnego z obsługiwanych serwisów */
-export async function fetchSocialInfo(rawUrl: string, fetchImpl: typeof fetch = fetch): Promise<SocialInfo> {
+export async function fetchSocialInfo(rawUrl: string, fetchImpl: typeof fetch = fetch, opts: { youtubeApiKey?: string } = {}): Promise<SocialInfo> {
   const platform = socialPlatform(rawUrl)
-  if (platform === 'youtube') return fetchYouTubeInfo(rawUrl, fetchImpl)
+  if (platform === 'youtube') return fetchYouTubeInfo(rawUrl, fetchImpl, opts.youtubeApiKey)
   if (platform === 'instagram') return fetchInstagramInfo(rawUrl, fetchImpl)
   if (platform === 'tiktok') {
     const t = await fetchTikTokInfo(rawUrl, fetchImpl)

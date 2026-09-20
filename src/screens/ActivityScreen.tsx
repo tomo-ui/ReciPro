@@ -6,6 +6,7 @@ import { notificationText } from '@/lib/notificationText'
 import { coverGradient, timeAgo } from '@/lib/ui'
 import { usePaged } from '@/hooks/usePaged'
 import { Avatar } from '@/components/Avatar'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { HeartIcon } from '@/components/Icons'
 import { LoadMore } from '@/components/LoadMore'
 
@@ -69,7 +70,8 @@ function Row({ n, onClick }: { n: AppNotification; onClick: () => void }) {
       >
         <Avatar name={n.actor.username} src={n.actor.avatar_url} size={44} />
         <span className="min-w-0 flex-1 text-[14px] leading-snug">
-          <span className="font-semibold">{n.actor.username}</span> {action}
+          <span className="font-semibold">{n.actor.username}</span>
+          <VerifiedBadge username={n.actor.username} size={12} className="mx-0.5" /> {action}
           {detail && <span className="block truncate text-label-2">{detail}</span>}
           <span className="block text-[12px] text-label-2">{timeAgo(n.created_at)}</span>
         </span>

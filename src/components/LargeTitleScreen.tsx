@@ -4,6 +4,8 @@ import { TAB_BAR_PADDING } from './TabBar'
 
 interface Props {
   title: string
+  /** Element po tytule (np. znaczek weryfikacji) */
+  titleBadge?: ReactNode
   left?: ReactNode
   right?: ReactNode
   /** `inline`: bez dużego tytułu — nazwa wyśrodkowana na pasku (jak nazwa użytkownika na profilu w Instagramie) */
@@ -15,7 +17,7 @@ interface Props {
  * Szkielet ekranu zakładki w stylu iOS: duży tytuł, który przy przewijaniu zamienia się w mały
  * na rozmytym pasku, oraz dolny margines na pasek zakładek.
  */
-export function LargeTitleScreen({ title, left, right, variant = 'large', children }: Props) {
+export function LargeTitleScreen({ title, titleBadge, left, right, variant = 'large', children }: Props) {
   const inline = variant === 'inline'
   const scrollRef = useRef<HTMLDivElement>(null)
   const { scrollY } = useScroll({ container: scrollRef })
@@ -30,9 +32,10 @@ export function LargeTitleScreen({ title, left, right, variant = 'large', childr
           <div className="flex min-w-9 items-center">{left}</div>
           <motion.h2
             style={{ opacity: inline ? 1 : smallTitleOpacity }}
-            className={inline ? 'max-w-[70%] truncate text-[20px] font-bold tracking-tight' : 'text-[17px] font-semibold'}
+            className={inline ? 'flex max-w-[70%] items-center gap-1.5 text-[20px] font-bold tracking-tight' : 'text-[17px] font-semibold'}
           >
-            {title}
+            <span className="truncate">{title}</span>
+            {titleBadge}
           </motion.h2>
           <div className="flex min-w-9 items-center justify-end">{right}</div>
         </div>

@@ -5,5 +5,5 @@
  */
 export const FEATURES = {
   nutrition: false,
-  diet: true,
+  diet: false,
 } as const

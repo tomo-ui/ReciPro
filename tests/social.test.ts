@@ -235,3 +235,49 @@ describe('miniaturki z CDN YouTube i Instagrama', () => {
     }
   })
 })
+
+describe('YouTube: odczyt, gdy dane odtwarzacza są ucięte (blokada serwerów w chmurze)', () => {
+  const blocked = (description: string) =>
+    `<html><head><meta property="og:title" content="Sernik babci - YouTube"><meta property="og:image" content="https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg"></head><body><script>var ytInitialPlayerResponse = {"playabilityStatus":{"status":"LOGIN_REQUIRED","reason":"Sign in to confirm you're not a bot"}};var ytInitialData = {"attributedDescription":{"content":${JSON.stringify(description)},"commandRuns":[]}};</script></body></html>`
+
+  it('bierze opis z panelu opisu pod filmem (attributedDescription)', () => {
+    const d = parseYouTubeHtml(blocked('Składniki:\n- 1 kg sera\nPrzepis: https://blog.example/sernik'), 'abcdefghijk')!
+    expect(d.caption).toBe('Składniki:\n- 1 kg sera\nPrzepis: https://blog.example/sernik')
+    expect(d.title).toBe('Sernik babci - YouTube')
+    expect(d.thumbnailUrl).toContain('maxresdefault')
+  })
+
+  it('a gdy nie ma nic więcej, choćby uciętym opisem z og:description', () => {
+    const page = `<meta property="og:title" content="Sernik"><meta property="og:description" content="Zaczynamy od składników: 1 kg sera, 6 jaj…">`
+    expect(parseYouTubeHtml(page, 'abcdefghijk')?.caption).toBe('Zaczynamy od składników: 1 kg sera, 6 jaj…')
+  })
+
+  it('import działa na takiej stronie, a bez żadnego opisu daje czytelny błąd', async () => {
+    const ok = await parseRecipeUrl(YT_URL, { ...opts, fetchImpl: network({ youtube: blocked(`Pyszny sernik! Przepis: ${RECIPE_LINK}`), gemini: NONE }).fetchImpl })
+    expect(ok.origin).toBe('post-link')
+    const err = parseRecipeUrl(YT_URL, { ...opts, fetchImpl: network({ youtube: '<html><head><meta property="og:title" content="Film"></head></html>' }).fetchImpl })
+    await expect(err).rejects.toThrow(/zablokował odczyt z serwera/)
+  })
+
+  it('wysyła ciasteczko zgody i używa oficjalnego API, gdy jest klucz', async () => {
+    const { fetchImpl, calls } = network({ youtube: player('Składniki: 1 kg sera, 6 jaj. Przygotowanie: utrzyj i piecz.'), gemini: FULL })
+    await parseRecipeUrl(YT_URL, { ...opts, fetchImpl })
+    const page = calls.find((c) => c.url.includes('youtube.com/watch'))!
+    expect(String((page.init?.headers as Record<string, string>).cookie)).toContain('SOCS=')
+
+    const api = vi.fn(async (input: string | URL) => {
+      const url = String(input)
+      if (url.includes('googleapis.com/youtube/v3/videos')) {
+        expect(url).toContain('id=abcdefghijk')
+        expect(url).toContain('key=YT-KEY')
+        return new Response(JSON.stringify({ items: [{ snippet: { title: 'Sernik z API', description: 'Składniki: 1 kg sera, 6 jaj. Przygotowanie: utrzyj i piecz.', channelTitle: 'Kuchnia', thumbnails: { default: { url: 'https://i.ytimg.com/vi/a/default.jpg', width: 120 }, maxres: { url: 'https://i.ytimg.com/vi/a/maxresdefault.jpg', width: 1280 } } } }] }))
+      }
+      if (url.includes('generativelanguage')) return reply(FULL)
+      return new Response('nie ma', { status: 404 })
+    }) as unknown as typeof fetch
+    const out = await parseRecipeUrl(YT_URL, { ...opts, fetchImpl: api, youtubeApiKey: 'YT-KEY' })
+    expect(out.origin).toBe('youtube-caption')
+    expect(out.draft.image_url).toBe('https://i.ytimg.com/vi/a/maxresdefault.jpg')
+    expect((api as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((c) => String(c[0]).includes('youtube.com/watch'))).toBe(false) // strona filmu nie była potrzebna
+  })
+})
