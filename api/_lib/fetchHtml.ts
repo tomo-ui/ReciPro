@@ -119,6 +119,8 @@ export interface FetchHtmlOptions {
   maxBytes?: number
   maxRedirects?: number
   fetchImpl?: typeof fetch
+  /** Nadpisuje domyślne nagłówki (np. user-agent robota podglądów linków) */
+  headers?: Record<string, string>
 }
 
 /**
@@ -128,7 +130,7 @@ export interface FetchHtmlOptions {
  */
 export async function fetchHtml(
   rawUrl: string,
-  { timeoutMs = 8000, maxBytes = 2_000_000, maxRedirects = 4, fetchImpl = fetch }: FetchHtmlOptions = {},
+  { timeoutMs = 8000, maxBytes = 2_000_000, maxRedirects = 4, fetchImpl = fetch, headers }: FetchHtmlOptions = {},
 ): Promise<{ html: string; finalUrl: string }> {
   let url: URL
   try {
@@ -152,6 +154,7 @@ export async function fetchHtml(
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
           accept: 'text/html,application/xhtml+xml',
           'accept-language': 'pl,en;q=0.8',
+          ...headers,
         },
       })
     } catch (e) {

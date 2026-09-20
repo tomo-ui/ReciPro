@@ -7,8 +7,15 @@ import { assertPublicUrl, readCapped } from './fetchHtml.js'
  * i zapisujemy w Supabase Storage (bucket `recipe-images`, patrz supabase/storage.sql).
  */
 
-// CDN TikToka: p16-common-sign.tiktokcdn-eu.com, …tiktokcdn.com, …tiktokcdn-us.com
-const CDN_HOST = /(^|\.)tiktokcdn(-[a-z]+)?\.com$/i
+// Dozwolone CDN miniaturek:
+//  TikTok:    p16-common-sign.tiktokcdn-eu.com, …tiktokcdn.com, …tiktokcdn-us.com
+//  YouTube:   i.ytimg.com, i9.ytimg.com
+//  Instagram: scontent.cdninstagram.com, scontent-waw1-1.cdninstagram.com, instagram.fwaw1-1.fna.fbcdn.net
+const CDN_HOST = /(^|\.)(tiktokcdn(-[a-z]+)?\.com|ytimg\.com|cdninstagram\.com|fbcdn\.net)$/i
+
+/** Referer zgodny z serwisem, z którego pochodzi miniaturka (część CDN odrzuca żądania bez niego) */
+const refererFor = (host: string) =>
+  /tiktokcdn/i.test(host) ? 'https://www.tiktok.com/' : /ytimg/i.test(host) ? 'https://www.youtube.com/' : 'https://www.instagram.com/'
 const MAX_IMAGE_BYTES = 1_500_000 // obserwowane miniaturki: 110–240 KB
 const MAX_REDIRECTS = 3
 
@@ -110,10 +117,10 @@ export interface DownloadResult {
 }
 
 /**
- * Pobiera miniaturkę wyłącznie z CDN TikToka (https, publiczny adres). Przekierowania idą ręcznie,
+ * Pobiera miniaturkę wyłącznie z CDN TikToka, YouTube lub Instagrama (https, publiczny adres). Przekierowania idą ręcznie,
  * a każdy hop musi znowu być https, w domenie CDN i pod publicznym adresem.
  */
-export async function downloadTikTokThumbnail(
+export async function downloadThumbnail(
   rawUrl: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DownloadResult> {
@@ -127,7 +134,7 @@ export async function downloadTikTokThumbnail(
   try {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       if (url.protocol !== 'https:' || !CDN_HOST.test(url.hostname)) {
-        return { reason: `adres miniaturki poza CDN TikToka (${url.hostname})` }
+        return { reason: `adres miniaturki poza CDN (${url.hostname})` }
       }
       await assertPublicUrl(url)
 
@@ -137,7 +144,7 @@ export async function downloadTikTokThumbnail(
           'user-agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
           accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8',
-          referer: 'https://www.tiktok.com/',
+          referer: refererFor(url.hostname),
         },
         signal: AbortSignal.timeout(8000),
       })
@@ -220,3 +227,6 @@ export async function uploadRecipeImage(
   if (!res.ok) throw new Error(`Storage HTTP ${res.status}: ${await readErrorMessage(res)}`)
   return `${base}/storage/v1/object/public/recipe-images/${path}`
 }
+
+/** Stara nazwa (miniaturki były najpierw tylko z TikToka) */
+export const downloadTikTokThumbnail = downloadThumbnail

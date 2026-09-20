@@ -18,6 +18,14 @@ const IMPORT_NOTES: Record<RecipeDraft['parse_method'], string> = {
   gemini: 'Odczytano przez AI — upewnij się, że wszystko się zgadza.',
 }
 
+/** Komunikat zależny od tego, skąd pochodzi import (opis posta albo strona z linku w opisie) */
+const ORIGIN_NOTES: Partial<Record<ParseOrigin, string>> = {
+  'tiktok-caption': 'Przepis odczytany z opisu filmu na TikToku (samego wideo nie analizujemy). Sprawdź składniki i kroki — bywają niepełne.',
+  'instagram-caption': 'Przepis odczytany z opisu posta na Instagramie (samego wideo nie analizujemy). Sprawdź składniki i kroki — bywają niepełne.',
+  'youtube-caption': 'Przepis odczytany z opisu filmu na YouTube (samego wideo nie analizujemy). Sprawdź składniki i kroki — bywają niepełne.',
+  'post-link': 'W opisie posta był link do przepisu — odczytano go ze strony pod tym linkiem. Sprawdź składniki i kroki.',
+}
+
 /** Informacje o imporcie pokazywane nad formularzem (nie trafiają do bazy) */
 interface ImportInfo {
   origin: ParseOrigin
@@ -91,9 +99,7 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
   const notes = info && (
     <div className="space-y-1.5 rounded-[12px] bg-surface px-4 py-3 text-[14px] text-label-2">
       <p>
-        {info.origin === 'tiktok-caption'
-          ? 'Przepis odczytany z opisu filmu na TikToku (samego wideo nie analizujemy). Sprawdź składniki i kroki — bywają niepełne.'
-          : IMPORT_NOTES[info.method]}
+        {ORIGIN_NOTES[info.origin] ?? IMPORT_NOTES[info.method]}
       </p>
       {info.estimatedServings !== undefined && form.servings === String(info.estimatedServings) && (
         <p>
@@ -104,7 +110,7 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
       {info.thumbnail.status === 'failed' && (
         <p>Nie udało się zapisać miniaturki filmu ({info.thumbnail.reason ?? 'nieznany powód'}). Możesz dodać własne zdjęcie.</p>
       )}
-      {info.thumbnail.status === 'none' && info.origin === 'tiktok-caption' && <p>Ten film nie udostępnia miniaturki.</p>}
+      {info.thumbnail.status === 'none' && info.origin in ORIGIN_NOTES && info.origin !== 'post-link' && <p>Ten post nie udostępnia miniaturki.</p>}
     </div>
   )
 
@@ -186,8 +192,8 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
                 </AnimatePresence>
 
                 <p className="px-1 pt-1 text-[13px] text-label-2">
-                  Wklej link do przepisu albo do filmu z TikToka — w drugim przypadku odczytamy przepis z opisu filmu.
-                  Aplikacja w razie potrzeby użyje AI.
+                  Wklej link do przepisu albo do posta z Instagrama, filmu z YouTube lub TikToka — w drugim przypadku odczytamy
+                  przepis z opisu, a gdy opis zawiera link do przepisu, ze strony pod tym linkiem. Aplikacja w razie potrzeby użyje AI.
                 </p>
               </div>
             ) : (

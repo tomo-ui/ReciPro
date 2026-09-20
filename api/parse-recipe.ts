@@ -5,7 +5,7 @@ import type { StorageConfig } from './_lib/image.js'
 import { ParseError, parseRecipeUrl } from './_lib/pipeline.js'
 
 /**
- * POST /api/parse-recipe  { url }  →  { draft, origin: 'page' | 'tiktok-caption', servingsEstimated, thumbnail }
+ * POST /api/parse-recipe  { url }  →  { draft, origin: 'page' | 'tiktok-caption' | 'instagram-caption' | 'youtube-caption' | 'post-link', servingsEstimated, thumbnail }
  * Strona WWW: pobranie po stronie serwera (omija CORS) i 3-warstwowy pipeline.
  * Link do TikToka: odczyt opisu filmu i wyciągnięcie z niego przepisu (Gemini).
  * GEMINI_API_KEY żyje tylko tutaj. Wymaga nagłówka Authorization: Bearer <token sesji Supabase>.

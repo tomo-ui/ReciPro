@@ -7,7 +7,8 @@
 export type ParseMethod = 'manual' | 'json-ld' | 'heuristic' | 'gemini'
 
 /** Skąd pochodzi zaimportowany przepis (tylko informacja dla UI, nie trafia do bazy) */
-export type ParseOrigin = 'page' | 'tiktok-caption'
+/** Skąd pochodzi import: strona z przepisem, opis posta/filmu albo strona z linku znalezionego w opisie */
+export type ParseOrigin = 'page' | 'tiktok-caption' | 'instagram-caption' | 'youtube-caption' | 'post-link'
 
 /**
  * Co się stało z miniaturką filmu (tylko informacja dla UI):
