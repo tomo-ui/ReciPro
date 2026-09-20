@@ -243,3 +243,94 @@ describe('produkty wskazane ręcznie w formularzu', () => {
     expect(back.ingredients[2]).toEqual({ text: '250 ml mleko', food_id: 171265 }) // klucz po surowym tekście, zapis po normalizacji
   })
 })
+
+describe('dokładniejsze wyszukiwanie', () => {
+  it('odmiany makaronu trafiają w „Makaron, suchy” (synonimy)', () => {
+    const r = db.search('suchy makaron spaghetti', { limit: 5 })
+    expect(r.length).toBeGreaterThan(0)
+    expect(r[0].name).toMatch(/^Makaron/)
+    expect(db.search('penne', { limit: 3 })[0]).toBeDefined()
+  })
+
+  it('żółtko ma własną wagę, a nie wagę całego jajka', () => {
+    const yolk = analyzeLine({ text: '1 żółtko jajka' }, db)
+    expect(yolk.food?.name).toMatch(/żółtko/)
+    expect(yolk.grams).toBeGreaterThan(10)
+    expect(yolk.grams).toBeLessThan(25)
+    expect(analyzeLine({ text: '2 żółtka' }, db).grams).toBeCloseTo(2 * yolk.grams!, 5)
+    expect(analyzeLine({ text: '1 jajko' }, db).grams).toBe(55)
+  })
+
+  it('hideJunk usuwa produkty dla niemowląt, markowe i z restauracji', () => {
+    const all = db.search('mleko', { limit: 60 })
+    const clean = db.search('mleko', { limit: 60, hideJunk: true })
+    expect(all.some((f) => f.catEn === 'Baby Foods')).toBe(true)
+    expect(clean.some((f) => f.catEn === 'Baby Foods')).toBe(false)
+    expect(clean.length).toBeGreaterThan(5)
+  })
+})
+
+describe('produkty z opakowań (Open Food Facts)', () => {
+  const usda = JSON.parse(readFileSync('src/data/foods.json', 'utf8')) as FoodData
+  const off = {
+    v: 1,
+    products: [
+      [5900000000001, 'Makaron spaghetti', 'Lubella', [350, 12, 1.5, 72, 3, 3, 0.3, 6, 0, ...new Array(15).fill(0)]],
+      [5900000000002, 'Jogurt naturalny', 'Bakoma', [63, 4.3, 3.2, 4.8, 4.8, 0, 2, 50, 0, ...new Array(15).fill(0)]],
+    ] as [number, string, string, number[]][],
+  }
+  const both = buildFoodDb(usda, off)
+
+  it('dokłada produkty do bazy i pozwala szukać po marce', () => {
+    expect(both.size).toBe(usda.foods.length + 2)
+    const r = both.search('lubella spaghetti', { limit: 5 })
+    expect(r[0]).toMatchObject({ source: 'off', brand: 'Lubella', id: 5900000000001 })
+    expect(both.byId.get(5900000000002)?.name).toBe('Jogurt naturalny')
+  })
+
+  it('zwykłe wyszukiwanie nadal stawia ogólny składnik przed produktem z opakowania', () => {
+    expect(both.search('makaron', { limit: 5 })[0].source).toBe('usda')
+  })
+
+  it('automatyczne dopasowanie składnika z przepisu nie sięga po produkty z opakowań', () => {
+    expect(both.match('makaron spaghetti')?.source).toBe('usda')
+    expect(both.match('jogurt naturalny')?.source).toBe('usda')
+  })
+
+  it('produkt z opakowania można wskazać ręcznie (food_id) i liczy się z jego wartości', () => {
+    const a = analyzeLine({ text: '200 g makaron spaghetti', food_id: 5900000000001 }, both)
+    expect(a.manual).toBe(true)
+    expect(a.nutrients![IDX.kcal]).toBeCloseTo(700, 5)
+  })
+
+  it('krótka nazwa produktu z opakowania to jego pełna nazwa', () => {
+    expect(shortName(both.byId.get(5900000000001)!)).toBe('makaron spaghetti')
+  })
+})
+
+describe('dane Open Food Facts w repozytorium', () => {
+  const off = JSON.parse(readFileSync('src/data/off-products.json', 'utf8')) as { products: [number, string, string, number[]][] }
+  const usda = JSON.parse(readFileSync('src/data/foods.json', 'utf8')) as FoodData
+  const all = buildFoodDb(usda, off as never)
+
+  it('ma ponad 10 tysięcy polskich produktów z poprawnymi wartościami i unikalnymi kodami', () => {
+    expect(off.products.length).toBeGreaterThan(10000)
+    expect(new Set(off.products.map((p) => p[0])).size).toBe(off.products.length)
+    expect(off.products.every(([code, name, , n]) => Number.isSafeInteger(code) && name.length >= 3 && n.length === 24 && n.every(Number.isFinite))).toBe(true)
+    // kody OFF nie mogą się zderzać z identyfikatorami USDA (food_id jest wspólny)
+    const usdaIds = new Set(usda.foods.map((f) => f[0]))
+    expect(off.products.some(([code]) => usdaIds.has(code))).toBe(false)
+  })
+
+  it('wyszukiwanie znajduje polskie produkty z opakowań (spaghetti, jajka, mąka)', () => {
+    for (const q of ['spaghetti', 'jajka', 'mąka tortowa']) {
+      const r = all.search(q, { limit: 60 })
+      expect(r.some((f) => f.source === 'off'), q).toBe(true)
+    }
+  })
+
+  it('składnik z przepisu nadal dopasowuje się do ogólnych składników', () => {
+    expect(all.match('mąki pszennej')?.source).toBe('usda')
+    expect(analyzeLine({ text: '2 jajka' }, all).food?.source).toBe('usda')
+  })
+})

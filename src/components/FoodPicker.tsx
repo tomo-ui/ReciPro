@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import type { Food } from '@/lib/foodDb'
+import { FEATURES } from '@/lib/features'
 import { IDX, formatAmount } from '@/lib/nutrients'
 import { useDebounced } from '@/hooks/useDebounced'
 import { useFoodDb } from '@/hooks/useFoodDb'
@@ -19,6 +20,7 @@ interface Props {
 
 const QUICK = ['mąka', 'mleko', 'jajko', 'masło', 'kurczak', 'ziemniaki', 'ryż', 'makaron', 'pomidor', 'cebula', 'ser', 'cukier', 'oliwa', 'wołowina', 'łosoś']
 const PRESET_GRAMS = [50, 100, 150, 200, 250]
+const TOP = 8
 
 /** Krok zmiany gramatury: drobny dla małych ilości, większy dla dużych */
 export const gramStep = (g: number) => (g < 50 ? 5 : g < 250 ? 10 : g < 1000 ? 25 : 100)
@@ -31,7 +33,11 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
   const [selected, setSelected] = useState<Food | null>(null)
   const [grams, setGrams] = useState(100)
 
-  const results = useMemo(() => (db && debounced.trim() ? db.search(debounced, { limit: 40 }) : []), [db, debounced])
+  // Domyślnie bez produktów markowych, z restauracji i dla niemowląt; najpierw kilka najlepszych trafień
+  const [brands, setBrands] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const results = useMemo(() => (db && debounced.trim() ? db.search(debounced, { limit: 60, hideJunk: !brands }) : []), [db, debounced, brands])
+  const visible = expanded ? results : results.slice(0, TOP)
 
   function choose(food: Food) {
     if (askAmount) {
@@ -60,7 +66,10 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
               <input
                 autoFocus
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  setExpanded(false)
+                }}
                 placeholder="Szukaj składnika, np. mąka pszenna"
                 aria-label="Szukaj składnika"
                 autoCapitalize="none"
@@ -86,14 +95,14 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
                   ))}
                 </div>
                 <p className="mt-5 px-1 text-[13px] text-label-2">
-                  {db.size.toLocaleString('pl-PL')} produktów z wartościami odżywczymi na 100 g. Nazwy możesz wpisywać po polsku, w dowolnej odmianie.
+                  {db.size.toLocaleString('pl-PL')} produktów: ogólne składniki (USDA) i polskie produkty z opakowań (Open Food Facts, licencja ODbL). Nazwy możesz wpisywać po polsku, w dowolnej odmianie, także z marką.
                 </p>
               </div>
             ) : results.length === 0 ? (
               <p className="pt-16 text-center text-[15px] text-label-2">Nic nie znaleziono. Spróbuj innego słowa.</p>
             ) : (
               <ul className="divide-y divide-separator overflow-hidden rounded-[14px] bg-surface">
-                {results.map((f) => (
+                {visible.map((f) => (
                   <li key={f.id}>
                     <motion.button
                       whileTap={{ backgroundColor: 'var(--surface-2)' }}
@@ -102,16 +111,30 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
                     >
                       <span className="min-w-0 flex-1">
                         <span className="line-clamp-2 text-[15px] leading-snug">{f.name}</span>
-                        <span className="block truncate text-[12px] text-label-2">{f.cat}</span>
+                        <span className="block truncate text-[12px] text-label-2">{f.source === 'off' ? (f.brand ? `${f.brand} · z opakowania` : 'Produkt z opakowania') : f.cat}</span>
                       </span>
-                      <span className="shrink-0 text-right text-[13px] text-label-2 tabular-nums">
-                        <span className="block font-semibold text-label">{formatAmount(f.n[IDX.kcal])} kcal</span>
-                        na 100 g
-                      </span>
+                      {FEATURES.nutrition && (
+                        <span className="shrink-0 text-right text-[13px] text-label-2 tabular-nums">
+                          <span className="block font-semibold text-label">{formatAmount(f.n[IDX.kcal])} kcal</span>
+                          na 100 g
+                        </span>
+                      )}
                     </motion.button>
                   </li>
                 ))}
               </ul>
+            )}
+            {debounced.trim() && db && (
+              <div className="mt-3 space-y-2 text-center">
+                {!expanded && results.length > TOP && (
+                  <button onClick={() => setExpanded(true)} className="w-full rounded-[12px] bg-surface py-3 text-[15px] font-medium text-accent">
+                    Pokaż więcej ({results.length - TOP})
+                  </button>
+                )}
+                <button onClick={() => setBrands((b) => !b)} className="text-[13px] text-label-2 underline">
+                  {brands ? 'Ukryj produkty markowe, z restauracji i dla niemowląt' : 'Pokaż też produkty markowe, z restauracji i dla niemowląt'}
+                </button>
+              </div>
             )}
           </div>
         </>
@@ -129,7 +152,7 @@ function AmountStep({ food, grams, setGrams, onAdd }: { food: Food; grams: numbe
     <div className="scroll-y flex-1 space-y-5 px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
       <div>
         <p className="text-[19px] leading-snug font-semibold">{food.name}</p>
-        <p className="mt-0.5 text-[13px] text-label-2">{food.cat}</p>
+        <p className="mt-0.5 text-[13px] text-label-2">{food.source === 'off' ? (food.brand ? `${food.brand} · produkt z opakowania` : 'Produkt z opakowania') : food.cat}</p>
       </div>
 
       <div className="rounded-[16px] bg-surface p-4">
@@ -165,12 +188,14 @@ function AmountStep({ food, grams, setGrams, onAdd }: { food: Food; grams: numbe
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 text-center">
-        <Macro label="kcal" value={kcal} />
-        <Macro label="białko" value={food.n[IDX.protein] * k} unit="g" />
-        <Macro label="tłuszcz" value={food.n[IDX.fat] * k} unit="g" />
-        <Macro label="węgle" value={food.n[IDX.carbs] * k} unit="g" />
-      </div>
+      {FEATURES.nutrition && (
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <Macro label="kcal" value={kcal} />
+          <Macro label="białko" value={food.n[IDX.protein] * k} unit="g" />
+          <Macro label="tłuszcz" value={food.n[IDX.fat] * k} unit="g" />
+          <Macro label="węgle" value={food.n[IDX.carbs] * k} unit="g" />
+        </div>
+      )}
 
       <motion.button
         whileTap={{ scale: 0.97 }}

@@ -52,6 +52,7 @@ function pieceGrams(parsed: ParsedIngredient, food: Food | undefined): number | 
   const word = (parsed.unitWord ?? '').toLowerCase()
   const name = parsed.name.toLowerCase()
   const p = food?.p ?? {}
+  if (food && /^Egg, (yolk|white)/.test(food.en) && p.pc) return p.pc // 1 żółtko ≠ 1 jajko
   if (/puszk/.test(word)) return p.cn ?? 400
   if (/plaster|kromk/.test(word)) return p.sl ?? 25
   if (/ząbk|zabk/.test(word) || /ząbek|ząbk/.test(name)) return p.cl ?? 5

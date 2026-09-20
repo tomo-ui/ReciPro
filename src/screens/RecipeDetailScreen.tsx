@@ -10,6 +10,7 @@ import { ChevronLeftIcon, ClockIcon, CommentIcon, MinusIcon, PencilIcon, PlusIco
 import { CommentsSection } from '@/components/CommentsSection'
 import { LikeButton } from '@/components/LikeButton'
 import { NutritionSection } from '@/components/NutritionSection'
+import { FEATURES } from '@/lib/features'
 import { Cover } from '@/components/RecipeCard'
 
 interface Props {
@@ -175,9 +176,11 @@ export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDele
             ))}
           </Section>
 
-          <Section title="Wartości odżywcze">
-            <NutritionSection recipe={recipe} onSaveCopy={onSaveCopy} />
-          </Section>
+          {FEATURES.nutrition && (
+            <Section title="Wartości odżywcze">
+              <NutritionSection recipe={recipe} onSaveCopy={onSaveCopy} />
+            </Section>
+          )}
 
           <Section title="Przygotowanie">
             {recipe.steps.length === 0 && <p className="text-[15px] text-label-2">Brak opisanych kroków.</p>}

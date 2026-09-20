@@ -22,6 +22,16 @@ export interface Food {
   /** Wartości na 100 g w kolejności z nutrients.ts */
   n: number[]
   p: Portions
+  /** usda = ogólny składnik (USDA), off = produkt z opakowania (Open Food Facts) */
+  source: 'usda' | 'off'
+  /** Marka (tylko produkty z Open Food Facts) */
+  brand?: string
+}
+
+/** Polskie produkty z Open Food Facts (ODbL): [kod kreskowy, nazwa, marka, wartości na 100 g] */
+export interface OffData {
+  v: number
+  products: [number, string, string, number[]][]
 }
 
 export interface FoodData {
@@ -64,7 +74,12 @@ export function ingredientQueryTokens(name: string): string[] {
   return [...new Set(out)]
 }
 
+export const OFF_CATEGORY = 'Produkty z opakowań (Open Food Facts)'
+const OFF_CATEGORY_EN = 'Open Food Facts'
+
 const CAT_PENALTY: Record<string, number> = {
+  // Produkt z opakowania wygrywa z ogólnym składnikiem dopiero, gdy pasuje lepiej (marka, dokładna nazwa)
+  [OFF_CATEGORY_EN]: 0.9,
   'Baby Foods': 1.6,
   'Fast Foods': 1.1,
   'Restaurant Foods': 1.3,
@@ -78,8 +93,28 @@ const CAT_PENALTY: Record<string, number> = {
 const CLAUSE_WEIGHT = [3, 2.4, 1.3]
 const isRaw = (f: Food) => /surow|^raw|, raw/i.test(f.name) || /(^|, )raw($|,)/.test(f.en)
 
+/** Kategorie, które przy składaniu przepisu zwykle tylko przeszkadzają: markowe, restauracyjne, dla niemowląt */
+const JUNK_CATEGORIES = new Set([
+  'Baby Foods',
+  'Fast Foods',
+  'Restaurant Foods',
+  'Branded Food Products Database',
+  'American Indian/Alaska Native Foods',
+  'Quality Control Materials',
+])
+
+/** Odmiany makaronu i inne słowa, które w bazie kryją się pod ogólną nazwą („Makaron, suchy”) */
+const SYNONYMS = new Map<string, string[]>()
+for (const w of ['spaghetti', 'penne', 'fusilli', 'tagliatelle', 'farfalle', 'rigatoni', 'lasagne', 'nudle', 'muszelki', 'kokardki', 'swiderki', 'rurki', 'wstazki']) {
+  SYNONYMS.set(stem(w), [stem('makaron')])
+}
+/** Każde słowo zapytania może się znaleźć w nazwie także jako jeden ze swoich synonimów */
+const withSynonyms = (stems: string[]): string[][] => stems.map((s) => [s, ...(SYNONYMS.get(s) ?? [])])
+
 export interface SearchOptions {
   limit?: number
+  /** Pomija produkty markowe, z restauracji, dla niemowląt itp. */
+  hideJunk?: boolean
   /** Jaka część słów zapytania musi się znaleźć w nazwie (1 = wszystkie) */
   minRatio?: number
 }
@@ -101,25 +136,31 @@ export function cleanedName(name: string): string {
   return (fold(head).match(WORD) ?? []).filter((w) => !NOISE.has(w)).join(' ')
 }
 
-export function buildFoodDb(data: FoodData): FoodDb {
+const pad = (n: number[]) => (n.length === NUTRIENT_COUNT ? n : [...n, ...new Array(Math.max(0, NUTRIENT_COUNT - n.length)).fill(0)])
+
+export function buildFoodDb(data: FoodData, off?: OffData): FoodDb {
   const foods: Food[] = data.foods.map(([id, name, en, cat, n, p]) => ({
     id,
     name,
     en,
     cat: data.cats[cat] ?? '',
     catEn: data.catsEn?.[cat] ?? '',
-    n: n.length === NUTRIENT_COUNT ? n : [...n, ...new Array(Math.max(0, NUTRIENT_COUNT - n.length)).fill(0)],
+    n: pad(n),
     p: p || {},
+    source: 'usda' as const,
   }))
+  for (const [id, name, brand, n] of off?.products ?? []) {
+    foods.push({ id, name, en: '', cat: OFF_CATEGORY, catEn: OFF_CATEGORY_EN, n: pad(n), p: {}, source: 'off', brand: brand || undefined })
+  }
   const byId = new Map(foods.map((f) => [f.id, f]))
   const byEn = new Map(foods.map((f) => [f.en, f]))
   const findEn = (en: string): Food | undefined =>
     byEn.get(en) ?? foods.find((f) => f.en.startsWith(`${en} (`)) ?? foods.find((f) => f.en.startsWith(en))
 
   /** Wzorce sprawdzamy od początku nazwy, a potem od kolejnych słów („biała kiełbasa” → „kiełbasa”) */
-  const aliasFor = (name: string): Food | undefined => {
+  const aliasFor = (name: string, startOnly = false): Food | undefined => {
     const words = cleanedName(name).split(' ').filter(Boolean)
-    for (let i = 0; i < Math.min(words.length, 3); i++) {
+    for (let i = 0; i < Math.min(words.length, startOnly ? 1 : 3); i++) {
       const rest = words.slice(i).join(' ')
       for (const [re, en] of ALIASES) {
         if (re.test(rest)) {
@@ -150,6 +191,7 @@ export function buildFoodDb(data: FoodData): FoodDb {
     tokenCount.push(count)
     firstToken.push(tokens(f.name)[0] ?? '')
     for (const t of tokens(f.en)) add(t, idx, 0.9) // angielskie słowa też działają, ale słabiej
+    if (f.brand) for (const t of tokens(f.brand)) add(t, idx, 1.4)
   })
   const vocab = [...postings.keys()]
 
@@ -165,24 +207,29 @@ export function buildFoodDb(data: FoodData): FoodDb {
 
   const cache = new Map<string, Food[]>()
 
-  function rank(qs: string[], minRatio: number, limit: number): Food[] {
+  function rank(qs: string[][], minRatio: number, limit: number, hideJunk = false, genericOnly = false): Food[] {
     if (qs.length === 0) return []
     const need = Math.max(1, Math.ceil(qs.length * minRatio - 1e-9))
     const best = new Map<number, number[]>() // produkt → najlepsza waga dla każdego słowa zapytania
-    qs.forEach((q, qi) => {
-      for (const [key, factor] of expand(q)) {
-        for (const [idx, w] of postings.get(key)!) {
-          let arr = best.get(idx)
-          if (!arr) best.set(idx, (arr = new Array(qs.length).fill(0)))
-          arr[qi] = Math.max(arr[qi], w * factor)
+    qs.forEach((alts, qi) => {
+      for (const q of alts) {
+        for (const [key, factor] of expand(q)) {
+          for (const [idx, w] of postings.get(key)!) {
+            let arr = best.get(idx)
+            if (!arr) best.set(idx, (arr = new Array(qs.length).fill(0)))
+            arr[qi] = Math.max(arr[qi], w * factor)
+          }
         }
       }
     })
+    const flat = qs.flat()
     const scored: [number, Food][] = []
     for (const [idx, arr] of best) {
       const matched = arr.filter((v) => v > 0).length
       if (matched < need) continue
       const f = foods[idx]
+      if (hideJunk && JUNK_CATEGORIES.has(f.catEn)) continue
+      if (genericOnly && f.source === 'off') continue
       const extra = Math.max(0, tokenCount[idx] - matched)
       const score =
         arr.reduce((a, b) => a + b, 0) -
@@ -190,7 +237,7 @@ export function buildFoodDb(data: FoodData): FoodDb {
         (CAT_PENALTY[f.catEn] ?? 0) -
         0.004 * f.name.length +
         (isRaw(f) ? 0.45 : 0) +
-        (qs.some((q) => firstToken[idx] === q || (q.length >= 4 && firstToken[idx].startsWith(q)) || (firstToken[idx].length >= 4 && q.startsWith(firstToken[idx]))) ? 1.2 : 0)
+        (flat.some((q) => firstToken[idx] === q || (q.length >= 4 && firstToken[idx].startsWith(q)) || (firstToken[idx].length >= 4 && q.startsWith(firstToken[idx]))) ? 1.2 : 0)
       scored.push([score, f])
     }
     scored.sort((a, b) => b[0] - a[0] || a[1].name.length - b[1].name.length)
@@ -203,12 +250,12 @@ export function buildFoodDb(data: FoodData): FoodDb {
     size: foods.length,
     search(query, opts = {}) {
       const limit = opts.limit ?? 30
-      const key = `${query}|${opts.minRatio ?? 1}|${limit}`
+      const key = `${query}|${opts.minRatio ?? 1}|${limit}|${opts.hideJunk ? 1 : 0}`
       const hit = cache.get(key)
       if (hit) return hit
-      let res = rank([...new Set(tokens(query))], opts.minRatio ?? 1, limit)
+      let res = rank(withSynonyms([...new Set(tokens(query))]), opts.minRatio ?? 1, limit, opts.hideJunk)
       // Popularny składnik (np. „mąka pszenna”) na pierwszym miejscu: to zwykle ten, o który chodzi
-      const preferred = aliasFor(query)
+      const preferred = aliasFor(query, true) // tylko gdy zapytanie zaczyna się od tego składnika (nie „marka + składnik”)
       if (preferred && res.length > 0) res = [preferred, ...res.filter((f) => f.id !== preferred.id)].slice(0, limit)
       if (cache.size > 500) cache.clear()
       cache.set(key, res)
@@ -219,7 +266,7 @@ export function buildFoodDb(data: FoodData): FoodDb {
       const aliased = aliasFor(name)
       if (aliased) return aliased
       const qs = ingredientQueryTokens(name)
-      const top = rank(qs, qs.length > 1 ? 0.5 : 1, 1)[0]
+      const top = rank(withSynonyms(qs), qs.length > 1 ? 0.5 : 1, 1, false, true)[0]
       return top
     },
   }
@@ -230,6 +277,7 @@ export function shortName(food: Food): string {
   const clauses = food.name.split(',').map((c) => c.trim()).filter(Boolean)
   const skip = /^(surow|śwież|swiez|ugotowan|gotowan|bez |z |o |cały|cała|całe)/i
   let name = clauses[0] ?? food.name
+  if (food.source === 'off') return name.charAt(0).toLowerCase() + name.slice(1) // nazwa z opakowania w całości
   if (clauses[1] && clauses[1].split(/\s+/).length <= 3 && !skip.test(clauses[1])) name += ` ${clauses[1]}`
   return name.charAt(0).toLowerCase() + name.slice(1)
 }
@@ -238,6 +286,10 @@ let dbPromise: Promise<FoodDb> | undefined
 
 /** Wczytuje bazę raz na sesję (osobny fragment aplikacji) */
 export function loadFoodDb(): Promise<FoodDb> {
-  dbPromise ??= import('@/data/foods.json').then((m) => buildFoodDb((m.default ?? m) as unknown as FoodData))
+  dbPromise ??= Promise.all([
+    import('@/data/foods.json'),
+    // produkty z opakowań są dodatkiem: bez nich baza działa dalej
+    import('@/data/off-products.json').catch(() => null),
+  ]).then(([usda, off]) => buildFoodDb((usda.default ?? usda) as unknown as FoodData, off ? ((off.default ?? off) as unknown as OffData) : undefined))
   return dbPromise
 }
