@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import type { Profile } from '@/types/recipe'
 import { backend } from '@/lib/data'
 import { deleteRecipeImage, fileToAvatarBlob, uploadAvatarImage } from '@/lib/images'
-import { normalizeFullName, normalizeUsername } from '@/lib/username'
+import { BIO_MAX_LENGTH, BIO_MAX_LINES, normalizeBio, normalizeFullName, normalizeUsername } from '@/lib/username'
 import { useUsernameCheck } from '@/hooks/useUsernameCheck'
 import { Avatar } from '@/components/Avatar'
 import { Field, Group, Toggle } from '@/components/formParts'
@@ -16,11 +16,18 @@ interface Props {
   onSaved: (me: Profile) => void
 }
 
+/** Ogranicza wpisywany opis do 150 znaków i 5 linii (bez przycinania spacji, żeby dało się swobodnie pisać) */
+function limitBio(v: string): string {
+  return v.replace(/\r\n?/g, '\n').split('\n').slice(0, BIO_MAX_LINES).join('\n').slice(0, BIO_MAX_LENGTH)
+}
+
 /** Edycja profilu: zdjęcie profilowe, nazwa użytkownika, imię i nazwisko, prywatność */
 export function EditProfileScreen({ me, onClose, onSaved }: Props) {
   const [username, setUsername] = useState(me.username)
   const [fullName, setFullName] = useState(me.full_name ?? '')
+  const [bio, setBio] = useState(me.bio ?? '')
   const [isPublic, setIsPublic] = useState(me.is_public)
+  const [allowZoom, setAllowZoom] = useState(me.allow_avatar_zoom !== false)
   const [pending, setPending] = useState<{ blob: Blob; preview: string } | null>(null)
   const [removeAvatar, setRemoveAvatar] = useState(false)
   const [avatarBusy, setAvatarBusy] = useState(false)
@@ -74,6 +81,10 @@ export function EditProfileScreen({ me, onClose, onSaved }: Props) {
         is_public: isPublic,
       }
       if (normalizeUsername(username) !== me.username) patch.username = username
+      // opis wysyłamy tylko po zmianie, żeby zapis profilu działał też przed aktualizacją bazy o kolumnę bio
+      if ((normalizeBio(bio) ?? '') !== (me.bio ?? '')) patch.bio = normalizeBio(bio) ?? null
+      // jak przy opisie: tylko po zmianie, żeby zapis działał też przed aktualizacją bazy
+      if (allowZoom !== (me.allow_avatar_zoom !== false)) patch.allow_avatar_zoom = allowZoom
       if (pending) {
         uploaded = await uploadAvatarImage(pending.blob)
         patch.avatar_url = uploaded
@@ -174,6 +185,22 @@ export function EditProfileScreen({ me, onClose, onSaved }: Props) {
         </div>
 
         <div>
+          <p className="mb-1.5 px-4 text-[13px] text-label-2 uppercase">Opis</p>
+          <Group>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(limitBio(e.target.value))}
+              placeholder="Napisz kilka słów o sobie"
+              rows={4}
+              className="block w-full resize-none bg-transparent px-4 py-3.5 leading-snug outline-none placeholder:text-label-3"
+            />
+          </Group>
+          <p className="mt-1.5 px-4 text-right text-[13px] text-label-2 tabular-nums">
+            {bio.length}/{BIO_MAX_LENGTH}
+          </p>
+        </div>
+
+        <div>
           <Group>
             <Field label="Profil publiczny">
               <span className="flex justify-end">
@@ -185,6 +212,19 @@ export function EditProfileScreen({ me, onClose, onSaved }: Props) {
             {isPublic
               ? 'Inni widzą Twoje przepisy, znajdą je w wyszukiwarce i mogą Cię obserwować.'
               : 'Twoje przepisy są widoczne tylko dla Ciebie. Profil (nazwa i imię) nadal można znaleźć w wyszukiwarce.'}
+          </p>
+        </div>
+
+        <div>
+          <Group>
+            <Field label="Powiększanie zdjęcia">
+              <span className="flex justify-end">
+                <Toggle checked={allowZoom} onChange={setAllowZoom} label="Powiększanie zdjęcia profilowego" />
+              </span>
+            </Field>
+          </Group>
+          <p className="mt-1.5 px-4 text-[13px] text-label-2">
+            {allowZoom ? 'Inni mogą dotknąć Twojego zdjęcia profilowego, żeby zobaczyć je w dużym formacie.' : 'Dotknięcie Twojego zdjęcia profilowego nic nie robi. Ty nadal możesz je powiększyć.'}
           </p>
         </div>
       </div>

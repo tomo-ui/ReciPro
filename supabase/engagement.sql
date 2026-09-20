@@ -6,6 +6,14 @@
 -- ---------------------------------------------------------------------------
 
 alter table public.profiles add column if not exists avatar_url text;
+-- Opis profilu (bio) jak w Instagramie: do 150 znaków, maksymalnie 5 linii
+alter table public.profiles add column if not exists bio text;
+-- Czy inni mogą powiększyć zdjęcie profilowe dotknięciem (domyślnie tak)
+alter table public.profiles add column if not exists allow_avatar_zoom boolean not null default true;
+alter table public.profiles drop constraint if exists profiles_bio_valid;
+alter table public.profiles add constraint profiles_bio_valid check (
+  bio is null or (char_length(bio) <= 150 and array_length(string_to_array(bio, E'\n'), 1) <= 5)
+);
 alter table public.profiles add column if not exists followers_count int not null default 0;
 alter table public.profiles add column if not exists following_count int not null default 0;
 
@@ -20,8 +28,8 @@ alter table public.profiles add constraint profiles_avatar_url_valid check (
 
 -- Klient nie może sam ustawiać liczników (ani innych kolumn poza własnymi danymi profilu)
 revoke insert, update on public.profiles from anon, authenticated;
-grant insert (id, username, full_name, is_public, avatar_url) on public.profiles to authenticated;
-grant update (username, full_name, is_public, avatar_url) on public.profiles to authenticated;
+grant insert (id, username, full_name, is_public, avatar_url, bio, allow_avatar_zoom) on public.profiles to authenticated;
+grant update (username, full_name, is_public, avatar_url, bio, allow_avatar_zoom) on public.profiles to authenticated;
 
 -- Liczniki utrzymują triggery, dzięki temu Realtime może pokazać zmianę wiersza profilu wszystkim
 -- bez ujawniania, kto kogo obserwuje
@@ -69,7 +77,8 @@ drop function if exists public.search_profiles(text, int, int);
 create function public.get_profile(p_username text)
 returns table (
   id uuid, username text, full_name text, avatar_url text, is_public boolean,
-  recipe_count int, followers_count int, following_count int, is_following boolean, is_me boolean
+  recipe_count int, followers_count int, following_count int, is_following boolean, is_me boolean,
+  bio text, allow_avatar_zoom boolean
 )
 language sql stable security definer set search_path = public as $$
   select p.id, p.username, p.full_name, p.avatar_url, p.is_public,
@@ -77,7 +86,8 @@ language sql stable security definer set search_path = public as $$
           then (select count(*) from public.recipes r where r.user_id = p.id) else 0 end)::int,
     p.followers_count, p.following_count,
     exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = p.id),
-    p.id = auth.uid()
+    p.id = auth.uid(),
+    p.bio, p.allow_avatar_zoom
   from public.profiles p
   where p.username = lower(p_username)
 $$;

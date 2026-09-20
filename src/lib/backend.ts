@@ -22,6 +22,10 @@ export type RecipeSort = 'relevance' | 'newest'
 export interface ProfilePatch {
   username?: string
   full_name?: string | null
+  /** Opis profilu; null lub pusty tekst usuwa opis */
+  bio?: string | null
+  /** Czy inni mogą powiększyć zdjęcie profilowe */
+  allow_avatar_zoom?: boolean
   is_public?: boolean
   /** Adres nowego zdjęcia profilowego; null usuwa zdjęcie */
   avatar_url?: string | null

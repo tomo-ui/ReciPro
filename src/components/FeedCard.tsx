@@ -37,9 +37,9 @@ export function FeedCard({ recipe, stats, onStatsChange, onOpen, onOpenAuthor }:
         <button onClick={() => onOpenAuthor(author.username)} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left">
           <Avatar name={author.username} src={author.avatar_url} size={34} />
           <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-1 text-[15px] leading-tight font-semibold">
+            <span className="flex items-center text-[15px] leading-tight font-semibold">
               <span className="truncate">{author.username}</span>
-              <VerifiedBadge username={author.username} size={14} />
+              <VerifiedBadge username={author.username} size={16} />
             </span>
             {author.full_name && <span className="block truncate text-[12px] text-label-2">{author.full_name}</span>}
           </span>
@@ -92,7 +92,7 @@ export function FeedCard({ recipe, stats, onStatsChange, onOpen, onOpenAuthor }:
             <span className="min-w-0 flex-1 text-[14px] leading-snug">
               <span className="line-clamp-2 break-words whitespace-pre-line">
                 <span className="font-semibold">{last.author.username}</span>
-                <VerifiedBadge username={last.author.username} size={12} /> {last.body}
+                <VerifiedBadge username={last.author.username} size={14} className="mr-1" /> {last.body}
               </span>
               <span className="mt-0.5 block text-[12px] text-label-2">{timeAgo(last.created_at)}</span>
             </span>

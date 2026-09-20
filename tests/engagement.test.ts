@@ -78,6 +78,34 @@ describe('liczniki obserwujących (triggery)', () => {
   })
 })
 
+describe('opis profilu (bio)', () => {
+  it('zapis, odczyt w get_profile i limity: 150 znaków, 5 linii', async () => {
+    expect(await asOk(A, `update public.profiles set bio = E'Gotuję codziennie\nPrzepisy z Podlasia' where id = '${A}'`)).toBeNull()
+    expect((await one<{ bio: string | null }>(B, `select * from public.get_profile('anna')`)).bio).toBe('Gotuję codziennie\nPrzepisy z Podlasia')
+    expect(await asOk(A, `update public.profiles set bio = '${'x'.repeat(150)}' where id = '${A}'`)).toBeNull()
+    expect(await asOk(A, `update public.profiles set bio = '${'x'.repeat(151)}' where id = '${A}'`)).toMatch(/profiles_bio_valid|check/i)
+    expect(await asOk(A, `update public.profiles set bio = E'1\n2\n3\n4\n5\n6' where id = '${A}'`)).toMatch(/profiles_bio_valid|check/i)
+    expect(await asOk(A, `update public.profiles set bio = null where id = '${A}'`)).toBeNull()
+    expect((await one<{ bio: string | null }>(B, `select * from public.get_profile('anna')`)).bio).toBeNull()
+  })
+
+  it('cudzego opisu nie da się zmienić', async () => {
+    await as(B, `update public.profiles set bio = 'włamanie' where id = '${A}'`)
+    expect((await one<{ bio: string | null }>(A, `select * from public.get_profile('anna')`)).bio).toBeNull()
+  })
+})
+
+describe('zgoda na powiększanie zdjęcia profilowego', () => {
+  it('domyślnie włączona; właściciel może ją wyłączyć, obcy nie', async () => {
+    expect((await one<{ allow_avatar_zoom: boolean }>(B, `select * from public.get_profile('anna')`)).allow_avatar_zoom).toBe(true)
+    expect(await asOk(A, `update public.profiles set allow_avatar_zoom = false where id = '${A}'`)).toBeNull()
+    expect((await one<{ allow_avatar_zoom: boolean }>(B, `select * from public.get_profile('anna')`)).allow_avatar_zoom).toBe(false)
+    await as(B, `update public.profiles set allow_avatar_zoom = true where id = '${A}'`)
+    expect((await one<{ allow_avatar_zoom: boolean }>(B, `select * from public.get_profile('anna')`)).allow_avatar_zoom).toBe(false)
+    expect(await asOk(A, `update public.profiles set allow_avatar_zoom = true where id = '${A}'`)).toBeNull()
+  })
+})
+
 describe('zdjęcie profilowe (awatar)', () => {
   it('dozwolony tylko adres z naszego bucketa w folderze właściciela', async () => {
     expect(await asOk(A, `update public.profiles set avatar_url = '${HOST}/${A}/avatar-1.jpg' where id = '${A}'`)).toBeNull()

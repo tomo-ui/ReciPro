@@ -174,7 +174,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
           'profile',
           <LargeTitleScreen
             title={me.username}
-            titleBadge={<VerifiedBadge username={me.username} size={16} />}
+            titleBadge={<VerifiedBadge username={me.username} size={19} className="ml-1.5" />}
             variant="inline"
             right={
               <motion.button
@@ -232,7 +232,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               }}
             />
           ) : entry.kind === 'profile' ? (
-            <PushedScreen key={`profile-${entry.username}-${i}`} title={`@${entry.username}`} titleBadge={<VerifiedBadge username={entry.username} />} onBack={pop}>
+            <PushedScreen key={`profile-${entry.username}-${i}`} title={entry.username} titleStart titleBadge={<VerifiedBadge username={entry.username} size={17} className="ml-1.5" />} onBack={pop}>
               <div className="px-[max(16px,env(safe-area-inset-left))]">
                 <ProfileView
                   username={entry.username}

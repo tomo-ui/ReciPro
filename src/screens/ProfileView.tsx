@@ -5,12 +5,13 @@ import { FEATURES } from '@/lib/features'
 import { backend } from '@/lib/data'
 import { usePaged } from '@/hooks/usePaged'
 import { Avatar } from '@/components/Avatar'
-import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { DietTab } from '@/components/DietTab'
 import { GoalsTab } from '@/components/GoalsTab'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { FollowButton } from '@/components/FollowButton'
 import { LockIcon, PlusIcon, SpinnerIcon } from '@/components/Icons'
+import { formatCount } from '@/lib/ui'
+import { AvatarLightbox } from '@/components/AvatarLightbox'
 import { LoadMore } from '@/components/LoadMore'
 import { RecipeCard } from '@/components/RecipeCard'
 
@@ -42,6 +43,7 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
   const [tab, setTab] = useState<Tab>('recipes')
   const [profile, setProfile] = useState<ProfileSummary | null | undefined>(undefined) // undefined = ładowanie
   const [error, setError] = useState<string | null>(null)
+  const [zoomed, setZoomed] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -100,6 +102,9 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
     )
   }
 
+  // Powiększenie: tylko gdy jest zdjęcie; cudze — jeśli właściciel na to pozwala
+  const canZoom = !!profile.avatar_url && (profile.is_me || profile.allow_avatar_zoom !== false)
+
   const setFollowing = (following: boolean) =>
     setProfile((p) =>
       p ? { ...p, is_following: following, followers_count: p.followers_count + (following === p.is_following ? 0 : following ? 1 : -1) } : p,
@@ -108,9 +113,15 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
   return (
     <div>
       <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pt-4 pb-5">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           <div className="relative shrink-0">
-            <Avatar name={profile.username} src={profile.avatar_url} size={84} />
+            {canZoom ? (
+              <motion.button whileTap={{ scale: 0.96 }} onClick={() => setZoomed(true)} aria-label="Powiększ zdjęcie profilowe" className="block rounded-full">
+                <Avatar name={profile.username} src={profile.avatar_url} size={86} />
+              </motion.button>
+            ) : (
+              <Avatar name={profile.username} src={profile.avatar_url} size={86} />
+            )}
             {profile.is_me && onAddRecipe && (
               <motion.button
                 whileTap={{ scale: 0.88 }}
@@ -122,21 +133,17 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
               </motion.button>
             )}
           </div>
-          <div className="grid flex-1 grid-cols-3 text-center">
-            <Stat value={visible ? profile.recipe_count : '–'} label="przepisów" />
-            <Stat value={profile.followers_count} label="obserwujących" onClick={visible && onOpenList ? () => onOpenList('followers') : undefined} />
-            <Stat value={profile.following_count} label="obserwuje" onClick={visible && onOpenList ? () => onOpenList('following') : undefined} />
+          <div className="min-w-0 flex-1">
+            {profile.full_name && <p className="mb-1.5 truncate text-[15px] leading-tight font-semibold">{profile.full_name}</p>}
+            <div className="grid grid-cols-3 gap-1">
+              <Stat value={visible ? formatCount(profile.recipe_count) : '–'} label="przepisy" />
+              <Stat value={formatCount(profile.followers_count)} label="obserwatorzy" onClick={visible && onOpenList ? () => onOpenList('followers') : undefined} />
+              <Stat value={formatCount(profile.following_count)} label="obserwowani" onClick={visible && onOpenList ? () => onOpenList('following') : undefined} />
+            </div>
           </div>
         </div>
 
-        <div className="mt-3">
-          <p className="flex items-center gap-1.5 text-[17px] font-semibold">
-            @{profile.username}
-            <VerifiedBadge username={profile.username} />
-            {!profile.is_public && <LockIcon width={15} height={15} className="text-label-2" aria-label="Profil prywatny" />}
-          </p>
-          {profile.full_name && <p className="text-[15px] text-label-2">{profile.full_name}</p>}
-        </div>
+        {profile.bio && <p className="mt-3 text-[14px] leading-snug break-words whitespace-pre-line">{profile.bio}</p>}
 
         <div className="mt-4 flex gap-2">
           {profile.is_me ? (
@@ -161,6 +168,8 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
           </p>
         )}
       </motion.header>
+
+      <AvatarLightbox src={zoomed && canZoom ? profile.avatar_url! : null} name={profile.username} onClose={() => setZoomed(false)} />
 
       {!visible ? (
         <div className="flex flex-col items-center gap-2 border-t border-separator px-6 pt-10 text-center">
@@ -209,17 +218,17 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
 function Stat({ value, label, onClick }: { value: number | string; label: string; onClick?: () => void }) {
   const body = (
     <>
-      <motion.p key={String(value)} initial={{ opacity: 0.4, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-[19px] leading-tight font-bold tabular-nums">
+      <motion.p key={String(value)} initial={{ opacity: 0.4, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-[17px] leading-tight font-bold tabular-nums">
         {value}
       </motion.p>
-      <p className="text-[12px] text-label-2">{label}</p>
+      <p className="text-[12px] whitespace-nowrap">{label}</p>
     </>
   )
   return onClick ? (
-    <button onClick={onClick} className="rounded-lg py-0.5 active:bg-surface-2" aria-label={`${label}: ${value}`}>
+    <button onClick={onClick} className="rounded-lg py-0.5 text-left active:bg-surface-2" aria-label={`${label}: ${value}`}>
       {body}
     </button>
   ) : (
-    <div>{body}</div>
+    <div className="py-0.5">{body}</div>
   )
 }

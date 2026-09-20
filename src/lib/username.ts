@@ -39,3 +39,18 @@ export function normalizeFullName(raw: string): string | undefined {
   const t = raw.replace(/\s+/g, ' ').trim()
   return t ? t.slice(0, 60) : undefined
 }
+
+export const BIO_MAX_LENGTH = 150
+export const BIO_MAX_LINES = 5
+
+/** Opis profilu (bio): do 150 znaków i 5 linii, bez spacji na końcach linii i pustych linii na brzegach */
+export function normalizeBio(raw: string): string | undefined {
+  const lines = raw
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+/g, ' ').trim())
+  while (lines.length && !lines[0]) lines.shift()
+  while (lines.length && !lines[lines.length - 1]) lines.pop()
+  const t = lines.slice(0, BIO_MAX_LINES).join('\n').slice(0, BIO_MAX_LENGTH).trim()
+  return t || undefined
+}

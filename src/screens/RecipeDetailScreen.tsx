@@ -84,9 +84,9 @@ export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDele
             <button onClick={() => onOpenAuthor(recipe.author!.username)} className="mt-3 flex items-center gap-2.5 text-left">
               <Avatar name={recipe.author.username} src={recipe.author.avatar_url} size={30} />
               <span>
-                <span className="flex items-center gap-1 text-[15px] leading-tight font-semibold">
+                <span className="flex items-center text-[15px] leading-tight font-semibold">
                   {recipe.author.username}
-                  <VerifiedBadge username={recipe.author.username} size={14} />
+                  <VerifiedBadge username={recipe.author.username} size={16} />
                 </span>
                 {recipe.author.full_name && <span className="block text-[12px] text-label-2">{recipe.author.full_name}</span>}
               </span>

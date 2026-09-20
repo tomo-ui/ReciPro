@@ -73,6 +73,25 @@ describe('tryb lokalny: profil ze zdjęciem, listy i liczniki na żywo', () => {
     expect((await b.getMyProfile())?.avatar_url).toBeUndefined()
   })
 
+  it('opis profilu (bio): zapis, przycięcie, usunięcie', async () => {
+    await b.updateProfile({ bio: '  Kocham   zupy \n\n' })
+    expect((await b.getMyProfile())?.bio).toBe('Kocham zupy')
+    expect((await b.getProfile('ty'))?.bio).toBe('Kocham zupy')
+    await b.updateProfile({ full_name: 'Ty' }) // bez bio — opis zostaje
+    expect((await b.getMyProfile())?.bio).toBe('Kocham zupy')
+    await b.updateProfile({ bio: null })
+    expect((await b.getMyProfile())?.bio).toBeUndefined()
+  })
+
+  it('zgoda na powiększanie zdjęcia: zapis i odczyt', async () => {
+    await b.updateProfile({ allow_avatar_zoom: false })
+    expect((await b.getProfile('ty'))?.allow_avatar_zoom).toBe(false)
+    await b.updateProfile({ bio: 'x' }) // bez tego pola — ustawienie zostaje
+    expect((await b.getMyProfile())?.allow_avatar_zoom).toBe(false)
+    await b.updateProfile({ allow_avatar_zoom: true })
+    expect((await b.getMyProfile())?.allow_avatar_zoom).toBe(true)
+  })
+
   it('lista obserwujących: po zaobserwowaniu ja jestem na liście cudzego profilu', async () => {
     const zosia = (await b.getProfile('kuchnia.zosi'))!
     await b.unfollow(zosia.id)

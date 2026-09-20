@@ -71,6 +71,10 @@ export interface Profile {
   full_name?: string
   /** Zdjęcie profilowe (adres w Storage) */
   avatar_url?: string
+  /** Opis profilu (bio), do 150 znaków */
+  bio?: string
+  /** Czy inni mogą powiększyć zdjęcie profilowe dotknięciem; brak wartości = tak */
+  allow_avatar_zoom?: boolean
   is_public: boolean
 }
 

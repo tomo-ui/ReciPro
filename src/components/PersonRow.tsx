@@ -18,10 +18,10 @@ export function PersonRow({ person, onOpen, onFollowChange }: Props) {
       <motion.div whileTap={{ backgroundColor: 'var(--surface-2)' }} onClick={onOpen} className="flex cursor-pointer items-center gap-3 px-4 py-3">
         <Avatar name={person.username} src={person.avatar_url} size={46} />
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1 truncate text-[16px] font-semibold">
+          <p className="flex items-center text-[16px] font-semibold">
             <span className="truncate">{person.username}</span>
-            <VerifiedBadge username={person.username} size={14} />
-            {!person.is_public && <LockIcon width={13} height={13} className="shrink-0 text-label-2" />}
+            <VerifiedBadge username={person.username} size={17} />
+            {!person.is_public && <LockIcon width={13} height={13} className="ml-1.5 shrink-0 text-label-2" />}
           </p>
           {person.full_name && <p className="truncate text-[14px] text-label-2">{person.full_name}</p>}
           <p className="text-[12px] text-label-2">

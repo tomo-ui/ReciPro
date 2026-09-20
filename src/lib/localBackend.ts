@@ -5,7 +5,7 @@ import type { Backend, FeedMode, ProfilePatch, RecipeSort } from './backend'
 import { emit, on } from './events'
 import { seedRecipes } from './seed'
 import { fold } from './text'
-import { normalizeFullName, normalizeUsername, validateUsername } from './username'
+import { normalizeBio, normalizeFullName, normalizeUsername, validateUsername } from './username'
 
 /**
  * Tryb lokalny: dane w przeglądarce (localStorage), bez kont i sieci, plus kilku przykładowych
@@ -369,6 +369,8 @@ export const localBackend: Backend = {
       next.username = normalizeUsername(patch.username)
     }
     if (patch.full_name !== undefined) next.full_name = normalizeFullName(patch.full_name ?? '')
+    if (patch.bio !== undefined) next.bio = normalizeBio(patch.bio ?? '')
+    if (patch.allow_avatar_zoom !== undefined) next.allow_avatar_zoom = patch.allow_avatar_zoom
     if (patch.is_public !== undefined) next.is_public = patch.is_public
     if (patch.avatar_url !== undefined) next.avatar_url = patch.avatar_url ?? undefined
     write(KEYS.profile, next)

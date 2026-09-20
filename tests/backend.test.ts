@@ -190,6 +190,27 @@ describe('profile, listy i zdjęcie profilowe', () => {
     expect(f.calls[2].ops).toContainEqual(['update', [{ is_public: false }]])
   })
 
+  it('bio: przycięte i wysyłane tylko po zmianie; get_profile zwraca opis', async () => {
+    const row = { id: 'me', username: 'ja', full_name: null, avatar_url: null, bio: 'Hej', is_public: true }
+    const f = fake({ results: () => ok(row), rpc: () => ok([{ ...summaryRow, bio: 'Opis' }]) })
+    await f.backend.updateProfile({ bio: '  Hej  ' })
+    await f.backend.updateProfile({ bio: '   ' })
+    await f.backend.updateProfile({ is_public: false })
+    expect(f.calls[0].ops).toContainEqual(['update', [{ bio: 'Hej' }]])
+    expect(f.calls[1].ops).toContainEqual(['update', [{ bio: null }]])
+    expect(f.calls[2].ops).toContainEqual(['update', [{ is_public: false }]])
+    expect((await f.backend.getProfile('anna'))?.bio).toBe('Opis')
+  })
+
+  it('allow_avatar_zoom: domyślnie true, wysyłane tylko po zmianie', async () => {
+    const f = fake({ results: () => ok({ id: 'me', username: 'ja', full_name: null, avatar_url: null, is_public: true }) })
+    await f.backend.updateProfile({ allow_avatar_zoom: false })
+    await f.backend.updateProfile({ bio: 'x' })
+    expect(f.calls[0].ops).toContainEqual(['update', [{ allow_avatar_zoom: false }]])
+    expect(f.calls[1].ops).toContainEqual(['update', [{ bio: 'x' }]])
+    expect((await f.backend.getMyProfile())?.allow_avatar_zoom).toBe(true) // baza sprzed migracji
+  })
+
   it('brak migracji daje czytelny komunikat z nazwami plików', async () => {
     const missing = fake({ rpc: () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.list_followers' } }) })
     await expect(missing.backend.listFollowers('a', 0, 10)).rejects.toThrow(/engagement\.sql/)

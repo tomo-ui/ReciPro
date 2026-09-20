@@ -106,12 +106,12 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
                 <Avatar name={c.author.username} src={c.author.avatar_url} size={34} />
               </button>
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] text-label-2">
+                <p className="flex items-center text-[13px] text-label-2">
                   <button onClick={() => onOpenAuthor(c.author.username)} className="font-semibold text-label">
                     {c.author.username}
                   </button>
-                  <VerifiedBadge username={c.author.username} size={12} className="mx-0.5" />{' '}
-                  · {timeAgo(c.created_at)}
+                  <VerifiedBadge username={c.author.username} size={14} className="align-baseline" />
+                  <span className="ml-1.5">· {timeAgo(c.created_at)}</span>
                 </p>
                 <p className="text-[15px] leading-snug break-words whitespace-pre-wrap" data-selectable>
                   {c.body}

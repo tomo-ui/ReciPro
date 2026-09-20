@@ -7,12 +7,14 @@ interface Props {
   title: string
   /** Element po tytule (np. znaczek weryfikacji) */
   titleBadge?: ReactNode
+  /** Tytuł przy lewej krawędzi, obok przycisku wstecz (jak nazwa konta w profilu Instagrama) */
+  titleStart?: boolean
   onBack: () => void
   children: ReactNode
 }
 
 /** Ekran „wepchnięty” na stos (np. cudzy profil): wjazd z prawej, przycisk wstecz i swipe od lewej krawędzi */
-export function PushedScreen({ title, titleBadge, onBack, children }: Props) {
+export function PushedScreen({ title, titleBadge, titleStart, onBack, children }: Props) {
   const controls = useDragControls()
   return (
     <motion.div
@@ -33,7 +35,7 @@ export function PushedScreen({ title, titleBadge, onBack, children }: Props) {
       <div className="absolute inset-y-0 left-0 z-40 w-5 touch-pan-y" onPointerDown={(e) => controls.start(e)} />
 
       <div className="glass absolute inset-x-0 top-0 z-20 border-b border-separator pt-safe-top">
-        <div className="relative flex h-11 items-center justify-center px-[max(12px,env(safe-area-inset-left))]">
+        <div className={`relative flex h-11 items-center px-[max(12px,env(safe-area-inset-left))] ${titleStart ? 'justify-start pl-[max(46px,calc(env(safe-area-inset-left)+38px))]' : 'justify-center'}`}>
           <motion.button
             whileTap={{ scale: 0.88 }}
             onClick={onBack}
@@ -42,7 +44,7 @@ export function PushedScreen({ title, titleBadge, onBack, children }: Props) {
           >
             <ChevronLeftIcon />
           </motion.button>
-          <h2 className="flex max-w-[60%] items-center gap-1.5 text-[17px] font-semibold">
+          <h2 className={`flex items-center text-[17px] font-semibold ${titleStart ? 'max-w-[80%]' : 'max-w-[60%]'}`}>
             <span className="truncate">{title}</span>
             {titleBadge}
           </h2>

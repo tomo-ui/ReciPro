@@ -12,13 +12,15 @@ import {
   type RecipeRow,
   type RecipeWithAuthorRow,
 } from './supabaseRepository'
-import { normalizeFullName, normalizeUsername, validateUsername } from './username'
+import { normalizeBio, normalizeFullName, normalizeUsername, validateUsername } from './username'
 
 interface ProfileRow {
   id: string
   username: string
   full_name: string | null
   avatar_url: string | null
+  bio?: string | null
+  allow_avatar_zoom?: boolean | null
   is_public: boolean
 }
 interface ProfileSummaryRow extends ProfileRow {
@@ -44,6 +46,8 @@ const toProfile = (r: ProfileRow): Profile => ({
   username: r.username,
   full_name: r.full_name ?? undefined,
   avatar_url: r.avatar_url ?? undefined,
+  bio: r.bio ?? undefined,
+  allow_avatar_zoom: r.allow_avatar_zoom ?? true,
   is_public: r.is_public,
 })
 const toSummary = (r: ProfileSummaryRow): ProfileSummary => ({
@@ -234,6 +238,8 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
         changes.username = normalizeUsername(patch.username)
       }
       if (patch.full_name !== undefined) changes.full_name = normalizeFullName(patch.full_name ?? '') ?? null
+      if (patch.bio !== undefined) changes.bio = normalizeBio(patch.bio ?? '') ?? null
+      if (patch.allow_avatar_zoom !== undefined) changes.allow_avatar_zoom = patch.allow_avatar_zoom
       if (patch.is_public !== undefined) changes.is_public = patch.is_public
       if (patch.avatar_url !== undefined) changes.avatar_url = patch.avatar_url
       const { data, error } = await client().from('profiles').update(changes).eq('id', id).select().single()

@@ -34,6 +34,17 @@ export function totalTime(r: Recipe): number | undefined {
   return r.total_minutes ?? ((r.prep_minutes ?? 0) + (r.cook_minutes ?? 0) || undefined)
 }
 
+/** Liczniki jak w Instagramie: 1091, 12,5 tys., 3,2 mln */
+export function formatCount(n: number): string {
+  const short = (v: number, unit: string) => {
+    const r = v >= 100 ? Math.round(v) : Math.round(v * 10) / 10
+    return `${String(r).replace('.', ',')} ${unit}`
+  }
+  if (n >= 1_000_000) return short(n / 1_000_000, 'mln')
+  if (n >= 10_000) return short(n / 1_000, 'tys.')
+  return String(n)
+}
+
 /** „przed chwilą”, „5 min temu”, „3 godz. temu”, „2 dni temu”, potem data */
 export function timeAgo(iso: string, now = Date.now()): string {
   const diff = Math.max(0, now - new Date(iso).getTime())

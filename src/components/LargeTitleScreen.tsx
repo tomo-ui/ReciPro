@@ -8,7 +8,7 @@ interface Props {
   titleBadge?: ReactNode
   left?: ReactNode
   right?: ReactNode
-  /** `inline`: bez dużego tytułu — nazwa wyśrodkowana na pasku (jak nazwa użytkownika na profilu w Instagramie) */
+  /** `inline`: bez dużego tytułu — nazwa przy lewej krawędzi paska (jak nazwa użytkownika na profilu w Instagramie) */
   variant?: 'large' | 'inline'
   children: ReactNode
 }
@@ -29,10 +29,10 @@ export function LargeTitleScreen({ title, titleBadge, left, right, variant = 'la
       <div className="absolute inset-x-0 top-0 z-10 pt-safe-top">
         <motion.div className="glass absolute inset-0 border-b border-separator" style={{ opacity: barBgOpacity }} />
         <div className="relative flex h-11 items-center justify-between pr-[max(16px,env(safe-area-inset-right))] pl-[max(16px,env(safe-area-inset-left))]">
-          <div className="flex min-w-9 items-center">{left}</div>
+          {(left || !inline) && <div className="flex min-w-9 items-center">{left}</div>}
           <motion.h2
             style={{ opacity: inline ? 1 : smallTitleOpacity }}
-            className={inline ? 'flex max-w-[70%] items-center gap-1.5 text-[20px] font-bold tracking-tight' : 'text-[17px] font-semibold'}
+            className={inline ? 'flex min-w-0 flex-1 items-center text-[20px] font-bold tracking-tight' : 'text-[17px] font-semibold'}
           >
             <span className="truncate">{title}</span>
             {titleBadge}
