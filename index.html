@@ -8,6 +8,10 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <title>Przepisy</title>
+    <style>
+      html, body { background: #f2f2f7 }
+      @media (prefers-color-scheme: dark) { html, body { background: #000 } }
+    </style>
     <meta name="description" content="Twoja kolekcja przepisów kulinarnych" />
 
     <!-- iOS: tryb pełnoekranowy po dodaniu do ekranu początkowego -->
@@ -47,7 +51,19 @@
     <link rel="apple-touch-startup-image" href="/splash/375x667@2-dark.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Do pierwszego renderu Reacta: logo w tym samym miejscu i rozmiarze co na ekranie startowym (components/Splash.tsx) -->
+      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center">
+        <svg width="80" height="80" viewBox="0 0 512 512" style="border-radius:22.37%;box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1)" aria-hidden="true">
+          <rect width="512" height="512" fill="#ff6b35" />
+          <g fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M136 232h240v40a104 104 0 0 1-104 104h-32a104 104 0 0 1-104-104z" />
+            <path d="M112 232h288" />
+            <path d="M216 176c-16-20 16-32 0-52M296 176c-16-20 16-32 0-52" />
+          </g>
+        </svg>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

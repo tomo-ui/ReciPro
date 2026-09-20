@@ -30,8 +30,14 @@ for (const [w, h, r] of DEVICES) {
   for (const t of THEMES) {
     const W = w * r
     const H = h * r
-    const size = Math.round(Math.min(W, H) * 0.28)
-    const icon = await sharp(logo, { density: 384 }).resize(size, size, { fit: 'contain', background: t.bg }).png().toBuffer()
+    // Rozmiar i zaokrąglenie jak logo na ekranie logowania (80 pt, 22,37%) — na to miejsce wskakuje logo z aplikacji
+    const size = 80 * r
+    const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${size * 0.2237}" fill="#fff"/></svg>`)
+    const icon = await sharp(logo, { density: 384 })
+      .resize(size, size)
+      .composite([{ input: mask, blend: 'dest-in' }])
+      .png()
+      .toBuffer()
     const file = `splash/${w}x${h}@${r}-${t.name}.png`
     await sharp({ create: { width: W, height: H, channels: 3, background: t.bg } })
       .composite([{ input: icon, gravity: 'center' }])

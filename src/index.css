@@ -78,6 +78,10 @@
   html.fit-screen #root {
     height: var(--app-height);
   }
+  /* Skracanie aplikacji przy klawiaturze jest płynne, a nie skokowe */
+  html.fit-screen #root {
+    transition: height 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
   html.fit-screen body {
     bottom: auto;
     /* --vv-top: iOS przesuwa widoczną część strony nad klawiaturę; przesuwamy za nią całą aplikację */
@@ -130,4 +134,54 @@
   background: var(--bar);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* Znak aplikacji: miska to uśmiech, kreski nad nią to oczy. Animacja zaczyna i kończy się w pierwotnym stanie. */
+.logo-face .logo-eye,
+.logo-face .logo-smile {
+  transform-box: fill-box;
+}
+.logo-face .logo-eye {
+  transform-origin: 50% 50%;
+}
+.logo-face .logo-smile {
+  transform-origin: 50% 0%;
+}
+.logo-play .logo-smile {
+  animation: logo-smile 1.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.logo-play .logo-eye-l {
+  animation: logo-eye-l 1.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.logo-play .logo-eye-r {
+  animation: logo-eye-r 1.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+/* szerszy uśmiech, który trwa przez mrugnięcie i wraca */
+@keyframes logo-smile {
+  0% { transform: scale(1, 1); }
+  22% { transform: scale(1.08, 1.14) translateY(-1%); }
+  74% { transform: scale(1.08, 1.14) translateY(-1%); }
+  100% { transform: scale(1, 1); }
+}
+/* oczy: unoszą się i przymrużają w uśmiechu, potem wracają */
+@keyframes logo-eye-l {
+  0% { transform: translateY(0) scale(1, 1); }
+  22% { transform: translateY(-9%) scale(1, 0.72); }
+  62% { transform: translateY(-9%) scale(1, 0.72); }
+  82%, 100% { transform: translateY(0) scale(1, 1); }
+}
+/* prawe oko mruga: zamyka się w poziomą kreskę i otwiera z powrotem */
+@keyframes logo-eye-r {
+  0% { transform: translateY(0) rotate(0) scale(1, 1); }
+  22% { transform: translateY(-9%) rotate(0) scale(1, 0.72); }
+  40% { transform: translateY(-9%) rotate(0) scale(1, 0.72); }
+  50%, 60% { transform: translateY(12%) rotate(90deg) scale(0.55, 0.9); }
+  72% { transform: translateY(-9%) rotate(0) scale(1, 0.72); }
+  86%, 100% { transform: translateY(0) rotate(0) scale(1, 1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-play .logo-smile,
+  .logo-play .logo-eye {
+    animation: none;
+  }
 }

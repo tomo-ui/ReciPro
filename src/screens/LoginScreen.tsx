@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
+import { LOGO_TARGET_ID, markAppReady, useLogoLanded } from '@/lib/splash'
 import { normalizeFullName, normalizeUsername } from '@/lib/username'
 import { useUsernameCheck } from '@/hooks/useUsernameCheck'
+import { AppLogo } from '@/components/AppLogo'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { SpinnerIcon } from '@/components/Icons'
 import { UsernameInput } from '@/components/UsernameInput'
@@ -53,6 +55,10 @@ export function LoginScreen() {
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [password2, setPassword2] = useState('')
+  // Logo z ekranu startowego wskakuje w to miejsce; do tej chwili jest ukryte. Dotknięcie odtwarza mrugnięcie.
+  const landed = useLogoLanded()
+  const [wink, setWink] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(redirectResult.error ?? null)
   const [notice, setNotice] = useState<string | null>(redirectResult.notice ?? null)
@@ -61,15 +67,19 @@ export function LoginScreen() {
   const [username, setUsername] = useState('')
   const [fullName, setFullName] = useState('')
 
+  useEffect(() => markAppReady(), [])
+
   const signup = mode === 'signup'
+  const mismatch = signup && password2.length > 0 && password2 !== password
   // Nazwa użytkownika jest sprawdzana (reguły + dostępność) tylko w trybie rejestracji
   const usernameStatus = useUsernameCheck(signup ? username : '')
   const canSubmit =
     email.includes('@') &&
-    (signup ? password.length >= MIN_PASSWORD && usernameStatus.state === 'ok' : password.length > 0)
+    (signup ? password.length >= MIN_PASSWORD && password2 === password && usernameStatus.state === 'ok' : password.length > 0)
 
   function switchMode(next: Mode) {
     setMode(next)
+    setPassword2('')
     setError(null)
     setNotice(null)
     setUnconfirmed(false)
@@ -117,6 +127,7 @@ export function LoginScreen() {
       if (!data.session) {
         setNotice('Sprawdź skrzynkę: jeśli adres nie był jeszcze zarejestrowany, wysłaliśmy link potwierdzający. Po kliknięciu wróć tu i zaloguj się.')
         setMode('signin')
+        setPassword2('')
       }
       return
     }
@@ -132,9 +143,13 @@ export function LoginScreen() {
   return (
     <div className="scroll-y fixed inset-0 bg-bg px-8 pt-safe-top pb-safe-bottom">
       <div className="flex min-h-full flex-col items-center justify-center py-8">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        {/* Ta sama grafika i zaokrąglenie co ikona aplikacji na iPhonie */}
-        <img src="/apple-touch-icon-180x180.png" alt="" className="mx-auto mb-6 h-20 w-20 rounded-[22.37%] shadow-lg" />
+      {/* Bez przesunięcia przy wejściu: ekran startowy mierzy położenie logo i wskakuje dokładnie tutaj */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-sm">
+        <div id={LOGO_TARGET_ID} className="mx-auto mb-6 h-20 w-20" style={{ visibility: landed ? 'visible' : 'hidden' }}>
+          <button type="button" onClick={() => setWink((n) => n + 1)} tabIndex={-1} aria-hidden className="block rounded-[22.37%]">
+            <AppLogo key={wink} size={80} play={wink > 0} />
+          </button>
+        </div>
         <h1 className="text-center text-[28px] font-bold tracking-tight">Przepisy</h1>
         <p className="mt-1 mb-6 text-center text-[15px] text-label-2">
           {signup ? 'Załóż konto, żeby zapisywać przepisy w chmurze.' : 'Zaloguj się, żeby synchronizować przepisy.'}
@@ -151,7 +166,7 @@ export function LoginScreen() {
           />
         </div>
 
-        <form onSubmit={submit} className="space-y-3">
+        <form onSubmit={submit}>
           {/* Pola rejestracji rozwijają się i zwijają tą samą animacją przy zmianie zakładki */}
           <AnimatePresence initial={false}>
             {signup && (
@@ -183,7 +198,7 @@ export function LoginScreen() {
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="divide-y divide-separator overflow-hidden rounded-[14px] bg-surface">
+          <div className="overflow-hidden rounded-[14px] bg-surface">
             <input
               type="email"
               inputMode="email"
@@ -201,15 +216,52 @@ export function LoginScreen() {
               placeholder={signup ? `hasło (min. ${MIN_PASSWORD} znaków)` : 'hasło'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
+              className="w-full border-t border-separator bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
             />
+            <AnimatePresence initial={false}>
+              {signup && (
+                <motion.div
+                  key="password-repeat"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+                  className="overflow-hidden"
+                >
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="powtórz hasło"
+                    value={password2}
+                    onChange={(e) => setPassword2(e.target.value)}
+                    aria-invalid={mismatch}
+                    className="w-full border-t border-separator bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+
+          <AnimatePresence initial={false}>
+            {mismatch && (
+              <motion.p
+                key="mismatch"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden px-4 pt-2 text-[13px] text-red-500"
+                aria-live="polite"
+              >
+                Hasła nie są takie same.
+              </motion.p>
+            )}
+          </AnimatePresence>
 
           <motion.button
             type="submit"
             whileTap={{ scale: 0.97 }}
             disabled={busy || !canSubmit}
-            className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-accent py-3.5 text-[16px] font-semibold text-white transition-opacity disabled:opacity-40"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] bg-accent py-3.5 text-[16px] font-semibold text-white transition-opacity disabled:opacity-40"
           >
             {busy && <SpinnerIcon />}
             {signup ? 'Załóż konto' : 'Zaloguj'}

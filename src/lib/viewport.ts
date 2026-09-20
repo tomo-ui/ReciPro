@@ -71,16 +71,71 @@ export function lockDocumentScroll(): void {
 
 const TEXT_FIELD = 'input:not([type=file]):not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select, [contenteditable=""], [contenteditable="true"]'
 
-/** Po fokusie na polu (i po wysunięciu się klawiatury) przewija je na środek widocznego obszaru */
+/** Margines (px) między polem a brzegiem widocznego obszaru, poniżej którego pole uznajemy za „przy krawędzi” */
+export const REVEAL_PADDING = 20
+
+/**
+ * O ile przewinąć kontener, żeby pole było w pełni widoczne. Pole, które już jest widoczne z marginesem,
+ * nie jest ruszane (0) — dzięki temu dotknięcie pola nie powoduje zbędnego przewijania. Pole spoza obszaru
+ * trafia na jego środek, a pole wyższe niż obszar (długi textarea) — na górę.
+ * Wartości dodatnie = przewiń w dół.
+ */
+export function revealDelta(field: { top: number; bottom: number }, area: { top: number; bottom: number }, padding = REVEAL_PADDING): number {
+  const inView = field.top >= area.top + padding && field.bottom <= area.bottom - padding
+  if (inView) return 0
+  const tooTall = field.bottom - field.top > area.bottom - area.top - 2 * padding
+  if (tooTall) return field.top - (area.top + padding)
+  return (field.top + field.bottom) / 2 - (area.top + area.bottom) / 2
+}
+
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p
+  }
+  return null
+}
+
+/**
+ * Po fokusie na polu przewija je nad klawiaturę — jednym ruchem, dopiero gdy układ przestał się zmieniać
+ * (klawiatura wysunięta, aplikacja skrócona). Wcześniejsze dwa przewinięcia „na środek” nakładały się na
+ * skracanie aplikacji i na własne przewijanie iOS, przez co ekran skakał.
+ */
 function revealFocusedField(): void {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const vv = window.visualViewport
+
   const reveal = () => {
     const el = document.activeElement
-    if (el instanceof HTMLElement && el.matches(TEXT_FIELD)) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    if (!(el instanceof HTMLElement) || !el.matches(TEXT_FIELD)) return
+    const box = scrollParent(el)
+    if (!box) return
+    const f = el.getBoundingClientRect()
+    const a = box.getBoundingClientRect()
+    // Widoczny obszar: kontener przycięty do tego, co nie jest pod klawiaturą
+    const bottom = Math.min(a.bottom, (vv ? vv.offsetTop + vv.height : window.innerHeight))
+    const delta = revealDelta(f, { top: a.top, bottom })
+    if (Math.abs(delta) < 3) return
+    box.scrollBy({ top: delta, behavior: 'smooth' })
   }
+
+  /** Czeka, aż zmiany rozmiaru widoku ustaną (koniec animacji klawiatury), z limitem, gdy żadna nie nadejdzie */
+  const scheduleAfterSettle = (quiet: number, max: number) => {
+    const started = Date.now()
+    const tick = () => {
+      if (Date.now() - lastChange >= quiet || Date.now() - started >= max) return reveal()
+      timer = setTimeout(tick, 40)
+    }
+    clearTimeout(timer)
+    lastChange = Date.now()
+    timer = setTimeout(tick, quiet)
+  }
+  let lastChange = 0
+  vv?.addEventListener('resize', () => (lastChange = Date.now()))
+
   document.addEventListener('focusin', (e) => {
     if (!(e.target instanceof HTMLElement) || !e.target.matches(TEXT_FIELD)) return
-    setTimeout(reveal, 80)
-    setTimeout(reveal, 380) // po zakończeniu animacji klawiatury
+    scheduleAfterSettle(140, 700)
   })
 }
 

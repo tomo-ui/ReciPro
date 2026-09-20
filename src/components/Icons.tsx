@@ -53,6 +53,13 @@ export const LinkIcon = (p: P) => (
     <path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" />
   </svg>
 )
+export const InfoIcon = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5.5" />
+    <path d="M12 7.6h.01" strokeWidth={2.6} />
+  </svg>
+)
 export const SpinnerIcon = (p: P) => (
   <svg {...base(p)} className={`animate-spin ${p.className ?? ''}`}>
     <path d="M12 3a9 9 0 1 0 9 9" />

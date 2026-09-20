@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeLayout, type LayoutInput } from '../src/lib/viewport'
+import { computeLayout, revealDelta, type LayoutInput } from '../src/lib/viewport'
 
 // iPhone 15 Pro: ekran 393×852
 const phone = (over: Partial<LayoutInput> = {}): LayoutInput => ({
@@ -41,5 +41,28 @@ describe('układ ekranu na telefonie', () => {
 
   it('bez visualViewport nic nie zmienia poza iPhone’em z ekranu głównego', () => {
     expect(computeLayout(phone({ standaloneIPhone: false, vvHeight: undefined }))).toEqual({ top: 0, keyboard: false })
+  })
+})
+
+describe('wyrównanie pola nad klawiaturą', () => {
+  const area = { top: 0, bottom: 500 }
+
+  it('pole już widoczne (z marginesem) nie jest ruszane', () => {
+    expect(revealDelta({ top: 200, bottom: 250 }, area)).toBe(0)
+    expect(revealDelta({ top: 20, bottom: 70 }, area)).toBe(0)
+    expect(revealDelta({ top: 430, bottom: 480 }, area)).toBe(0)
+  })
+
+  it('pole tuż przy dolnej krawędzi lub pod klawiaturą trafia na środek obszaru', () => {
+    expect(revealDelta({ top: 460, bottom: 510 }, area)).toBe(235) // środek pola 485 → 250
+    expect(revealDelta({ top: 700, bottom: 750 }, area)).toBe(475)
+  })
+
+  it('pole nad obszarem jest przewijane w górę', () => {
+    expect(revealDelta({ top: -60, bottom: -10 }, area)).toBe(-285)
+  })
+
+  it('pole wyższe niż obszar wyrównujemy do góry z marginesem', () => {
+    expect(revealDelta({ top: 300, bottom: 900 }, area)).toBe(280)
   })
 })

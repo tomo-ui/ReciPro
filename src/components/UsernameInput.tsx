@@ -1,4 +1,7 @@
+import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { USERNAME_MAX } from '@/lib/username'
+import { InfoIcon } from './Icons'
 import type { UsernameStatus } from '@/hooks/useUsernameCheck'
 
 interface Props {
@@ -8,8 +11,13 @@ interface Props {
   autoFocus?: boolean
 }
 
-/** Pole nazwy użytkownika z „@” i komunikatem o poprawności/dostępności pod spodem */
+/**
+ * Pole nazwy użytkownika z „@”. Zasady wpisywania kryją się pod ikoną (i) po prawej; pod polem pojawia się
+ * tylko komunikat o poprawności i dostępności nazwy (gdy coś wpisano).
+ */
 export function UsernameInput({ value, onChange, status, autoFocus }: Props) {
+  const [help, setHelp] = useState(false)
+  const message = messageFor(status)
   return (
     <div>
       <div className="flex items-center gap-1 px-4 py-3.5">
@@ -27,18 +35,50 @@ export function UsernameInput({ value, onChange, status, autoFocus }: Props) {
           aria-describedby="username-status"
           className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-label-3"
         />
+        <button
+          type="button"
+          onClick={() => setHelp((v) => !v)}
+          aria-label="Zasady nazwy użytkownika"
+          aria-expanded={help}
+          className={`-mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors active:opacity-50 ${help ? 'text-accent' : 'text-label-2'}`}
+        >
+          <InfoIcon width={20} height={20} />
+        </button>
       </div>
-      <p id="username-status" className={`px-4 pb-2.5 text-[13px] ${colorFor(status)}`} aria-live="polite">
-        {messageFor(status)}
-      </p>
+      <AnimatePresence initial={false}>
+        {(message || help) && (
+          <motion.div
+            key="username-extra"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-1 px-4 pb-2.5 text-[13px]">
+              {message && (
+                <p id="username-status" className={colorFor(status)} aria-live="polite">
+                  {message}
+                </p>
+              )}
+              {help && (
+                <p className="text-label-2">
+                  Litery a–z (bez polskich znaków), cyfry, kropka i podkreślnik, do {USERNAME_MAX} znaków. Kropka nie może być na początku, na
+                  końcu ani dwa razy z rzędu. Wielkość liter nie ma znaczenia.
+                </p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
-function messageFor(s: UsernameStatus): string {
+function messageFor(s: UsernameStatus): string | null {
   switch (s.state) {
     case 'empty':
-      return 'Litery a–z, cyfry, kropka i podkreślnik (do 30 znaków).'
+      return null
     case 'invalid':
     case 'error':
       return s.message

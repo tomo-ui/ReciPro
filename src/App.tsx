@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Session } from '@supabase/supabase-js'
 import type { Profile, Recipe, RecipeDraft } from '@/types/recipe'
 import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
+import { markAppReady } from '@/lib/splash'
 import { spring } from '@/lib/ui'
 import { useMe } from '@/hooks/useMe'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -15,6 +16,7 @@ import { NotificationToast } from '@/components/NotificationToast'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { PushedScreen } from '@/components/PushedScreen'
 import { SettingsMenu } from '@/components/SettingsMenu'
+import { Splash } from '@/components/Splash'
 import { Sheet } from '@/components/Sheet'
 import { TabBar, type Tab } from '@/components/TabBar'
 import { ActivityScreen } from '@/screens/ActivityScreen'
@@ -32,6 +34,16 @@ import { RecipeListScreen } from '@/screens/RecipeListScreen'
 import { SearchScreen } from '@/screens/SearchScreen'
 
 export default function App() {
+  return (
+    <>
+      <AppRoutes />
+      {/* Logo z ekranu startowego, które wskakuje na miejsce logo na ekranie logowania */}
+      <Splash />
+    </>
+  )
+}
+
+function AppRoutes() {
   const session = useSession()
 
   if (usesSupabase) {
@@ -47,8 +59,12 @@ export default function App() {
 function Gate({ session }: { session: Session | null }) {
   const { status, me, error, reload, setMe } = useMe(session)
   const signOut = usesSupabase ? () => void supabase?.auth.signOut() : undefined
+  const loading = status === 'loading'
+  useEffect(() => {
+    if (!loading) markAppReady()
+  }, [loading])
 
-  if (status === 'loading') return <div className="fixed inset-0 bg-bg" />
+  if (loading) return <div className="fixed inset-0 bg-bg" />
 
   if (status === 'error') {
     return (
