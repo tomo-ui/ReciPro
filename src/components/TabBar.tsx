@@ -1,19 +1,21 @@
-import type { ComponentType, SVGProps } from 'react'
+import { useEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent, type SVGProps } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { HOLD_MS, HOLD_MOVE_TOLERANCE, slotIndexAt, type SlotMetric } from '@/lib/tabScrub'
 import { BookIcon, HomeIcon, PlusIcon, SearchIcon, UserIcon } from './Icons'
 
 export type Tab = 'feed' | 'search' | 'mine' | 'profile'
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>
 
+type Slot = { kind: 'tab'; id: Tab; label: string; Icon: IconType } | { kind: 'add'; label: string }
+
 /** Układ: Feed, Szukaj, [+ dodaj przepis], Przepisy, Profil — bez podpisów, z nazwami dla czytników ekranu */
-const LEFT: { id: Tab; label: string; Icon: IconType }[] = [
-  { id: 'feed', label: 'Feed', Icon: HomeIcon },
-  { id: 'search', label: 'Szukaj', Icon: SearchIcon },
-]
-const RIGHT: { id: Tab; label: string; Icon: IconType }[] = [
-  { id: 'mine', label: 'Moje przepisy', Icon: BookIcon },
-  { id: 'profile', label: 'Profil', Icon: UserIcon },
+const SLOTS: Slot[] = [
+  { kind: 'tab', id: 'feed', label: 'Feed', Icon: HomeIcon },
+  { kind: 'tab', id: 'search', label: 'Szukaj', Icon: SearchIcon },
+  { kind: 'add', label: 'Dodaj przepis' },
+  { kind: 'tab', id: 'mine', label: 'Moje przepisy', Icon: BookIcon },
+  { kind: 'tab', id: 'profile', label: 'Profil', Icon: UserIcon },
 ]
 
 interface Props {
@@ -24,67 +26,199 @@ interface Props {
   badges?: Partial<Record<Tab, number>>
 }
 
+const LENS_SCALE = 1.34
+
 /**
- * Dolny pasek w stylu „liquid glass” z iOS 26: pływająca kapsuła (pełne zaokrąglenie boków), szkło z rozmyciem
- * tła, połyskiem i jasną krawędzią (index.css, `.liquid-glass`), a zaznaczona zakładka to szklana kapsuła,
- * która sprężyście przesuwa się między ikonami. Pasek jest węższy od kart (większy margines po bokach), żeby jego krawędzie
- * nie nakładały się w jednej linii z krawędziami treści.
+ * Dolny pasek w stylu „liquid glass” z iOS 26: pływająca kapsuła, szkło z rozmyciem tła, połyskiem i jasną krawędzią
+ * (index.css, `.liquid-glass`); zaznaczona zakładka to szklana kapsuła, która sprężyście przesuwa się między ikonami.
+ * Pasek jest węższy od kart, żeby jego krawędzie nie nakładały się z krawędziami treści.
+ *
+ * Przytrzymanie palca na pasku powiększa „soczewkę” pod palcem (jak w Threads): można ją przeciągać nad inne zakładki,
+ * a ekran zmienia się dopiero po puszczeniu palca nad wybraną zakładką. Zwykłe dotknięcie działa jak zwykle.
  */
 export function TabBar({ tab, onChange, onAdd, badges = {} }: Props) {
-  const item = ({ id, label, Icon }: (typeof LEFT)[number]) => {
-    const active = id === tab
-    const badge = badges[id] ?? 0
-    return (
-      <button
-        key={id}
-        onClick={() => onChange(id)}
-        aria-label={label}
-        aria-current={active ? 'page' : undefined}
-        className="relative flex h-full flex-1 items-center justify-center"
-      >
-        {active && (
-          <motion.span
-            layoutId="tab-pill"
-            transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.9 }}
-            className="liquid-pill absolute inset-y-[5px] inset-x-[1px] rounded-full"
-          />
-        )}
-        <motion.span whileTap={{ scale: 0.86 }} className={`relative transition-colors ${active ? 'text-label' : 'text-label-2'}`}>
-          <Icon width={26} height={26} strokeWidth={active ? 2.3 : 1.9} />
-          <AnimatePresence>
-            {badge > 0 && (
-              <motion.span
-                key="badge"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 22 }}
-                aria-label={`Nowe powiadomienia: ${badge}`}
-                className="absolute -top-1.5 -right-2.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] leading-none font-bold text-white tabular-nums"
-              >
-                {badge > 99 ? '99+' : badge}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.span>
-      </button>
-    )
+  const barRef = useRef<HTMLDivElement>(null)
+  const slotRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const [scrub, setScrub] = useState<{ index: number; metrics: SlotMetric[] } | null>(null)
+
+  // Stan gestu trzymamy w refach, żeby handlery nie zależały od renderów
+  const hold = useRef<{ timer?: ReturnType<typeof setTimeout>; startX: number; startY: number } | null>(null)
+  const scrubbing = useRef(false)
+  const suppressClick = useRef(false)
+
+  const measure = (): SlotMetric[] => slotRefs.current.map((b) => ({ left: b?.offsetLeft ?? 0, width: b?.offsetWidth ?? 0 }))
+
+  function cancelHold() {
+    if (hold.current?.timer) clearTimeout(hold.current.timer)
+    hold.current = null
   }
 
+  function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    const slot = (e.target as HTMLElement).closest<HTMLElement>('[data-slot]')
+    if (!slot) return
+    const pressed = Number(slot.dataset.slot)
+    cancelHold()
+    const pointerId = e.pointerId
+    hold.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      timer: setTimeout(() => {
+        scrubbing.current = true
+        try {
+          barRef.current?.setPointerCapture(pointerId) // ruch palca jest śledzony także poza paskiem
+        } catch {
+          /* brak przechwytywania (np. zdarzenie syntetyczne) — ruch i tak dociera z paska */
+        }
+        navigator.vibrate?.(8)
+        setScrub({ index: pressed, metrics: measure() })
+      }, HOLD_MS),
+    }
+  }
+
+  function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const h = hold.current
+    if (!h) return
+    if (!scrubbing.current) {
+      // ruch przed upływem czasu przytrzymania = zwykły gest (np. przeciągnięcie), nie soczewka
+      if (Math.hypot(e.clientX - h.startX, e.clientY - h.startY) > HOLD_MOVE_TOLERANCE) cancelHold()
+      return
+    }
+    const bar = barRef.current
+    if (!bar) return
+    const x = e.clientX - bar.getBoundingClientRect().left
+    setScrub((s) => {
+      if (!s) return s
+      const index = slotIndexAt(x, s.metrics)
+      if (index !== s.index) navigator.vibrate?.(5)
+      return index === s.index ? s : { ...s, index }
+    })
+  }
+
+  function endGesture(commit: boolean) {
+    const wasScrubbing = scrubbing.current
+    const index = scrub?.index
+    cancelHold()
+    scrubbing.current = false
+    if (!wasScrubbing) return
+    // po puszczeniu przeglądarka wyśle jeszcze „click” — pomijamy go, bo wybór już zrobiliśmy
+    suppressClick.current = true
+    setTimeout(() => (suppressClick.current = false), 400)
+    setScrub(null)
+    if (commit && index !== undefined) activate(index)
+  }
+
+  function activate(index: number) {
+    const slot = SLOTS[index]
+    if (slot.kind === 'add') onAdd()
+    else if (slot.id !== tab) onChange(slot.id)
+  }
+
+  useEffect(() => () => cancelHold(), [])
+
+  const metric = scrub?.metrics[scrub.index]
+
   return (
-    <nav
-      aria-label="Nawigacja"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-9"
-      style={{ paddingBottom: TAB_BAR_BOTTOM }}
-    >
-      <div className="liquid-glass pointer-events-auto relative mx-auto flex h-[64px] max-w-md items-stretch rounded-full px-1">
-        {LEFT.map(item)}
-        <button onClick={onAdd} aria-label="Dodaj przepis" className="relative flex h-full flex-1 items-center justify-center">
-          <motion.span whileTap={{ scale: 0.8, rotate: 90 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }} className="text-accent">
-            <PlusIcon width={31} height={31} strokeWidth={2.5} />
-          </motion.span>
-        </button>
-        {RIGHT.map(item)}
+    <nav aria-label="Nawigacja" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-9" style={{ paddingBottom: TAB_BAR_BOTTOM }}>
+      <div
+        ref={barRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={() => endGesture(true)}
+        onPointerCancel={() => endGesture(false)}
+        onContextMenu={(e) => e.preventDefault()}
+        className="liquid-glass pointer-events-auto relative mx-auto flex h-[64px] max-w-md touch-none items-stretch rounded-full px-1 select-none [-webkit-touch-callout:none]"
+      >
+        {/* Soczewka pod palcem: powiększona kapsuła, która podąża za palcem między zakładkami */}
+        <AnimatePresence>
+          {scrub && metric && (
+            <motion.span
+              key="lens"
+              aria-hidden
+              className="liquid-lens pointer-events-none absolute top-[5px] bottom-[5px] left-0 rounded-full"
+              style={{ width: metric.width }}
+              initial={{ x: metric.left, scale: 1, opacity: 0 }}
+              animate={{ x: metric.left, scale: LENS_SCALE, opacity: 1 }}
+              exit={{ scale: 1, opacity: 0, transition: { duration: 0.18 } }}
+              transition={{ type: 'spring', stiffness: 520, damping: 34, mass: 0.8 }}
+            />
+          )}
+        </AnimatePresence>
+
+        {SLOTS.map((slot, i) => {
+          const hovered = scrub?.index === i
+          if (slot.kind === 'add') {
+            return (
+              <button
+                key="add"
+                ref={(el) => {
+                  slotRefs.current[i] = el
+                }}
+                data-slot={i}
+                onClick={() => !suppressClick.current && onAdd()}
+                aria-label={slot.label}
+                className="relative flex h-full flex-1 items-center justify-center"
+              >
+                <motion.span
+                  animate={{ scale: hovered ? 1.3 : 1 }}
+                  whileTap={{ scale: hovered ? 1.3 : 0.8, rotate: hovered ? 0 : 90 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 24 }}
+                  className="text-accent"
+                >
+                  <PlusIcon width={31} height={31} strokeWidth={2.5} />
+                </motion.span>
+              </button>
+            )
+          }
+          const { id, label, Icon } = slot
+          const active = id === tab
+          const badge = badges[id] ?? 0
+          return (
+            <button
+              key={id}
+              ref={(el) => {
+                slotRefs.current[i] = el
+              }}
+              data-slot={i}
+              onClick={() => !suppressClick.current && onChange(id)}
+              aria-label={label}
+              aria-current={active ? 'page' : undefined}
+              className="relative flex h-full flex-1 items-center justify-center"
+            >
+              {active && (
+                <motion.span
+                  layoutId="tab-pill"
+                  animate={{ opacity: scrub ? 0 : 1 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.9 }}
+                  className="liquid-pill absolute inset-y-[5px] inset-x-[1px] rounded-full"
+                />
+              )}
+              <motion.span
+                animate={{ scale: hovered ? 1.3 : 1 }}
+                whileTap={{ scale: hovered ? 1.3 : 0.86 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 26 }}
+                className={`relative transition-colors ${active || hovered ? 'text-label' : 'text-label-2'}`}
+              >
+                <Icon width={26} height={26} strokeWidth={active || hovered ? 2.3 : 1.9} />
+                <AnimatePresence>
+                  {badge > 0 && (
+                    <motion.span
+                      key="badge"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+                      aria-label={`Nowe powiadomienia: ${badge}`}
+                      className="absolute -top-1.5 -right-2.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] leading-none font-bold text-white tabular-nums"
+                    >
+                      {badge > 99 ? '99+' : badge}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.span>
+            </button>
+          )
+        })}
       </div>
     </nav>
   )

@@ -191,7 +191,17 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
   const top = stack[stack.length - 1]
   const screen = (id: Tab, node: React.ReactNode) =>
     visited.has(id) && (
-      <div className={`absolute inset-0 ${tab === id ? '' : 'invisible pointer-events-none'}`} aria-hidden={tab !== id} inert={tab !== id}>
+      // Zmiana zakładki: wchodzący ekran płynnie wyłania się nad wychodzącym (ma własne tło), a wychodzący znika dopiero
+      // po zakończeniu przejścia — bez migania i skoków. Przy „ogranicz ruch” zmiana jest natychmiastowa.
+      <div
+        className={`absolute inset-0 bg-bg ${
+          tab === id
+            ? 'visible z-10 opacity-100 [transition:opacity_260ms_ease-out] motion-reduce:[transition:none]'
+            : 'invisible pointer-events-none z-0 opacity-0 [transition:opacity_0s_linear_260ms,visibility_0s_linear_260ms] motion-reduce:[transition:none]'
+        }`}
+        aria-hidden={tab !== id}
+        inert={tab !== id}
+      >
         {node}
       </div>
     )
