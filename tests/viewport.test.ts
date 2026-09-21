@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import { computeLayout, revealDelta, type LayoutInput } from '../src/lib/viewport'
 
@@ -64,5 +66,48 @@ describe('wyrównanie pola nad klawiaturą', () => {
 
   it('pole wyższe niż obszar wyrównujemy do góry z marginesem', () => {
     expect(revealDelta({ top: 300, bottom: 900 }, area)).toBe(280)
+  })
+})
+
+describe('skrypt startowy w index.html (pierwszy render przed aplikacją)', () => {
+  const html = readFileSync('index.html', 'utf8')
+  const script = /<script id="boot-layout">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? ''
+
+  /** Uruchamia skrypt z atrapami przeglądarki i zwraca, co ustawił na <html> */
+  function boot(env: { standalone: boolean; ua: string; iw: number; ih: number; sw: number; sh: number }) {
+    const vars: Record<string, string> = {}
+    const classes: string[] = []
+    runInNewContext(script, {
+      navigator: { standalone: env.standalone, userAgent: env.ua },
+      matchMedia: () => ({ matches: false }),
+      innerWidth: env.iw,
+      innerHeight: env.ih,
+      screen: { width: env.sw, height: env.sh },
+      document: { documentElement: { style: { setProperty: (k: string, v: string) => (vars[k] = v) }, classList: { add: (c: string) => classes.push(c) } } },
+    })
+    return { vars, classes }
+  }
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)'
+
+  it('istnieje', () => {
+    expect(script.trim().length).toBeGreaterThan(50)
+  })
+
+  it('iPhone z ekranu głównego, krótszy widok: wysokość pełnego ekranu — tak samo jak computeLayout', () => {
+    const r = boot({ standalone: true, ua: IPHONE, iw: 393, ih: 802, sw: 393, sh: 852 })
+    expect(r.vars['--app-height']).toBe('852px')
+    expect(r.classes).toEqual(['fit-screen'])
+    expect(computeLayout(phone({ innerHeight: 802, vvHeight: 802 })).height).toBe(852)
+  })
+
+  it('obrót w poziomie: krótszy wymiar ekranu, zgodnie z computeLayout', () => {
+    const r = boot({ standalone: true, ua: IPHONE, iw: 852, ih: 393, sw: 393, sh: 852 })
+    expect(r.vars['--app-height']).toBe('393px')
+    expect(computeLayout(phone({ innerWidth: 852, innerHeight: 393, vvHeight: 393 })).height).toBe(393)
+  })
+
+  it('zwykła przeglądarka i inne urządzenia: nic nie zmienia', () => {
+    expect(boot({ standalone: false, ua: IPHONE, iw: 393, ih: 700, sw: 393, sh: 852 })).toEqual({ vars: {}, classes: [] })
+    expect(boot({ standalone: true, ua: 'Mozilla/5.0 (Linux; Android 14)', iw: 393, ih: 700, sw: 393, sh: 852 })).toEqual({ vars: {}, classes: [] })
   })
 })

@@ -12,6 +12,22 @@
       html, body { background: #f2f2f7 }
       @media (prefers-color-scheme: dark) { html, body { background: #000 } }
     </style>
+    <!-- iPhone z ekranu głównego: system bywa krótszy niż ekran (pas gestu), więc pierwszy render liczyłby środek niżej
+         niż statyczny obraz startowy i logo „podskakiwałoby”. Ten sam wzór co computeLayout (src/lib/viewport.ts), zanim
+         ruszy aplikacja; tests/viewport.test.ts pilnuje zgodności. -->
+    <script id="boot-layout">
+      (function () {
+        var n = navigator
+        var standalone = n.standalone === true || matchMedia('(display-mode: standalone)').matches
+        if (!standalone || !/iPhone|iPod/.test(n.userAgent)) return
+        var tall = Math.max(screen.width, screen.height)
+        var short = Math.min(screen.width, screen.height)
+        var h = Math.max(innerWidth > innerHeight ? short : tall, innerHeight)
+        var root = document.documentElement
+        root.style.setProperty('--app-height', h + 'px')
+        root.classList.add('fit-screen')
+      })()
+    </script>
     <meta name="description" content="Twoja kolekcja przepisów kulinarnych" />
 
     <!-- iOS: tryb pełnoekranowy po dodaniu do ekranu początkowego -->
@@ -55,7 +71,7 @@
   <body>
     <div id="root">
       <!-- Do pierwszego renderu Reacta: logo w tym samym miejscu i rozmiarze co na ekranie startowym (components/Splash.tsx) -->
-      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center">
+      <div style="position:fixed;left:0;right:0;top:0;height:var(--app-height,100%);display:flex;align-items:center;justify-content:center">
         <svg width="80" height="80" viewBox="0 0 512 512" style="border-radius:22.37%;box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1)" aria-hidden="true">
           <rect width="512" height="512" fill="#ff6b35" />
           <g fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
