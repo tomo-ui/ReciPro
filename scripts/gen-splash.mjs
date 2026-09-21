@@ -1,7 +1,7 @@
 // Generuje ekrany startowe iOS (apple-touch-startup-image) w jasnym i ciemnym wariancie
 // i wypisuje znaczniki <link> do wklejenia w index.html.
 // Użycie: node scripts/gen-splash.mjs
-// Katalog v2: iOS zapamiętuje ekrany startowe przy dodaniu aplikacji do ekranu głównego; nowa ścieżka pozwala je podmienić.
+// Katalog v3 (zmiana koloru ciemnego tła): iOS zapamiętuje ekrany startowe przy dodaniu aplikacji do ekranu głównego; nowa ścieżka pozwala je podmienić.
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import sharp from 'sharp'
 
@@ -21,11 +21,11 @@ const DEVICES = [
 ]
 const THEMES = [
   { name: 'light', bg: '#f2f2f7' },
-  { name: 'dark', bg: '#000000' },
+  { name: 'dark', bg: '#1d1e24' },
 ]
 
 const logo = await readFile('public/logo.svg')
-await mkdir('public/splash/v2', { recursive: true })
+await mkdir('public/splash/v3', { recursive: true })
 const links = []
 
 for (const [w, h, r] of DEVICES) {
@@ -40,7 +40,7 @@ for (const [w, h, r] of DEVICES) {
       .composite([{ input: mask, blend: 'dest-in' }])
       .png()
       .toBuffer()
-    const file = `splash/v2/${w}x${h}@${r}-${t.name}.png`
+    const file = `splash/v3/${w}x${h}@${r}-${t.name}.png`
     await sharp({ create: { width: W, height: H, channels: 3, background: t.bg } })
       .composite([{ input: icon, gravity: 'center' }])
       .png({ compressionLevel: 9, palette: true })

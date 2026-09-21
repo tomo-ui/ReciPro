@@ -10,7 +10,7 @@
     <title>Przepisy</title>
     <style>
       html, body { background: #f2f2f7 }
-      @media (prefers-color-scheme: dark) { html, body { background: #000 } }
+      @media (prefers-color-scheme: dark) { html, body { background: #1d1e24 } }
     </style>
     <!-- iPhone z ekranu głównego: system bywa krótszy niż ekran (pas gestu), więc pierwszy render liczyłby środek niżej
          niż statyczny obraz startowy i logo „podskakiwałoby”. Ten sam wzór co computeLayout (src/lib/viewport.ts), zanim
@@ -38,35 +38,35 @@
     <meta name="format-detection" content="telephone=no" />
 
     <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#1d1e24" media="(prefers-color-scheme: dark)" />
 
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/logo.svg" sizes="any" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
 
     <!-- iOS: ekrany startowe (scripts/gen-splash.mjs), bez nich okno aplikacji bywa dopasowane po swojemu -->
-    <link rel="apple-touch-startup-image" href="/splash/v2/440x956@3-light.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/440x956@3-dark.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/420x912@3-light.png" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/420x912@3-dark.png" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/402x874@3-light.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/402x874@3-dark.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/430x932@3-light.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/430x932@3-dark.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/393x852@3-light.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/393x852@3-dark.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/428x926@3-light.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/428x926@3-dark.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/390x844@3-light.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/390x844@3-dark.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/375x812@3-light.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/375x812@3-dark.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/414x896@3-light.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/414x896@3-dark.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/414x896@2-light.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/414x896@2-dark.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/375x667@2-light.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: light)" />
-    <link rel="apple-touch-startup-image" href="/splash/v2/375x667@2-dark.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/440x956@3-light.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/440x956@3-dark.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/420x912@3-light.png" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/420x912@3-dark.png" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/402x874@3-light.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/402x874@3-dark.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/430x932@3-light.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/430x932@3-dark.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/393x852@3-light.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/393x852@3-dark.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/428x926@3-light.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/428x926@3-dark.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/390x844@3-light.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/390x844@3-dark.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/375x812@3-light.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/375x812@3-dark.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/414x896@3-light.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/414x896@3-dark.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/414x896@2-light.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/414x896@2-dark.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/375x667@2-light.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="/splash/v3/375x667@2-dark.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
   </head>
   <body>
     <div id="root">

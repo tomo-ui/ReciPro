@@ -26,7 +26,7 @@ export function SegmentedControl<T extends string>({ value, options, onChange }:
               <motion.span
                 layoutId={id}
                 transition={springSoft}
-                className="absolute inset-0 -z-10 rounded-[7px] bg-white shadow-sm dark:bg-[#636366]"
+                className="absolute inset-0 -z-10 rounded-[7px] bg-white shadow-sm dark:bg-[#64656f]"
               />
             )}
             {o.label}
