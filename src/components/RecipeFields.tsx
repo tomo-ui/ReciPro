@@ -4,6 +4,7 @@ import type { FormState } from '@/lib/recipeForm'
 import { CameraIcon, SpinnerIcon, TrashIcon } from './Icons'
 import { Field, Group, NumberInput, TextBlock } from './formParts'
 import { IngredientTools } from './IngredientTools'
+import { SegmentedControl } from './SegmentedControl'
 
 interface Props {
   form: FormState
@@ -24,6 +25,30 @@ export function RecipeFields({ form, set, imageSrc, imageBusy, imageError, onPic
   return (
     <div className="space-y-5">
       {notes}
+
+      {form.saved_from ? (
+        <p className="rounded-[12px] bg-surface px-4 py-3 text-[14px] text-label-2">
+          Zapisano od <span className="font-semibold text-label">@{form.saved_from.username}</span>. Ten przepis jest tylko w Twojej książce kucharskiej, więc
+          nie pojawi się na profilu ani w feedzie.
+        </p>
+      ) : (
+        <div>
+          <p className="mb-1.5 px-4 text-[13px] text-label-2 uppercase">Gdzie dodać</p>
+          <SegmentedControl<'post' | 'book'>
+            value={form.is_post === false ? 'book' : 'post'}
+            onChange={(v) => set('is_post', v === 'post')}
+            options={[
+              { value: 'post', label: 'Post na profilu' },
+              { value: 'book', label: 'Książka kucharska' },
+            ]}
+          />
+          <p className="mt-1.5 px-4 text-[13px] text-label-2">
+            {form.is_post === false
+              ? 'Tylko dla Ciebie: przepis będzie w zakładce Przepisy (Twoim archiwum), bez pokazywania go na profilu i w feedzie.'
+              : 'Post: widoczny na Twoim profilu i w feedzie innych osób (gdy profil jest publiczny). Znajdziesz go też w zakładce Przepisy.'}
+          </p>
+        </div>
+      )}
 
       <div>
         <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[16px] bg-surface-2">

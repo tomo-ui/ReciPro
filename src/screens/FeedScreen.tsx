@@ -18,6 +18,10 @@ interface Props {
   onOpenProfile: (username: string) => void
   /** Otwiera komentarze pod przepisem; `focus` = z kursorem w polu nowego komentarza */
   onOpenComments: (recipe: Recipe, focus: boolean) => void
+  /** Id przepisów z feedu zapisanych już w mojej książce kucharskiej */
+  savedIds: ReadonlySet<string>
+  /** Zapisuje przepis w książce (albo usuwa zapis) */
+  onToggleSave: (recipe: Recipe) => Promise<void>
   onGoSearch: () => void
   /** Centrum powiadomień i liczba nieprzeczytanych */
   onOpenActivity: () => void
@@ -32,7 +36,7 @@ const newSeed = () => crypto.randomUUID()
  * w obrębie jednego odświeżenia (ziarno), więc doładowywanie nie powtarza pozycji.
  * „Najnowsze” pokazuje chronologicznie tylko obserwowanych.
  */
-export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, onGoSearch, onOpenActivity, unread }: Props) {
+export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, savedIds, onToggleSave, onGoSearch, onOpenActivity, unread }: Props) {
   const [mode, setMode] = useState<FeedMode>('foryou')
   const [seed, setSeed] = useState(newSeed)
   // Przepisy tego samego autora nie idą jeden po drugim (także na granicy stron; wyświetlone karty się nie przestawiają)
@@ -115,6 +119,8 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, onGoSe
               onOpen={() => onOpenRecipe(r)}
               onOpenAuthor={onOpenProfile}
               onOpenComments={(focus) => onOpenComments(r, focus)}
+              saved={savedIds.has(r.id)}
+              onToggleSave={() => onToggleSave(r)}
             />
           ))}
           <LoadMore loading={feed.loading} done={feed.done} error={feed.error} onLoadMore={feed.loadMore} onRetry={feed.retry} />

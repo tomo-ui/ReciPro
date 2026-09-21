@@ -78,6 +78,44 @@ grant execute on function public.admin_test_account_count() to authenticated;
 drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles for select to authenticated using (not is_test or public.can_see_test_accounts());
 
+-- ---------------------------------------------------------------------------
+-- Książka kucharska: przepis to POST (profil i feed) albo tylko wpis w mojej książce (zakładka Przepisy, prywatnie).
+-- Zapisany cudzy przepis jest zawsze wpisem w książce, z oznaczeniem autora oryginału.
+-- ---------------------------------------------------------------------------
+
+alter table public.recipes add column if not exists is_post boolean not null default true;
+alter table public.recipes add column if not exists saved_from_user_id uuid references auth.users (id) on delete set null;
+alter table public.recipes add column if not exists saved_from_username text;
+alter table public.recipes add column if not exists saved_from_recipe_id uuid references public.recipes (id) on delete set null;
+
+-- Zapisanego cudzego przepisu nie da się opublikować jako własny post
+alter table public.recipes drop constraint if exists recipes_saved_not_post;
+alter table public.recipes add constraint recipes_saved_not_post check (
+  not is_post or (saved_from_user_id is null and saved_from_recipe_id is null and saved_from_username is null)
+);
+-- Ten sam przepis można zapisać u siebie tylko raz
+create unique index if not exists recipes_saved_once on public.recipes (user_id, saved_from_recipe_id) where saved_from_recipe_id is not null;
+
+-- Widoczność: własne przepisy (posty i książka) widzi tylko ich autor; cudze tylko posty z profili publicznych
+drop policy if exists recipes_select_visible on public.recipes;
+create policy recipes_select_visible on public.recipes for select to authenticated
+  using (
+    user_id = auth.uid()
+    or (is_post and exists (select 1 from public.profiles p where p.id = recipes.user_id and p.is_public))
+  );
+
+-- Popularne tagi liczą tylko posty
+create or replace function public.popular_tags(p_limit int default 20)
+returns table (tag text, uses int)
+language sql stable set search_path = public as $$
+  select t, count(*)::int
+  from public.recipes r cross join lateral unnest(r.tags) as t
+  where r.is_post
+  group by t
+  order by 2 desc, 1
+  limit least(greatest(p_limit, 1), 50)
+$$;
+
 -- Liczniki utrzymują triggery, dzięki temu Realtime może pokazać zmianę wiersza profilu wszystkim
 -- bez ujawniania, kto kogo obserwuje
 create or replace function public.follows_update_counts() returns trigger
@@ -130,7 +168,7 @@ returns table (
 language sql stable security definer set search_path = public as $$
   select p.id, p.username, p.full_name, p.avatar_url, p.is_public,
     (case when p.is_public or p.id = auth.uid()
-          then (select count(*) from public.recipes r where r.user_id = p.id) else 0 end)::int,
+          then (select count(*) from public.recipes r where r.user_id = p.id and r.is_post) else 0 end)::int,
     p.followers_count, p.following_count,
     exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = p.id),
     p.id = auth.uid(),
@@ -151,7 +189,7 @@ language sql stable security definer set search_path = public as $$
   )
   select p.id, p.username, p.full_name, p.avatar_url, p.is_public,
     (case when p.is_public or p.id = auth.uid()
-          then (select count(*) from public.recipes r where r.user_id = p.id) else 0 end)::int,
+          then (select count(*) from public.recipes r where r.user_id = p.id and r.is_post) else 0 end)::int,
     p.followers_count, p.following_count,
     exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = p.id),
     p.id = auth.uid()
@@ -177,7 +215,7 @@ returns table (
 language sql stable security definer set search_path = public as $$
   select p.id, p.username, p.full_name, p.avatar_url, p.is_public,
     (case when p.is_public or p.id = auth.uid()
-          then (select count(*) from public.recipes r where r.user_id = p.id) else 0 end)::int,
+          then (select count(*) from public.recipes r where r.user_id = p.id and r.is_post) else 0 end)::int,
     p.followers_count, p.following_count,
     exists (select 1 from public.follows x where x.follower_id = auth.uid() and x.followee_id = p.id),
     p.id = auth.uid()
@@ -199,7 +237,7 @@ returns table (
 language sql stable security definer set search_path = public as $$
   select p.id, p.username, p.full_name, p.avatar_url, p.is_public,
     (case when p.is_public or p.id = auth.uid()
-          then (select count(*) from public.recipes r where r.user_id = p.id) else 0 end)::int,
+          then (select count(*) from public.recipes r where r.user_id = p.id and r.is_post) else 0 end)::int,
     p.followers_count, p.following_count,
     exists (select 1 from public.follows x where x.follower_id = auth.uid() and x.followee_id = p.id),
     p.id = auth.uid()
@@ -266,7 +304,7 @@ language sql stable set search_path = public as $$
   from public.recipes r
   join public.profiles p on p.id = r.user_id
   cross join q
-  where not exists (
+  where r.is_post and not exists (
     select 1 from unnest(q.words) as w where r.search_text not like '%' || w || '%' escape '\'
   )
   order by
@@ -343,7 +381,7 @@ language sql stable set search_path = public as $$
            exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = r.user_id) as followed
     from public.recipes r
     join public.profiles p on p.id = r.user_id
-    where r.user_id <> auth.uid()
+    where r.user_id <> auth.uid() and r.is_post
   ),
   scored as (
     select c.*,

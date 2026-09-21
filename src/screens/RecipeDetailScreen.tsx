@@ -7,7 +7,7 @@ import { formatMinutes, spring, totalTime } from '@/lib/ui'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { Avatar } from '@/components/Avatar'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
-import { ChevronLeftIcon, ClockIcon, CommentIcon, MinusIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
+import { BookmarkIcon, ChevronLeftIcon, ClockIcon, LockIcon, CommentIcon, MinusIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
 import { CommentsSection } from '@/components/CommentsSection'
 import { LikeButton } from '@/components/LikeButton'
 import { NutritionSection } from '@/components/NutritionSection'
@@ -26,6 +26,9 @@ interface Props {
   onOpenAuthor: (username: string) => void
   /** Zapisuje dopasowaną wersję przepisu jako nowy przepis użytkownika */
   onSaveCopy?: (draft: RecipeDraft) => Promise<void>
+  /** Cudzy przepis: czy jest już w mojej książce kucharskiej; dotknięcie zapisuje albo usuwa zapis */
+  saved?: boolean
+  onToggleSave?: () => Promise<void>
 }
 
 /** Grupuje linie po polu `group`, zachowując kolejność */
@@ -41,7 +44,8 @@ function groupLines<T extends { group?: string }>(lines: T[]) {
 
 const MAX_SERVINGS = 99
 
-export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDelete, onOpenAuthor, onSaveCopy }: Props) {
+export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDelete, onOpenAuthor, onSaveCopy, saved, onToggleSave }: Props) {
+  const [savingBook, setSavingBook] = useState(false)
   const controls = useDragControls()
   const { stats, set: setStats, update: updateStats } = useRecipeStats([recipe])
   const recipeStats = stats[recipe.id]
@@ -93,6 +97,24 @@ export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDele
             </button>
           )}
 
+          {/* Mój wpis: oznaczenie, od kogo go zapisałem, albo że jest tylko w mojej książce */}
+          {isOwner && recipe.saved_from && (
+            <button
+              onClick={() => onOpenAuthor(recipe.saved_from!.username)}
+              className="mt-3 flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-[14px] text-label-2 active:opacity-60"
+            >
+              <BookmarkIcon width={15} height={15} filled />
+              <span>
+                Zapisano od <span className="font-semibold text-label">@{recipe.saved_from.username}</span>
+              </span>
+            </button>
+          )}
+          {isOwner && !recipe.saved_from && recipe.is_post === false && (
+            <p className="mt-3 flex w-fit items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-[14px] text-label-2">
+              <LockIcon width={14} height={14} /> Tylko w Twojej książce kucharskiej
+            </p>
+          )}
+
           {recipe.description && (
             <p className="mt-3 text-[16px] text-label-2" data-selectable>
               {recipe.description}
@@ -127,6 +149,26 @@ export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDele
               <CommentIcon width={26} height={26} />
               <span className="tabular-nums">{recipeStats?.comment_count ?? '–'}</span>
             </button>
+            {!isOwner && onToggleSave && (
+              <button
+                disabled={savingBook}
+                onClick={async () => {
+                  setSavingBook(true)
+                  try {
+                    await onToggleSave()
+                  } finally {
+                    setSavingBook(false)
+                  }
+                }}
+                aria-pressed={!!saved}
+                className={`ml-auto flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[15px] font-semibold transition-colors disabled:opacity-50 ${
+                  saved ? 'bg-surface-2 text-label' : 'bg-accent text-white'
+                }`}
+              >
+                <BookmarkIcon width={17} height={17} filled={!!saved} />
+                {saved ? 'Zapisano w książce' : 'Zapisz w książce'}
+              </button>
+            )}
           </div>
 
           <Section title="Składniki">

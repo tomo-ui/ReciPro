@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Recipe } from '@/types/recipe'
 import { fold } from '@/lib/text'
+import { isSavedRecipe } from '@/lib/cookbook'
 import { LargeTitleScreen } from '@/components/LargeTitleScreen'
+import { SegmentedControl } from '@/components/SegmentedControl'
 import { RecipeCard } from '@/components/RecipeCard'
 import { SearchIcon } from '@/components/Icons'
 
@@ -15,23 +17,41 @@ interface Props {
   onAdd: () => void
 }
 
-/** Zakładka „Przepisy”: moja kolekcja z szybkim filtrem po tytule, tagach i składnikach */
+type Scope = 'all' | 'own' | 'saved'
+
+/**
+ * Zakładka „Przepisy”: moja książka kucharska (archiwum) — moje przepisy (posty i te tylko dla mnie) oraz zapisane od innych,
+ * z oznaczeniem autora oryginału i szybkim filtrem po tytule, tagach i składnikach.
+ */
 export function RecipeListScreen({ recipes, loading, error, onRetry, onOpen, onAdd }: Props) {
   const [query, setQuery] = useState('')
+  const [scope, setScope] = useState<Scope>('all')
 
   const filtered = useMemo(() => {
     const words = fold(query).split(/\s+/).filter(Boolean)
-    if (!words.length) return recipes
-    return recipes.filter((r) => {
+    const inScope = scope === 'all' ? recipes : recipes.filter((r) => isSavedRecipe(r) === (scope === 'saved'))
+    if (!words.length) return inScope
+    return inScope.filter((r) => {
       const hay = fold([r.title, r.tags.join(' '), ...r.ingredients.map((i) => i.text)].join(' '))
       return words.every((w) => hay.includes(w))
     })
-  }, [recipes, query])
+  }, [recipes, query, scope])
 
   return (
     <LargeTitleScreen
       title="Przepisy"
     >
+      <div className="mb-3">
+        <SegmentedControl<Scope>
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: 'all', label: 'Wszystkie' },
+            { value: 'own', label: 'Moje' },
+            { value: 'saved', label: 'Zapisane' },
+          ]}
+        />
+      </div>
       <label className="mb-4 flex items-center gap-2 rounded-[10px] bg-surface-2 px-2.5 py-2 text-label-2">
         <SearchIcon width={17} height={17} />
         <input

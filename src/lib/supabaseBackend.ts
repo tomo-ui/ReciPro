@@ -146,7 +146,7 @@ const toComment = (r: CommentRow): Comment => ({
 /** Zamienia błąd Postgrest na czytelny komunikat; rozpoznaje niewykonaną migrację */
 function fail(error: { code?: string; message: string }, context?: 'profile'): never {
   const migrationMissing =
-    error.code === 'PGRST202' || error.code === 'PGRST205' || error.code === '42P01' || error.code === '42883' ||
+    error.code === 'PGRST202' || error.code === 'PGRST205' || error.code === 'PGRST204' || error.code === '42P01' || error.code === '42883' || error.code === '42703' ||
     /could not find the (function|table)/i.test(error.message)
   if (migrationMissing) {
     throw new Error(
@@ -196,7 +196,7 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
     },
 
     async updateRecipe(id, draft) {
-      const { data, error } = await client().from('recipes').update(draftToInsert(draft)).eq('id', id).select().single()
+      const { data, error } = await client().from('recipes').update(draftToInsert(draft, true)).eq('id', id).select().single()
       if (error) fail(error)
       return rowToRecipe(data as RecipeRow)
     },
@@ -263,12 +263,14 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
     },
 
     async profileRecipes(profile, offset, limit) {
-      const { data, error } = await client()
-        .from('recipes')
-        .select('*')
-        .eq('user_id', profile.id)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1)
+      // Profil pokazuje tylko posty (wpisy z książki kucharskiej są prywatne). Baza sprzed migracji nie ma kolumny is_post:
+      // wtedy pobieramy bez filtra, bo wszystkie przepisy są jeszcze postami.
+      const query = (onlyPosts: boolean) => {
+        const q = client().from('recipes').select('*').eq('user_id', profile.id)
+        return (onlyPosts ? q.eq('is_post', true) : q).order('created_at', { ascending: false }).range(offset, offset + limit - 1)
+      }
+      let { data, error } = await query(true)
+      if (error && /is_post/.test(error.message)) ({ data, error } = await query(false))
       if (error) fail(error)
       const author = { username: profile.username, full_name: profile.full_name, avatar_url: profile.avatar_url }
       return (data as RecipeRow[]).map((r): Recipe => ({ ...rowToRecipe(r), author }))

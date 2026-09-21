@@ -9,7 +9,7 @@ import { useRecipeNutrition } from '@/hooks/useFoodDb'
 import { Avatar } from './Avatar'
 import { VerifiedBadge } from './VerifiedBadge'
 import { FollowButton } from './FollowButton'
-import { ClockIcon, CommentIcon, FlameIcon, SpinnerIcon, UsersIcon } from './Icons'
+import { BookmarkIcon, ClockIcon, CommentIcon, FlameIcon, SpinnerIcon, UsersIcon } from './Icons'
 import { LikeButton } from './LikeButton'
 import { Cover } from './RecipeCard'
 
@@ -30,10 +30,14 @@ interface Props {
   onOpenAuthor: (username: string) => void
   /** Otwiera same komentarze; `focus` = od razu z kursorem w polu nowego komentarza */
   onOpenComments: (focus: boolean) => void
+  /** Zapisane w mojej książce kucharskiej (zakładka Przepisy) */
+  saved: boolean
+  onToggleSave: () => Promise<void>
 }
 
 /** Duża karta do feedu: autor (z przyciskiem obserwowania), zdjęcie 4:3, tytuł, czas, porcje, tagi i komentarze */
-export function FeedCard({ recipe, stats, showFollow, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments }: Props) {
+export function FeedCard({ recipe, stats, showFollow, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments, saved, onToggleSave }: Props) {
+  const [saving, setSaving] = useState(false)
   const author = recipe.author
   const time = formatMinutes(totalTime(recipe))
   const last = stats?.last_comment
@@ -123,6 +127,24 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
           <CommentIcon width={22} height={22} />
           <span className="tabular-nums">{stats?.comment_count ?? '–'}</span>
         </button>
+        {/* Zapis do mojej książki kucharskiej (tylko zakładka Przepisy, nie mój profil) */}
+        <motion.button
+          whileTap={{ scale: 0.85 }}
+          disabled={saving}
+          onClick={async () => {
+            setSaving(true)
+            try {
+              await onToggleSave()
+            } finally {
+              setSaving(false)
+            }
+          }}
+          aria-label={saved ? 'Zapisano w książce kucharskiej — usuń' : 'Zapisz w książce kucharskiej'}
+          aria-pressed={saved}
+          className={`ml-auto flex items-center transition-colors disabled:opacity-50 ${saved ? 'text-accent' : 'text-label-2'}`}
+        >
+          {saving ? <SpinnerIcon width={22} height={22} /> : <BookmarkIcon width={23} height={23} filled={saved} />}
+        </motion.button>
       </div>
 
       {last && (

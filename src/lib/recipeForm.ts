@@ -1,5 +1,5 @@
 import { normalizeIngredient } from './ingredients'
-import { emptyDraft, type IngredientLine, type RecipeDraft } from '@/types/recipe'
+import { emptyDraft, type IngredientLine, type RecipeDraft, type SavedFrom } from '@/types/recipe'
 
 /**
  * Stan formularza przepisu (dodawanie i edycja) i konwersja z/do RecipeDraft.
@@ -21,6 +21,10 @@ export interface FormState {
   image_url?: string
   /** Produkty z bazy składników wskazane ręcznie: tekst linii → id produktu (patrz IngredientLine.food_id) */
   foodIds?: Record<string, number>
+  /** Gdzie przepis trafia: true = post na profilu, false = tylko książka kucharska; brak = starszy przepis (post) */
+  is_post?: boolean
+  /** Zapisany cudzy przepis: oznaczenie autora oryginału (nie edytujemy, tylko przenosimy) */
+  saved_from?: SavedFrom
 }
 
 export const emptyForm = (): FormState => ({
@@ -33,6 +37,7 @@ export const emptyForm = (): FormState => ({
   steps: '',
   tags: '',
   parse_method: 'manual',
+  is_post: true,
 })
 
 /** Pozycje → tekst; zmiana grupy daje linię „# nazwa”, powrót do braku grupy — samo „#” */
@@ -84,6 +89,8 @@ export function draftToForm(d: RecipeDraft): FormState {
     source_url: d.source_url,
     image_url: d.image_url,
     parse_method: d.parse_method,
+    is_post: d.is_post,
+    saved_from: d.saved_from,
   }
 }
 
@@ -111,5 +118,8 @@ export function formToDraft(f: FormState): RecipeDraft {
     source_url: f.source_url,
     image_url: f.image_url,
     parse_method: f.parse_method,
+    // zapisany cudzy przepis nigdy nie jest postem
+    is_post: f.saved_from ? false : f.is_post,
+    ...(f.saved_from ? { saved_from: f.saved_from } : {}),
   }
 }

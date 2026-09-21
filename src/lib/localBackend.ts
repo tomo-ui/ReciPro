@@ -253,6 +253,8 @@ function loadOwn(): Recipe[] {
 }
 const saveOwn = (list: Recipe[]) => write(KEYS.recipes, list)
 const newestFirst = (a: Recipe, b: Recipe) => b.created_at.localeCompare(a.created_at)
+/** Post (profil, feed, wyszukiwarka) kontra wpis tylko w książce kucharskiej; starsze przepisy bez pola są postami */
+const isPost = (r: Recipe) => r.is_post !== false
 
 const allProfiles = (): Profile[] => [loadMe(), ...visibleDemo().map((d) => d.profile)]
 
@@ -261,7 +263,7 @@ function summary(p: Profile): ProfileSummary {
   const follows = loadFollows()
   const d = demoById.get(p.id)
   const isMe = p.id === me.id
-  const recipeCount = isMe ? loadOwn().length : p.is_public ? (d?.recipes.length ?? 0) : 0
+  const recipeCount = isMe ? loadOwn().filter(isPost).length : p.is_public ? (d?.recipes.length ?? 0) : 0
   return {
     ...p,
     recipe_count: recipeCount,
@@ -335,8 +337,11 @@ export const localBackend: Backend = {
 
   async addRecipe(draft: RecipeDraft) {
     const now = new Date().toISOString()
-    const recipe: Recipe = { ...draft, id: crypto.randomUUID(), user_id: LOCAL_USER_ID, created_at: now, updated_at: now }
-    saveOwn([recipe, ...loadOwn()])
+    const own = loadOwn()
+    if (draft.saved_from?.recipe_id && own.some((r) => r.saved_from?.recipe_id === draft.saved_from?.recipe_id)) throw new Error('Ten przepis jest już w Twojej książce.')
+    // zapisany cudzy przepis jest zawsze tylko w książce (jak ograniczenie w bazie)
+    const recipe: Recipe = { ...draft, is_post: draft.saved_from ? false : draft.is_post, id: crypto.randomUUID(), user_id: LOCAL_USER_ID, created_at: now, updated_at: now }
+    saveOwn([recipe, ...own])
     return recipe
   },
 
@@ -344,7 +349,7 @@ export const localBackend: Backend = {
     const list = loadOwn()
     const old = list.find((r) => r.id === id)
     if (!old) throw new Error('Nie znaleziono przepisu.')
-    const updated: Recipe = { ...old, ...draft, id, user_id: LOCAL_USER_ID, updated_at: new Date().toISOString() }
+    const updated: Recipe = { ...old, ...draft, is_post: old.saved_from ? false : draft.is_post, saved_from: old.saved_from, id, user_id: LOCAL_USER_ID, updated_at: new Date().toISOString() }
     saveOwn(list.map((r) => (r.id === id ? updated : r)))
     return updated
   },
@@ -398,7 +403,7 @@ export const localBackend: Backend = {
 
   async profileRecipes(profile, offset, limit) {
     const me = loadMe()
-    if (profile.id === me.id) return page(loadOwn().sort(newestFirst).map((r) => withAuthor(r, me)), offset, limit)
+    if (profile.id === me.id) return page(loadOwn().filter(isPost).sort(newestFirst).map((r) => withAuthor(r, me)), offset, limit)
     const d = demoById.get(profile.id)
     if (!d || !d.profile.is_public) return []
     return page([...d.recipes].sort(newestFirst).map((r) => withAuthor(r, d.profile)), offset, limit)
@@ -432,7 +437,7 @@ export const localBackend: Backend = {
   async searchRecipes(query: string, sort: RecipeSort, offset, limit) {
     const me = loadMe()
     const w = words(query)
-    const candidates = [...loadOwn().map((r) => withAuthor(r, me)), ...publicDemoRecipes()]
+    const candidates = [...loadOwn().filter(isPost).map((r) => withAuthor(r, me)), ...publicDemoRecipes()]
     const scored = candidates
       .filter((r) => {
         const hay = searchText(r)

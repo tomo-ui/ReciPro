@@ -246,6 +246,26 @@ describe('profile, listy i zdjęcie profilowe', () => {
     expect(await oldDb.backend.getAdminSettings()).toBeNull() // baza sprzed panelu admina: bez panelu, bez błędu
   })
 
+  it('profil pokazuje tylko posty; baza sprzed migracji (bez kolumny is_post) działa bez filtra', async () => {
+    const seen: unknown[][] = []
+    const f = fake({
+      results: (call) => {
+        seen.push(call.ops.map(([op]) => op))
+        const filtered = call.ops.some(([op, args]) => op === 'eq' && args[0] === 'is_post')
+        return filtered ? { data: null, error: { code: '42703', message: 'column recipes.is_post does not exist' } } : ok([])
+      },
+    })
+    const profile = { id: 'u', username: 'anna', is_public: true, recipe_count: 0, followers_count: 0, following_count: 0, is_following: false, is_me: false }
+    expect(await f.backend.profileRecipes(profile, 0, 12)).toEqual([])
+    expect(f.calls).toHaveLength(2) // z filtrem (błąd) i ponowienie bez niego
+    const first = f.calls[0].ops.find(([op, args]) => op === 'eq' && args[0] === 'is_post')
+    expect(first?.[1]).toEqual(['is_post', true])
+
+    const fresh = fake({ results: () => ok([]) })
+    await fresh.backend.profileRecipes(profile, 0, 12)
+    expect(fresh.calls).toHaveLength(1)
+  })
+
   it('brak migracji daje czytelny komunikat z nazwami plików', async () => {
     const missing = fake({ rpc: () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.list_followers' } }) })
     await expect(missing.backend.listFollowers('a', 0, 10)).rejects.toThrow(/engagement\.sql/)

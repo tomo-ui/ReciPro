@@ -53,6 +53,12 @@ export const LinkIcon = (p: P) => (
     <path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" />
   </svg>
 )
+/** Zakładka „zapisz”; `filled` = przepis już zapisany */
+export const BookmarkIcon = ({ filled, ...p }: P & { filled?: boolean }) => (
+  <svg {...base(p)} fill={filled ? 'currentColor' : 'none'}>
+    <path d="M6.5 4.5A1.5 1.5 0 0 1 8 3h8a1.5 1.5 0 0 1 1.5 1.5V21l-5.5-4.2L6.5 21z" />
+  </svg>
+)
 export const InfoIcon = (p: P) => (
   <svg {...base(p)}>
     <circle cx="12" cy="12" r="9" />

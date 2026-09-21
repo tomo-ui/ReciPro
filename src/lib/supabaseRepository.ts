@@ -1,4 +1,4 @@
-import type { IngredientLine, ParseMethod, Recipe, RecipeDraft, StepLine } from '@/types/recipe'
+import type { IngredientLine, ParseMethod, Recipe, RecipeDraft, SavedFrom, StepLine } from '@/types/recipe'
 
 /** Wiersz tabeli `recipes` (patrz supabase/schema.sql) */
 export interface RecipeRow {
@@ -18,6 +18,11 @@ export interface RecipeRow {
   parse_method: ParseMethod
   created_at: string
   updated_at: string
+  /** Kolumny książki kucharskiej (engagement.sql); brak w bazie sprzed migracji */
+  is_post?: boolean | null
+  saved_from_user_id?: string | null
+  saved_from_username?: string | null
+  saved_from_recipe_id?: string | null
 }
 
 /** Wiersz zwracany przez funkcje search_recipes i feed: przepis + autor */
@@ -49,7 +54,14 @@ export function rowToRecipe(r: RecipeRow): Recipe {
     parse_method: r.parse_method,
     created_at: r.created_at,
     updated_at: r.updated_at,
+    is_post: r.is_post ?? undefined,
+    saved_from: savedFromOf(r),
   }
+}
+
+function savedFromOf(r: RecipeRow): SavedFrom | undefined {
+  if (!r.saved_from_username) return undefined
+  return { username: r.saved_from_username, user_id: orUndef(r.saved_from_user_id ?? null), recipe_id: orUndef(r.saved_from_recipe_id ?? null) }
 }
 
 export function rowWithAuthorToRecipe(r: RecipeWithAuthorRow): Recipe {
@@ -64,9 +76,21 @@ export function rowWithAuthorToRecipe(r: RecipeWithAuthorRow): Recipe {
   }
 }
 
-/** user_id, id i timestampy nadaje baza (default auth.uid(), gen_random_uuid(), now()) */
-export function draftToInsert(d: RecipeDraft) {
+/**
+ * user_id, id i timestampy nadaje baza (default auth.uid(), gen_random_uuid(), now()).
+ * Kolumny książki kucharskiej wysyłamy tylko wtedy, gdy są potrzebne (wpis w książce, zapisany cudzy przepis albo
+ * zmiana rodzaju przy edycji), więc zwykłe dodawanie i edycja działają też na bazie sprzed migracji.
+ */
+export function draftToInsert(d: RecipeDraft, forUpdate = false) {
   return {
+    ...(d.is_post === false || (forUpdate && d.is_post !== undefined) ? { is_post: d.is_post } : {}),
+    ...(!forUpdate && d.saved_from
+      ? {
+          saved_from_user_id: d.saved_from.user_id ?? null,
+          saved_from_username: d.saved_from.username,
+          saved_from_recipe_id: d.saved_from.recipe_id ?? null,
+        }
+      : {}),
     title: d.title,
     description: d.description ?? null,
     image_url: d.image_url ?? null,

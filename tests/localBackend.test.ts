@@ -97,6 +97,54 @@ describe('tryb lokalny: panel admina (przykładowi użytkownicy jako konta testo
   })
 })
 
+describe('tryb lokalny: książka kucharska', () => {
+  const draft = (over: object = {}) => ({ title: 'Test książki', ingredients: [], steps: [], tags: ['ksiazka'], parse_method: 'manual' as const, ...over })
+
+  it('wpis tylko w książce jest na liście „moje”, ale nie na profilu, w liczniku i w wyszukiwarce', async () => {
+    const mineBefore = (await b.listMyRecipes()).length
+    const countBefore = (await b.getProfile('ty'))!.recipe_count
+    const book = await b.addRecipe(draft({ is_post: false }))
+    const post = await b.addRecipe(draft({ title: 'Test posta', is_post: true }))
+    expect((await b.listMyRecipes()).length).toBe(mineBefore + 2)
+    const profile = (await b.getProfile('ty'))!
+    expect(profile.recipe_count).toBe(countBefore + 1)
+    const onProfile = (await b.profileRecipes(profile, 0, 100)).map((r) => r.id)
+    expect(onProfile).toContain(post.id)
+    expect(onProfile).not.toContain(book.id)
+    const found = (await b.searchRecipes('ksiazka', 'newest', 0, 50)).map((r) => r.id)
+    expect(found).toContain(post.id)
+    expect(found).not.toContain(book.id)
+    await b.removeRecipe(book)
+    await b.removeRecipe(post)
+  })
+
+  it('zapisany cudzy przepis: oznaczenie autora, zawsze tylko w książce, jeden raz', async () => {
+    const original = (await b.feed('foryou', 's', 0, 50))[0]
+    const saved_from = { user_id: original.user_id, username: original.author!.username, recipe_id: original.id }
+    const copy = await b.addRecipe(draft({ title: original.title, is_post: true, saved_from })) // próba opublikowania jako własny post
+    expect(copy.is_post).toBe(false)
+    expect(copy.saved_from).toEqual(saved_from)
+    await expect(b.addRecipe(draft({ saved_from }))).rejects.toThrow(/już w Twojej książce/)
+    // edycja nie zmieni kopii w post ani nie zgubi oznaczenia
+    const edited = await b.updateRecipe(copy.id, draft({ title: 'Zmieniony', is_post: true }))
+    expect(edited).toMatchObject({ is_post: false, saved_from })
+    const profile = (await b.getProfile('ty'))!
+    expect((await b.profileRecipes(profile, 0, 100)).some((r) => r.id === copy.id)).toBe(false)
+    await b.removeRecipe(copy)
+    await b.addRecipe(draft({ saved_from })).then((again) => b.removeRecipe(again)) // po usunięciu można zapisać ponownie
+  })
+
+  it('zmiana z książki na post i z powrotem (własny przepis)', async () => {
+    const r = await b.addRecipe(draft({ is_post: false }))
+    const profile = (await b.getProfile('ty'))!
+    expect((await b.updateRecipe(r.id, draft({ is_post: true }))).is_post).toBe(true)
+    expect((await b.profileRecipes(profile, 0, 100)).some((x) => x.id === r.id)).toBe(true)
+    expect((await b.updateRecipe(r.id, draft({ is_post: false }))).is_post).toBe(false)
+    expect((await b.profileRecipes(profile, 0, 100)).some((x) => x.id === r.id)).toBe(false)
+    await b.removeRecipe(r)
+  })
+})
+
 describe('tryb lokalny: komentarze', () => {
   it('są przykładowe komentarze, od najnowszych, ze stronicowaniem', async () => {
     const all = await b.listComments('demo-zosia-1', 0, 10)

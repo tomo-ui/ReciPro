@@ -40,7 +40,7 @@ export function SearchScreen({ onOpenRecipe, onOpenProfile }: Props) {
   const list = scope === 'recipes' ? recipes : people
 
   return (
-    <LargeTitleScreen title="Szukaj">
+    <LargeTitleScreen title="Szukaj" noLargeTitle>
       <label className="mb-3 flex items-center gap-2 rounded-[10px] bg-surface-2 px-2.5 py-2 text-label-2">
         <SearchIcon width={17} height={17} />
         <input

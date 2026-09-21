@@ -34,6 +34,16 @@ export interface StepLine {
   group?: string
 }
 
+/** Skąd zapisano przepis do swojej książki kucharskiej: autor oryginału */
+export interface SavedFrom {
+  /** Konto autora oryginału (brak, gdy je usunięto) */
+  user_id?: string
+  /** Nazwa użytkownika autora w chwili zapisu */
+  username: string
+  /** Oryginalny przepis (brak, gdy go usunięto) */
+  recipe_id?: string
+}
+
 export interface Recipe {
   id: string
   title: string
@@ -51,6 +61,13 @@ export interface Recipe {
   parse_method: ParseMethod
   created_at: string // ISO 8601
   updated_at: string // ISO 8601
+  /**
+   * true (albo brak wartości = starsze przepisy) = post: widoczny na profilu i w feedzie;
+   * false = wpis tylko w mojej książce kucharskiej (zakładka Przepisy), prywatny
+   */
+  is_post?: boolean
+  /** Ustawione, gdy to zapisany cudzy przepis (zawsze tylko w książce, nigdy post) */
+  saved_from?: SavedFrom
   /** Autor przepisu (nadaje baza) */
   user_id?: string
   /** Dane autora — wypełnione w feedzie, wyszukiwarce i na cudzych profilach */

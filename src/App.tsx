@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Session } from '@supabase/supabase-js'
 import type { Profile, Recipe, RecipeDraft } from '@/types/recipe'
 import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
+import { draftForSaving } from '@/lib/cookbook'
+import { deleteRecipeImage } from '@/lib/images'
 import { markAppReady } from '@/lib/splash'
 import { spring } from '@/lib/ui'
 import { useMe } from '@/hooks/useMe'
@@ -157,6 +159,32 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
     await mine.add(draft)
     bump()
   }
+  // Książka kucharska: cudze przepisy zapisane w zakładce Przepisy (nie na profilu), z oznaczeniem autora oryginału
+  const savedByOriginal = useMemo(
+    () => new Map(mine.recipes.flatMap((r) => (r.saved_from?.recipe_id ? [[r.saved_from.recipe_id, r] as const] : []))),
+    [mine.recipes],
+  )
+  const savedIds = useMemo<ReadonlySet<string>>(() => new Set(savedByOriginal.keys()), [savedByOriginal])
+  const toggleSave = async (recipe: Recipe) => {
+    const existing = savedByOriginal.get(recipe.id)
+    try {
+      if (existing) {
+        if (!confirm('Usunąć ten przepis ze swojej książki kucharskiej?')) return
+        await mine.remove(existing)
+      } else {
+        const { draft, ownImage } = await draftForSaving(recipe)
+        try {
+          await mine.add(draft)
+        } catch (e) {
+          if (ownImage) await deleteRecipeImage(draft.image_url) // nie zostawiamy zdjęcia bez przepisu
+          throw e
+        }
+      }
+      bump()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Nie udało się zapisać przepisu.')
+    }
+  }
   const { markRead } = notes
   const onSeen = useCallback(() => void markRead(), [markRead])
 
@@ -182,6 +210,8 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onGoSearch={() => changeTab('search')}
             onOpenActivity={openActivity}
             onOpenComments={(recipe, focus) => setSheet({ kind: 'comments', recipe, focus })}
+            savedIds={savedIds}
+            onToggleSave={toggleSave}
             unread={notes.unread}
           />)}
         {screen('search', <SearchScreen onOpenRecipe={openRecipe} onOpenProfile={openProfile} />)}
@@ -252,6 +282,8 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
                 }
               }}
               onOpenAuthor={openProfile}
+              saved={savedIds.has(entry.recipe.id)}
+              onToggleSave={() => toggleSave(entry.recipe)}
               onSaveCopy={async (draft) => {
                 await mine.add(draft) // nowy przepis w „Przepisy”; zostajemy na ekranie szczegółów
                 bump()
