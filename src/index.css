@@ -185,3 +185,76 @@
     animation: none;
   }
 }
+
+/*
+ * „Liquid glass” z iOS 26 zrobione w CSS (Safari nie obsługuje SVG-owych filtrów refrakcji w backdrop-filter):
+ * rozmycie i nasycenie tła, delikatny szklany gradient, jasna krawędź (::before), połysk od góry (::after)
+ * i warstwowe cienie. Kolory zmieniają się z motywem.
+ */
+:root {
+  --glass-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.5));
+  --glass-rim: linear-gradient(140deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.25) 35%, rgba(255, 255, 255, 0.1) 65%, rgba(255, 255, 255, 0.7));
+  --glass-sheen: radial-gradient(120% 90% at 25% -10%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 60%);
+  --glass-shadow: 0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08), inset 0 0 0 0.5px rgba(255, 255, 255, 0.6),
+    inset 0 -6px 14px rgba(255, 255, 255, 0.25);
+  --pill-fill: linear-gradient(180deg, rgba(0, 0, 0, 0.09), rgba(0, 0, 0, 0.05));
+  --pill-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), inset 0 -1px 1px rgba(0, 0, 0, 0.05), 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --glass-fill: linear-gradient(180deg, rgba(60, 60, 64, 0.5), rgba(30, 30, 33, 0.42));
+    --glass-rim: linear-gradient(140deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.07) 35%, rgba(255, 255, 255, 0.04) 65%, rgba(255, 255, 255, 0.32));
+    --glass-sheen: radial-gradient(120% 90% at 25% -10%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 60%);
+    --glass-shadow: 0 14px 34px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.1),
+      inset 0 -6px 14px rgba(255, 255, 255, 0.04);
+    --pill-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.12));
+    --pill-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 1px rgba(255, 255, 255, 0.05), 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+}
+
+.liquid-glass {
+  position: relative;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(24px) saturate(190%) brightness(1.04);
+  backdrop-filter: blur(24px) saturate(190%) brightness(1.04);
+  box-shadow: var(--glass-shadow);
+  isolation: isolate;
+}
+/* jasna krawędź: gradient widoczny tylko na obrysie */
+.liquid-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-rim);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+  z-index: -1;
+}
+/* połysk od góry, jak odbicie światła na szkle */
+.liquid-glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--glass-sheen);
+  pointer-events: none;
+  z-index: -1;
+}
+/* zaznaczona zakładka: mniejsza kapsuła szkła w szkle */
+.liquid-pill {
+  background: var(--pill-fill);
+  box-shadow: var(--pill-shadow);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+  backdrop-filter: blur(6px) saturate(140%);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .liquid-glass {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

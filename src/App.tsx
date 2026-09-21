@@ -230,7 +230,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         )}
       </motion.div>
 
-      <TabBar tab={tab} onChange={changeTab} badges={{ profile: notes.unread }} />
+      <TabBar tab={tab} onChange={changeTab} onAdd={() => setSheet({ kind: 'add' })} badges={{ profile: notes.unread }} />
 
       <AnimatePresence>
         {stack.map((entry, i) =>

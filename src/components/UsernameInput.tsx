@@ -28,7 +28,11 @@ export function UsernameInput({ value, onChange, status, autoFocus }: Props) {
           placeholder="nazwa_uzytkownika"
           maxLength={USERNAME_MAX + 5}
           autoFocus={autoFocus}
-          autoComplete="username"
+          // To nie login: bez „username” iOS nie podpowiada zapamiętanych haseł ani nie wymusza ich wpisania po zaznaczeniu pola
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}

@@ -49,7 +49,7 @@ export function ProfileSetupScreen({ prefill, onDone, onSignOut }: Props) {
         </div>
 
         <Group>
-          <UsernameInput value={username} onChange={setUsername} status={status} autoFocus />
+          <UsernameInput value={username} onChange={setUsername} status={status} />
         </Group>
         <Group>
           <input
