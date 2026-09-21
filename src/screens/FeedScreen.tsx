@@ -11,7 +11,7 @@ import { FeedCard } from '@/components/FeedCard'
 import { HeartIcon } from '@/components/Icons'
 import { LargeTitleScreen } from '@/components/LargeTitleScreen'
 import { LoadMore } from '@/components/LoadMore'
-import { SegmentedControl } from '@/components/SegmentedControl'
+import { FeedTitle } from '@/components/FeedTitle'
 
 interface Props {
   onOpenRecipe: (r: Recipe) => void
@@ -69,7 +69,8 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, onGoSe
 
   return (
     <LargeTitleScreen
-      title="Feed"
+      variant="bare"
+      center={<FeedTitle mode={mode} onChange={setMode} />}
       right={
         <div className="flex items-center gap-2">
           <motion.button
@@ -88,17 +89,6 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, onGoSe
         </div>
       }
     >
-      <div className="mb-4">
-        <SegmentedControl<FeedMode>
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: 'foryou', label: 'Dla Ciebie' },
-            { value: 'newest', label: 'Najnowsze' },
-          ]}
-        />
-      </div>
-
       {empty ? (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-2 pt-14 text-center">
           <p className="text-[20px] font-semibold">{mode === 'foryou' ? 'Na razie nic tu nie ma' : 'Nie obserwujesz nikogo'}</p>

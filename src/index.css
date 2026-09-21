@@ -212,8 +212,9 @@
   }
 }
 
+/* Element z tą klasą musi być pozycjonowany (relative/absolute/fixed) — pseudoelementy są względem niego. Klasa sama
+   nie ustawia position, bo nieprzypisane do warstwy style wygrywałyby z utilities Tailwinda (np. „absolute”). */
 .liquid-glass {
-  position: relative;
   background: var(--glass-fill);
   -webkit-backdrop-filter: blur(24px) saturate(190%) brightness(1.04);
   backdrop-filter: blur(24px) saturate(190%) brightness(1.04);

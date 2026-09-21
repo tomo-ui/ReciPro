@@ -4,7 +4,7 @@ import type { Recipe } from '@/types/recipe'
 import { fold } from '@/lib/text'
 import { LargeTitleScreen } from '@/components/LargeTitleScreen'
 import { RecipeCard } from '@/components/RecipeCard'
-import { PlusIcon, SearchIcon } from '@/components/Icons'
+import { SearchIcon } from '@/components/Icons'
 
 interface Props {
   recipes: Recipe[]
@@ -31,16 +31,6 @@ export function RecipeListScreen({ recipes, loading, error, onRetry, onOpen, onA
   return (
     <LargeTitleScreen
       title="Przepisy"
-      right={
-        <motion.button
-          whileTap={{ scale: 0.88 }}
-          onClick={onAdd}
-          aria-label="Dodaj przepis"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white"
-        >
-          <PlusIcon width={20} height={20} strokeWidth={2.6} />
-        </motion.button>
-      }
     >
       <label className="mb-4 flex items-center gap-2 rounded-[10px] bg-surface-2 px-2.5 py-2 text-label-2">
         <SearchIcon width={17} height={17} />

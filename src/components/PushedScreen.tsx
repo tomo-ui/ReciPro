@@ -34,7 +34,7 @@ export function PushedScreen({ title, titleBadge, titleStart, onBack, children }
     >
       <div className="absolute inset-y-0 left-0 z-40 w-5 touch-pan-y" onPointerDown={(e) => controls.start(e)} />
 
-      <div className="glass absolute inset-x-0 top-0 z-20 border-b border-separator pt-safe-top">
+      <div className="glass absolute inset-x-0 top-0 z-20 pt-safe-top">
         <div className={`relative flex h-11 items-center px-[max(12px,env(safe-area-inset-left))] ${titleStart ? 'justify-start pl-[max(46px,calc(env(safe-area-inset-left)+38px))]' : 'justify-center'}`}>
           <motion.button
             whileTap={{ scale: 0.88 }}

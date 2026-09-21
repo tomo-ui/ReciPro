@@ -25,7 +25,7 @@ interface Props {
 }
 
 /**
- * Dolny pasek w stylu „liquid glass” z iOS 26: pływający prostokąt z mocno zaokrąglonymi rogami, szkło z rozmyciem
+ * Dolny pasek w stylu „liquid glass” z iOS 26: pływająca kapsuła (pełne zaokrąglenie boków), szkło z rozmyciem
  * tła, połyskiem i jasną krawędzią (index.css, `.liquid-glass`), a zaznaczona zakładka to szklana kapsuła,
  * która sprężyście przesuwa się między ikonami.
  */
@@ -45,7 +45,7 @@ export function TabBar({ tab, onChange, onAdd, badges = {} }: Props) {
           <motion.span
             layoutId="tab-pill"
             transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.9 }}
-            className="liquid-pill absolute inset-y-[5px] inset-x-[3px] rounded-[22px]"
+            className="liquid-pill absolute inset-y-[5px] inset-x-[1px] rounded-full"
           />
         )}
         <motion.span whileTap={{ scale: 0.86 }} className={`relative transition-colors ${active ? 'text-label' : 'text-label-2'}`}>
@@ -76,7 +76,7 @@ export function TabBar({ tab, onChange, onAdd, badges = {} }: Props) {
       className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4"
       style={{ paddingBottom: TAB_BAR_BOTTOM }}
     >
-      <div className="liquid-glass pointer-events-auto mx-auto flex h-[64px] max-w-md items-stretch rounded-[26px] px-1.5">
+      <div className="liquid-glass pointer-events-auto relative mx-auto flex h-[64px] max-w-md items-stretch rounded-full px-1">
         {LEFT.map(item)}
         <button onClick={onAdd} aria-label="Dodaj przepis" className="relative flex h-full flex-1 items-center justify-center">
           <motion.span whileTap={{ scale: 0.8, rotate: 90 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }} className="text-label">
