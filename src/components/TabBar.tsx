@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent, type SVGProps } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { HOLD_MS, HOLD_MOVE_TOLERANCE, slotIndexAt, type SlotMetric } from '@/lib/tabScrub'
+import { HOLD_MS, HOLD_MOVE_TOLERANCE, rimAngleAfter, slotIndexAt, type SlotMetric } from '@/lib/tabScrub'
 import { BookIcon, HomeIcon, PlusIcon, SearchIcon, UserIcon } from './Icons'
 
 export type Tab = 'feed' | 'search' | 'mine' | 'profile'
@@ -116,6 +116,36 @@ export function TabBar({ tab, onChange, onAdd, badges = {} }: Props) {
 
   useEffect(() => () => cancelHold(), [])
 
+  // Wężyk na obwódce: kąt rośnie o tyle, ile pikseli przesunęła się treść (1 px przewinięcia = 1 px po obwodzie paska),
+  // więc wolniejsze przewijanie daje wolniejszy ruch, a szybsze — szybszy; w górę wężyk biegnie w drugą stronę
+  useEffect(() => {
+    const bar = barRef.current
+    if (!bar || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)) return
+    let angle = 0
+    let queued = false
+    const lastTop = new WeakMap<EventTarget, number>()
+    const onScroll = (e: Event) => {
+      const el = e.target
+      if (!(el instanceof HTMLElement)) return
+      const top = el.scrollTop
+      const prev = lastTop.get(el)
+      lastTop.set(el, top)
+      if (prev === undefined || top === prev) return
+      const r = bar.getBoundingClientRect()
+      angle = rimAngleAfter(angle, top - prev, r.width, r.height)
+      if (!queued) {
+        queued = true
+        requestAnimationFrame(() => {
+          queued = false
+          bar.style.setProperty('--rim-angle', `${angle}deg`)
+        })
+      }
+    }
+    // zdarzenie scroll nie bąbelkuje, ale da się je złapać w fazie przechwytywania na całym dokumencie
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => document.removeEventListener('scroll', onScroll, { capture: true })
+  }, [])
+
   const metric = scrub?.metrics[scrub.index]
 
   return (
@@ -127,7 +157,7 @@ export function TabBar({ tab, onChange, onAdd, badges = {} }: Props) {
         onPointerUp={() => endGesture(true)}
         onPointerCancel={() => endGesture(false)}
         onContextMenu={(e) => e.preventDefault()}
-        className="liquid-glass pointer-events-auto relative mx-auto flex h-[64px] max-w-md touch-none items-stretch rounded-full px-1 select-none [-webkit-touch-callout:none]"
+        className="liquid-glass liquid-glass-snake pointer-events-auto relative mx-auto flex h-[64px] max-w-md touch-none items-stretch rounded-full px-1 select-none [-webkit-touch-callout:none]"
       >
         {/* Soczewka pod palcem: powiększona kapsuła, która podąża za palcem między zakładkami */}
         <AnimatePresence>

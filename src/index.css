@@ -286,3 +286,30 @@
       inset 0 -8px 16px rgba(255, 255, 255, 0.4);
   }
 }
+
+/*
+ * Wężyk na obwódce dolnego paska: jasny łuk z gasnącym ogonem, który okrąża pasek razem z przewijaniem treści
+ * (TabBar ustawia --rim-angle proporcjonalnie do przesuniętych pikseli). Pod spodem zostaje statyczna, blada obwódka.
+ */
+:root {
+  --snake-head: rgba(255, 107, 53, 0.9);
+  --snake-tail: rgba(255, 107, 53, 0);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --snake-head: rgba(255, 255, 255, 0.95);
+    --snake-tail: rgba(255, 255, 255, 0);
+  }
+}
+.liquid-glass-snake::before {
+  padding: 1.5px;
+  background:
+    conic-gradient(
+      from var(--rim-angle, 0deg) at 50% 50%,
+      var(--snake-tail) 0deg,
+      var(--snake-tail) 215deg,
+      var(--snake-head) 352deg,
+      var(--snake-tail) 360deg
+    ),
+    var(--glass-rim);
+}
