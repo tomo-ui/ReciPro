@@ -97,6 +97,22 @@ describe('kadrowanie okładki (4:3, jak zdjęcia ze stron)', () => {
     expect(b).toBeLessThan(60)
   })
 
+  it('avoidCenter (podgląd wideo z przyciskiem play na środku): pionowy obraz → górny pas zamiast środka', () => {
+    const out = decode(cropToCover(PORTRAIT, { avoidCenter: true }))
+    expect(out.width).toBe(108)
+    expect(out.height).toBe(81)
+    // górny pas 42% wysokości: czerwony, bez zielonego środka
+    const [r, g, b] = pixel(out, 54, 40)
+    expect(r).toBeGreaterThan(200)
+    expect(g).toBeLessThan(60)
+    expect(b).toBeLessThan(60)
+    // kadr obejmuje górne 81 z 192 px (42%), więc środek obrazu (50%), gdzie leży przycisk play, nie trafia na okładkę
+    expect(out.height).toBeLessThan(192 / 2)
+    // obraz poziomy bez przycinania zostaje bajt w bajt także z avoidCenter
+    const wide = makeJpeg(400, 300)
+    expect(cropToCover(wide, { avoidCenter: true })).toBe(wide)
+  })
+
   it('duży obraz jest zmniejszany do COVER_MAX_WIDTH z zachowaniem 4:3', () => {
     const out = decode(cropToCover(makeJpeg(1080, 1920)))
     expect(out.width).toBe(COVER_MAX_WIDTH)

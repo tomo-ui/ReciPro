@@ -58,6 +58,9 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
   // Rozwinięta lista odświeża się po dodaniu lub usunięciu komentarza (np. w arkuszu komentarzy)
   useEffect(() => (expanded ? on('comments-changed', () => void loadComments()) : undefined), [expanded, loadComments])
 
+  // Pozostałe komentarze pod podglądem: najnowszy już jest w podglądzie, więc go pomijamy
+  const others = (comments ?? []).filter((c) => c.id !== last?.id)
+
   function expand() {
     setExpanded(true)
     void loadComments()
@@ -149,53 +152,48 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
 
       {last && (
         <div className="px-3.5 pb-3.5">
-          <AnimatePresence initial={false} mode="wait">
-            {!expanded ? (
-              <motion.div key="collapsed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-                <CommentRow comment={last} lines={2} onOpen={() => onOpenComments(false)} />
-                {count > 1 && (
-                  <button onClick={expand} className="mt-1.5 block px-1 text-[13px] text-label-2 active:opacity-60">
-                    Zobacz więcej komentarzy
-                  </button>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="expanded"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ type: 'spring', stiffness: 380, damping: 38 }}
-                className="overflow-hidden"
-              >
-                {comments === null ? (
-                  <div className="flex justify-center py-3 text-label-2">
-                    <SpinnerIcon width={18} height={18} />
+          {/* Ostatni komentarz i dolny rząd z linkami zostają na karcie cały czas; rozwinięcie dokłada pozostałe komentarze
+              między nimi, każdy wjeżdża płynnie — nic nie znika i nie miga, a wysokość karty rośnie stopniowo */}
+          <CommentRow comment={last} lines={2} onOpen={() => onOpenComments(false)} />
+
+          <AnimatePresence initial={false}>
+            {expanded &&
+              others.map((c) => (
+                <motion.div
+                  key={c.id}
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-2">
+                    <CommentRow comment={c} lines={3} onOpen={() => onOpenComments(false)} />
                   </div>
-                ) : (
-                  <ul className="space-y-2">
-                    {comments.map((c) => (
-                      <li key={c.id}>
-                        <CommentRow comment={c} lines={3} onOpen={() => onOpenComments(false)} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div className="mt-1.5 flex items-center justify-between px-1 text-[13px] text-label-2">
-                  {count > (comments?.length ?? 0) ? (
-                    <button onClick={() => onOpenComments(false)} className="active:opacity-60">
-                      Zobacz wszystkie komentarze ({count})
-                    </button>
-                  ) : (
-                    <span />
-                  )}
-                  <button onClick={() => setExpanded(false)} className="active:opacity-60">
-                    Zwiń
-                  </button>
-                </div>
-              </motion.div>
-            )}
+                </motion.div>
+              ))}
           </AnimatePresence>
+
+          {count > 1 && (
+            <div className="mt-1.5 flex items-center justify-between px-1 text-[13px] text-label-2">
+              {!expanded ? (
+                <button onClick={expand} className="active:opacity-60">
+                  Zobacz więcej komentarzy
+                </button>
+              ) : count > (comments?.length ?? 0) && comments !== null ? (
+                <button onClick={() => onOpenComments(false)} className="active:opacity-60">
+                  Zobacz wszystkie komentarze ({count})
+                </button>
+              ) : (
+                <span>{comments === null ? 'Wczytuję…' : ''}</span>
+              )}
+              {expanded && (
+                <button onClick={() => setExpanded(false)} className="active:opacity-60">
+                  Zwiń
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </motion.article>

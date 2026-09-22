@@ -23,6 +23,11 @@ export interface SocialInfo {
   author?: string
   /** Adres miniaturki na dozwolonym CDN (patrz image.ts) */
   thumbnailUrl?: string
+  /**
+   * Miniaturka pochodzi z podglądu linku (og:image), który w wideo i rolkach Instagrama ma na środku wypalony przycisk „play”.
+   * Kadrujemy ją tak, żeby środek obrazu nie trafił na okładkę (patrz cropToCover).
+   */
+  thumbnailMayShowPlayButton?: boolean
 }
 
 const INSTAGRAM_HOST = /(^|\.)instagram\.com$|^instagr\.am$/i
@@ -220,6 +225,26 @@ export function parseInstagramHtml(html: string): Omit<SocialInfo, 'platform' | 
   return { caption: best.caption, author: candidates.find((c) => c.author)?.author, thumbnailUrl: image }
 }
 
+/**
+ * Czyste zdjęcie posta ze strony osadzenia (embed): to samo, co widać w poście, bez przycisku „play” wypalonego w podglądzie
+ * linku. Strona jest publiczna; przy błędzie zwracamy undefined i zostaje miniaturka z podglądu.
+ */
+export function parseInstagramEmbedImage(html: string): string | undefined {
+  const tag = html.match(/<img\b[^>]*\bclass="[^"]*\bEmbeddedMediaImage\b[^"]*"[^>]*>/i)?.[0]
+  const src = tag?.match(/\bsrc="([^"]+)"/i)?.[1]
+  const url = src ? decodeEntities(src).trim() : ''
+  return /^https:\/\//i.test(url) ? url : undefined
+}
+
+async function fetchInstagramEmbedImage(code: string, fetchImpl: typeof fetch): Promise<string | undefined> {
+  try {
+    const { html } = await fetchHtml(`https://www.instagram.com/p/${code}/embed/captioned/`, { fetchImpl, timeoutMs: 6000, maxBytes: 2_000_000 })
+    return parseInstagramEmbedImage(html)
+  } catch {
+    return undefined
+  }
+}
+
 export async function fetchInstagramInfo(rawUrl: string, fetchImpl: typeof fetch = fetch): Promise<SocialInfo> {
   const code = instagramCode(rawUrl)
   if (!code) throw new FetchError('invalid_url', 'To nie wygląda na link do posta ani rolki z Instagrama (np. instagram.com/p/… albo instagram.com/reel/…).')
@@ -239,7 +264,10 @@ export async function fetchInstagramInfo(rawUrl: string, fetchImpl: typeof fetch
       'Instagram nie udostępnił opisu tego posta. Może być prywatny, usunięty albo Instagram zablokował odczyt z serwera. Wklej link do przepisu z opisu posta albo dodaj przepis ręcznie.',
     )
   }
-  return { platform: 'instagram', canonicalUrl, ...parsed }
+  const embedImage = await fetchInstagramEmbedImage(code, fetchImpl)
+  if (embedImage) return { platform: 'instagram', canonicalUrl, ...parsed, thumbnailUrl: embedImage }
+  // tylko podgląd linku: w wideo ma na środku przycisk „play”, więc oznaczamy, żeby okładka go ominęła
+  return { platform: 'instagram', canonicalUrl, ...parsed, ...(parsed.thumbnailUrl ? { thumbnailMayShowPlayButton: true } : {}) }
 }
 
 /** Opis posta lub filmu z dowolnego z obsługiwanych serwisów */

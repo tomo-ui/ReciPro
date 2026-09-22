@@ -88,14 +88,17 @@ function resizeRGBA(src: Uint8Array, sw: number, sh: number, dw: number, dh: num
  * Kadruje miniaturkę do okładki przepisu: pionowy kadr (TikTok: 9:16) przycinamy do poziomego 4:3
  * (bierzemy środek obrazu), a potem zmniejszamy do COVER_MAX_WIDTH. Obraz, który już spełnia oba
  * warunki, zostaje bez zmian (bajt w bajt).
+ *
+ * `avoidCenter`: miniatura ma na środku wypalony przycisk „play” (podgląd wideo z Instagrama), więc z pionowego obrazu
+ * bierzemy górny pas zamiast środkowego — przycisk zostaje poza okładką.
  */
-export function cropToCover(bytes: Uint8Array): Uint8Array {
+export function cropToCover(bytes: Uint8Array, opts: { avoidCenter?: boolean } = {}): Uint8Array {
   const img = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true })
   const cropHeight = Math.min(img.height, Math.round(img.width / COVER_ASPECT))
   const outWidth = Math.min(img.width, COVER_MAX_WIDTH)
   if (cropHeight === img.height && outWidth === img.width) return bytes
 
-  const top = Math.floor((img.height - cropHeight) / 2)
+  const top = opts.avoidCenter ? 0 : Math.floor((img.height - cropHeight) / 2)
   const rowBytes = img.width * 4
   let data: Uint8Array = img.data.subarray(top * rowBytes, (top + cropHeight) * rowBytes)
   let width = img.width
@@ -174,10 +177,10 @@ export async function downloadThumbnail(
 }
 
 /** Kadruje pobraną miniaturkę do okładki 4:3; przy niepowodzeniu (np. uszkodzony plik) zostawia oryginał */
-export function prepareCover(img: DownloadedImage): DownloadedImage {
+export function prepareCover(img: DownloadedImage, opts: { avoidCenter?: boolean } = {}): DownloadedImage {
   if (img.contentType !== 'image/jpeg') return img
   try {
-    return { bytes: cropToCover(img.bytes), contentType: 'image/jpeg' }
+    return { bytes: cropToCover(img.bytes, opts), contentType: 'image/jpeg' }
   } catch (e) {
     console.warn('[image] nie udało się przyciąć miniaturki, zapisuję oryginał:', (e as Error).message)
     return img

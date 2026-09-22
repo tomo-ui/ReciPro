@@ -179,7 +179,7 @@ export async function parseSocialCaption(
 
   const finishCaption = async (draft: RecipeDraft) => {
     // Miniaturka dopiero po znalezieniu przepisu, żeby nie zostawiać w Storage obrazów bez przepisu
-    const { image_url, thumbnail } = await persistThumbnail(info.thumbnailUrl, { storage, deadlineAt, fetchImpl })
+    const { image_url, thumbnail } = await persistThumbnail(info.thumbnailUrl, { storage, deadlineAt, fetchImpl, avoidCenter: info.thumbnailMayShowPlayButton })
     // Siatka bezpieczeństwa: dane podane wprost w opisie („PORCJE: 6”, „CZAS: 40 MIN”) mają pierwszeństwo
     // przed szacunkiem AI, nawet jeśli model ich nie odczytał
     const total = draft.total_minutes ?? (draft.prep_minutes || draft.cook_minutes ? undefined : totalMinutesFromText(info.caption))
@@ -211,7 +211,7 @@ export async function parseSocialCaption(
       if (!isComplete(page) && fromCaption) continue
       const cover = page.image_url
         ? { image_url: page.image_url, thumbnail: { status: 'none' } as ThumbnailInfo }
-        : await persistThumbnail(info.thumbnailUrl, { storage, deadlineAt, fetchImpl })
+        : await persistThumbnail(info.thumbnailUrl, { storage, deadlineAt, fetchImpl, avoidCenter: info.thumbnailMayShowPlayButton })
       return {
         draft: { ...page, image_url: cover.image_url, tags: normalizeTags([...page.tags, ...hashtagsFromCaption(info.caption)]) },
         thumbnail: cover.thumbnail,
@@ -253,7 +253,7 @@ export async function parseTikTokCaption(
  */
 async function persistThumbnail(
   thumbnailUrl: string | undefined,
-  { storage, deadlineAt, fetchImpl }: Pick<PipelineOptions, 'storage' | 'deadlineAt' | 'fetchImpl'>,
+  { storage, deadlineAt, fetchImpl, avoidCenter }: Pick<PipelineOptions, 'storage' | 'deadlineAt' | 'fetchImpl'> & { avoidCenter?: boolean },
 ): Promise<{ image_url?: string; thumbnail: ThumbnailInfo }> {
   if (!thumbnailUrl) return { thumbnail: { status: 'none' } }
   if (!storage) {
@@ -271,7 +271,7 @@ async function persistThumbnail(
   if (!image) return fail(reason ?? 'nie udało się pobrać miniaturki')
 
   try {
-    const image_url = await uploadRecipeImage(prepareCover(image), storage, fetchImpl)
+    const image_url = await uploadRecipeImage(prepareCover(image, { avoidCenter }), storage, fetchImpl)
     return { image_url, thumbnail: { status: 'saved' } }
   } catch (e) {
     return fail(`zapis w Storage: ${e instanceof Error ? e.message : String(e)}`.slice(0, 160))

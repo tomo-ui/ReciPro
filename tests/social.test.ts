@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { instagramCode, linksFromCaption, parseInstagramHtml, parseYouTubeHtml, socialPlatform, youtubeId } from '../api/_lib/social'
+import { fetchInstagramInfo, instagramCode, linksFromCaption, parseInstagramEmbedImage, parseInstagramHtml, parseYouTubeHtml, socialPlatform, youtubeId } from '../api/_lib/social'
 import { ParseError, parseRecipeUrl } from '../api/_lib/pipeline'
 import { downloadThumbnail } from '../api/_lib/image'
 
@@ -35,6 +35,8 @@ const NONE = { is_recipe: false, title: '', ingredients: [], steps: [] }
 interface Routes {
   youtube?: string
   instagram?: string
+  /** Strona osadzenia posta (embed); brak = 404 */
+  instagramEmbed?: string
   gemini?: unknown
   link?: () => Response
   onGemini?: (body: string) => void
@@ -47,6 +49,7 @@ function network(r: Routes) {
     const url = String(input)
     calls.push({ url, init })
     if (url.includes('youtube.com/watch')) return html(r.youtube ?? '<html></html>')
+    if (url.includes('instagram.com/p/') && url.includes('/embed/')) return r.instagramEmbed === undefined ? new Response('nie ma', { status: 404 }) : html(r.instagramEmbed)
     if (url.includes('instagram.com/p/')) return html(r.instagram ?? '<html></html>')
     if (url.includes('generativelanguage')) {
       r.onGemini?.(String(init?.body))
@@ -193,6 +196,45 @@ describe('import z YouTube', () => {
     expect(sent).toContain('Title: Sernik babci')
     expect(sent).toContain('Author: @Kuchnia Zosi')
     expect(sent).toContain('1 kg sera')
+  })
+})
+
+const EMBED_IMG = 'https://scontent.cdninstagram.com/v/t51/clean_n.jpg?stp=dst-jpg_e15&_nc_ht=scontent.cdninstagram.com&oh=abc'
+const embed = (src = EMBED_IMG) => `<html><body><div class="Embed"><img class="EmbeddedMediaImage" alt="" src="${src.replace(/&/g, '&amp;')}"></div></body></html>`
+
+describe('miniatura z Instagrama bez przycisku play', () => {
+  it('parseInstagramEmbedImage: czyste zdjęcie ze strony osadzenia (encje w adresie), inaczej undefined', () => {
+    expect(parseInstagramEmbedImage(embed())).toBe(EMBED_IMG)
+    expect(parseInstagramEmbedImage('<img src="https://x/y.jpg" class="foo EmbeddedMediaImage bar">')).toBe('https://x/y.jpg')
+    expect(parseInstagramEmbedImage('<html><img class="Avatar" src="https://x/a.jpg"></html>')).toBeUndefined()
+    expect(parseInstagramEmbedImage('<img class="EmbeddedMediaImage" src="http://x/y.jpg">')).toBeUndefined() // tylko https
+    expect(parseInstagramEmbedImage('<html></html>')).toBeUndefined()
+  })
+
+  it('używa zdjęcia z embed zamiast og:image i nie oznacza go jako podglądu z przyciskiem', async () => {
+    const { fetchImpl, calls } = network({ instagram: instagram('Sernik: 1 kg sera, 6 jaj. Utrzyj i piecz godzinę.'), instagramEmbed: embed() })
+    const info = await fetchInstagramInfo(IG_URL, fetchImpl)
+    expect(info.thumbnailUrl).toBe(EMBED_IMG)
+    expect(info.thumbnailUrl).not.toContain('abc_n.jpg') // nie miniatura z podglądu linku
+    expect(info.thumbnailMayShowPlayButton).toBeUndefined()
+    expect(calls.some((c) => c.url === 'https://www.instagram.com/p/Cabc123XYZ/embed/captioned/')).toBe(true)
+  })
+
+  it('bez strony embed zostaje og:image, oznaczony jako podgląd z przyciskiem play (okładka go ominie)', async () => {
+    const { fetchImpl } = network({ instagram: instagram('Sernik: 1 kg sera, 6 jaj. Utrzyj i piecz godzinę.') }) // embed 404
+    const info = await fetchInstagramInfo(IG_URL, fetchImpl)
+    expect(info.thumbnailUrl).toContain('abc_n.jpg')
+    expect(info.thumbnailMayShowPlayButton).toBe(true)
+    // strona embed bez zdjęcia — to samo
+    const { fetchImpl: f2 } = network({ instagram: instagram('Sernik: 1 kg sera, 6 jaj. Utrzyj i piecz godzinę.'), instagramEmbed: '<html>nic</html>' })
+    expect((await fetchInstagramInfo(IG_URL, f2)).thumbnailMayShowPlayButton).toBe(true)
+  })
+
+  it('post bez żadnej miniatury: brak flagi', async () => {
+    const page = '<html><head><meta property="og:title" content="Zosia on Instagram: &quot;Sernik: 1 kg sera, 6 jaj. Utrzyj.&quot;"></head></html>'
+    const info = await fetchInstagramInfo(IG_URL, network({ instagram: page }).fetchImpl)
+    expect(info.thumbnailUrl).toBeUndefined()
+    expect(info.thumbnailMayShowPlayButton).toBeUndefined()
   })
 })
 
