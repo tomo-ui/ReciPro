@@ -288,17 +288,26 @@
 }
 
 /*
- * Wężyk na obwódce dolnego paska: jasny łuk z gasnącym ogonem, który okrąża pasek razem z przewijaniem treści
+ * Wężyk na obwódce dolnego paska: jasny łuk, miękko zanikający na obu końcach, który okrąża pasek razem z przewijaniem treści
  * (TabBar ustawia --rim-angle proporcjonalnie do przesuniętych pikseli). Pod spodem zostaje statyczna, blada obwódka.
  */
 :root {
-  --snake-head: rgba(255, 107, 53, 0.9);
-  --snake-tail: rgba(255, 107, 53, 0);
+  --snake-rgb: 255, 107, 53;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --snake-head: rgba(255, 255, 255, 0.95);
-    --snake-tail: rgba(255, 255, 255, 0);
+    --snake-rgb: 255, 255, 255;
+  }
+}
+/* Łuk jest symetryczny: ta sama miękka „dzwonowa” krzywa nasilenia z obu stron (bez ostrego czoła), więc oba końce
+   wężyka zlewają się z obwódką tak samo. Dwie warstwy: zwykła (biała / pomarańczowa) i tęczowa; --rainbow (0–1)
+   płynnie przechodzi między nimi, a --snake-hue (0–360, ustawiany w TabBar) powoli przesuwa kolory tęczy. */
+:root {
+  --rainbow-l: 55%;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rainbow-l: 68%;
   }
 }
 .liquid-glass-snake::before {
@@ -306,10 +315,35 @@
   background:
     conic-gradient(
       from var(--rim-angle, 0deg) at 50% 50%,
-      var(--snake-tail) 0deg,
-      var(--snake-tail) 215deg,
-      var(--snake-head) 352deg,
-      var(--snake-tail) 360deg
+      rgba(var(--snake-rgb), 0) 0deg,
+      rgba(var(--snake-rgb), calc(0 * (1 - var(--rainbow, 0)))) 190deg,
+      rgba(var(--snake-rgb), calc(0.1 * (1 - var(--rainbow, 0)))) 206deg,
+      rgba(var(--snake-rgb), calc(0.32 * (1 - var(--rainbow, 0)))) 222deg,
+      rgba(var(--snake-rgb), calc(0.62 * (1 - var(--rainbow, 0)))) 238deg,
+      rgba(var(--snake-rgb), calc(0.88 * (1 - var(--rainbow, 0)))) 254deg,
+      rgba(var(--snake-rgb), calc(1 * (1 - var(--rainbow, 0)))) 270deg,
+      rgba(var(--snake-rgb), calc(0.88 * (1 - var(--rainbow, 0)))) 286deg,
+      rgba(var(--snake-rgb), calc(0.62 * (1 - var(--rainbow, 0)))) 302deg,
+      rgba(var(--snake-rgb), calc(0.32 * (1 - var(--rainbow, 0)))) 318deg,
+      rgba(var(--snake-rgb), calc(0.1 * (1 - var(--rainbow, 0)))) 334deg,
+      rgba(var(--snake-rgb), calc(0 * (1 - var(--rainbow, 0)))) 350deg,
+      rgba(var(--snake-rgb), 0) 360deg
+    ),
+    conic-gradient(
+      from var(--rim-angle, 0deg) at 50% 50%,
+      hsla(0, 0%, 0%, 0) 0deg,
+      hsla(calc(var(--snake-hue, 0) + -120), 100%, var(--rainbow-l, 68%), calc(0 * var(--rainbow, 0))) 190deg,
+      hsla(calc(var(--snake-hue, 0) + -96), 100%, var(--rainbow-l, 68%), calc(0.1 * var(--rainbow, 0))) 206deg,
+      hsla(calc(var(--snake-hue, 0) + -72), 100%, var(--rainbow-l, 68%), calc(0.32 * var(--rainbow, 0))) 222deg,
+      hsla(calc(var(--snake-hue, 0) + -48), 100%, var(--rainbow-l, 68%), calc(0.62 * var(--rainbow, 0))) 238deg,
+      hsla(calc(var(--snake-hue, 0) + -24), 100%, var(--rainbow-l, 68%), calc(0.88 * var(--rainbow, 0))) 254deg,
+      hsla(calc(var(--snake-hue, 0) + 0), 100%, var(--rainbow-l, 68%), calc(1 * var(--rainbow, 0))) 270deg,
+      hsla(calc(var(--snake-hue, 0) + 24), 100%, var(--rainbow-l, 68%), calc(0.88 * var(--rainbow, 0))) 286deg,
+      hsla(calc(var(--snake-hue, 0) + 48), 100%, var(--rainbow-l, 68%), calc(0.62 * var(--rainbow, 0))) 302deg,
+      hsla(calc(var(--snake-hue, 0) + 72), 100%, var(--rainbow-l, 68%), calc(0.32 * var(--rainbow, 0))) 318deg,
+      hsla(calc(var(--snake-hue, 0) + 96), 100%, var(--rainbow-l, 68%), calc(0.1 * var(--rainbow, 0))) 334deg,
+      hsla(calc(var(--snake-hue, 0) + 120), 100%, var(--rainbow-l, 68%), calc(0 * var(--rainbow, 0))) 350deg,
+      hsla(0, 0%, 0%, 0) 360deg
     ),
     var(--glass-rim);
 }

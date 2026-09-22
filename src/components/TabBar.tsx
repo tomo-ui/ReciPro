@@ -24,9 +24,15 @@ interface Props {
   /** Plus na środku: otwiera dodawanie przepisu */
   onAdd: () => void
   badges?: Partial<Record<Tab, number>>
+  /** Na moim profilu wężyk na obwódce płynnie zmienia się z białego w tęczowy i powoli płynie kolorami */
+  rainbow?: boolean
 }
 
 const LENS_SCALE = 1.34
+/** Pełny obieg kolorów tęczowego wężyka (ms): powoli */
+const RAINBOW_CYCLE_MS = 14000
+/** Na profilu wężyk sam okrąża pasek (stopnie na sekundę), niezależnie od przewijania: szybko, pełne okrążenie co 2 s */
+const AUTO_SWIM_DEG_PER_SEC = 180
 
 /**
  * Dolny pasek w stylu „liquid glass” z iOS 26: pływająca kapsuła, szkło z rozmyciem tła, połyskiem i jasną krawędzią
@@ -36,7 +42,7 @@ const LENS_SCALE = 1.34
  * Przytrzymanie palca na pasku powiększa „soczewkę” pod palcem (jak w Threads): można ją przeciągać nad inne zakładki,
  * a ekran zmienia się dopiero po puszczeniu palca nad wybraną zakładką. Zwykłe dotknięcie działa jak zwykle.
  */
-export function TabBar({ tab, onChange, onAdd, badges = {} }: Props) {
+export function TabBar({ tab, onChange, onAdd, badges = {}, rainbow = false }: Props) {
   const barRef = useRef<HTMLDivElement>(null)
   const slotRefs = useRef<(HTMLButtonElement | null)[]>([])
   const [scrub, setScrub] = useState<{ index: number; metrics: SlotMetric[] } | null>(null)
@@ -116,12 +122,46 @@ export function TabBar({ tab, onChange, onAdd, badges = {} }: Props) {
 
   useEffect(() => () => cancelHold(), [])
 
+  // Tęcza wężyka i samoistne pływanie: --rainbow płynnie (wykładniczo, ok. 0,3 s) dąży do 1 na profilu i do 0 poza nim, a --snake-hue
+  // przesuwa kolory o pełne koło co ~14 s (powoli „płynie”). Pętla działa tylko dopóki tęcza jest widoczna.
+  const rainbowValue = useRef(0)
+  const hue = useRef(0)
+  /** Kąt wężyka na obwódce (stopnie): zmieniają go przewijanie (efekt niżej) i samoistne pływanie na profilu */
+  const rimAngle = useRef(0)
+  useEffect(() => {
+    const bar = barRef.current
+    if (!bar) return
+    const target = rainbow ? 1 : 0
+    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      rainbowValue.current = target // bez ruchu: kolory zmieniają się od razu i stoją w miejscu
+      bar.style.setProperty('--rainbow', String(target))
+      return
+    }
+    let raf = 0
+    let last = performance.now()
+    const step = (now: number) => {
+      const dt = Math.min(64, now - last)
+      last = now
+      rainbowValue.current += (target - rainbowValue.current) * (1 - Math.exp(-dt / 300))
+      hue.current = (hue.current + (dt * 360) / RAINBOW_CYCLE_MS) % 360
+      // samoistne pływanie po pasku, płynnie rozpędzane i wygaszane razem z tęczą (bez przewijania)
+      rimAngle.current = (rimAngle.current + (dt / 1000) * AUTO_SWIM_DEG_PER_SEC * rainbowValue.current) % 360
+      const done = target === 0 && rainbowValue.current < 0.003
+      if (done) rainbowValue.current = 0
+      bar.style.setProperty('--rainbow', rainbowValue.current.toFixed(3))
+      bar.style.setProperty('--snake-hue', hue.current.toFixed(1))
+      bar.style.setProperty('--rim-angle', `${rimAngle.current.toFixed(2)}deg`)
+      if (!done) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [rainbow])
+
   // Wężyk na obwódce: kąt rośnie o tyle, ile pikseli przesunęła się treść (1 px przewinięcia = 1 px po obwodzie paska),
   // więc wolniejsze przewijanie daje wolniejszy ruch, a szybsze — szybszy; w górę wężyk biegnie w drugą stronę
   useEffect(() => {
     const bar = barRef.current
     if (!bar || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)) return
-    let angle = 0
     let queued = false
     const lastTop = new WeakMap<EventTarget, number>()
     const onScroll = (e: Event) => {
@@ -132,12 +172,12 @@ export function TabBar({ tab, onChange, onAdd, badges = {} }: Props) {
       lastTop.set(el, top)
       if (prev === undefined || top === prev) return
       const r = bar.getBoundingClientRect()
-      angle = rimAngleAfter(angle, top - prev, r.width, r.height)
+      rimAngle.current = rimAngleAfter(rimAngle.current, top - prev, r.width, r.height)
       if (!queued) {
         queued = true
         requestAnimationFrame(() => {
           queued = false
-          bar.style.setProperty('--rim-angle', `${angle}deg`)
+          bar.style.setProperty('--rim-angle', `${rimAngle.current}deg`)
         })
       }
     }
