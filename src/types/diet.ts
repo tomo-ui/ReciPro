@@ -59,3 +59,15 @@ export interface Diet {
 
 /** Dieta do zapisu: bez pól nadawanych przez bazę; `id` brak = nowa */
 export type DietDraft = Omit<Diet, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'author'> & { id?: string }
+
+/** Zestaw dań (np. stałe śniadanie) zapisany do wielokrotnego wstawiania w przyszłych dietach */
+export interface MealTemplate {
+  id: string
+  user_id: string
+  name: string
+  items: DietItem[]
+  created_at: string
+}
+
+/** Szablon posiłku do zapisu: bez pól nadawanych przez bazę; `id` brak = nowy */
+export type MealTemplateDraft = Omit<MealTemplate, 'id' | 'user_id' | 'created_at'> & { id?: string }

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Diet, DietDraft } from '@/types/diet'
-import { sanitizeDiet } from './diet'
+import type { Diet, DietDraft, MealTemplate, MealTemplateDraft } from '@/types/diet'
+import { sanitizeDiet, sanitizeMealTemplate } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeStats } from '@/types/recipe'
 import type { Backend } from './backend'
 import { deleteRecipeImage } from './images'
@@ -130,6 +130,17 @@ const dietPayload = (d: DietDraft) => ({
   source: d.source ?? null,
 })
 
+interface MealTemplateRow {
+  id: string
+  user_id: string
+  name: string
+  items: MealTemplate['items']
+  created_at: string
+}
+const toMealTemplate = (r: MealTemplateRow): MealTemplate =>
+  sanitizeMealTemplate({ id: r.id, user_id: r.user_id, name: r.name, items: r.items, created_at: r.created_at })
+const mealTemplatePayload = (t: MealTemplateDraft) => ({ name: t.name.trim(), items: t.items })
+
 const toComment = (r: CommentRow): Comment => ({
   id: r.id,
   recipe_id: r.recipe_id,
@@ -150,7 +161,7 @@ function fail(error: { code?: string; message: string }, context?: 'profile'): n
     /could not find the (function|table)/i.test(error.message)
   if (migrationMissing) {
     throw new Error(
-      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql, engagement.sql, notifications.sql i diets.sql w SQL Editorze Supabase.',
+      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql, engagement.sql, notifications.sql, diets.sql i meal_templates.sql w SQL Editorze Supabase.',
     )
   }
   if (context === 'profile' && error.code === '23505') throw new Error('Ta nazwa użytkownika jest już zajęta.')
@@ -401,6 +412,30 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
 
     async deleteDiet(id) {
       const { error } = await client().from('diets').delete().eq('id', id)
+      if (error) fail(error)
+    },
+
+    /* — zapisane posiłki — */
+
+    async listMealTemplates() {
+      const { data, error } = await client().from('meal_templates').select('*').order('created_at', { ascending: false })
+      if (error) fail(error)
+      return (data as MealTemplateRow[]).map(toMealTemplate)
+    },
+
+    async saveMealTemplate(template) {
+      if (!template.name.trim()) throw new Error('Podaj nazwę posiłku.')
+      const payload = mealTemplatePayload(template)
+      const query = template.id
+        ? client().from('meal_templates').update(payload).eq('id', template.id)
+        : client().from('meal_templates').insert(payload)
+      const { data, error } = await query.select('*').single()
+      if (error) fail(error)
+      return toMealTemplate(data as MealTemplateRow)
+    },
+
+    async deleteMealTemplate(id) {
+      const { error } = await client().from('meal_templates').delete().eq('id', id)
       if (error) fail(error)
     },
 

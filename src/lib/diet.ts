@@ -1,5 +1,5 @@
 import type { Recipe } from '@/types/recipe'
-import type { Diet, DietDraft, DietItem, DietMeal, DietSource, DietTargets } from '@/types/diet'
+import type { Diet, DietDraft, DietItem, DietMeal, DietSource, DietTargets, MealTemplate, MealTemplateDraft } from '@/types/diet'
 import type { Food, FoodDb } from './foodDb'
 import { NUTRIENT_COUNT, scaleNutrients, zeroNutrients, type Nutrients } from './nutrients'
 import { analyzeRecipe, withAmount } from './nutrition'
@@ -177,6 +177,33 @@ export function copyDiet(diet: Pick<Diet, 'id' | 'user_id' | 'title' | 'descript
       ...m,
       id: id(),
       items: m.items.map((it) => ({ ...it, id: id(), lines: it.lines.map((l) => ({ ...l })) })),
+    })),
+  }
+}
+
+/* — zapisane posiłki (do wielokrotnego użytku) — */
+
+const cloneItems = (items: DietItem[]): DietItem[] => items.map((it) => ({ ...it, id: id(), lines: it.lines.map((l) => ({ ...l })) }))
+
+/** Zestaw dań z posiłku jako szablon do zapisu; świeże identyfikatory, żeby nie dzielić referencji z dietą */
+export function templateFromMeal(meal: Pick<DietMeal, 'name' | 'items'>): MealTemplateDraft {
+  return { name: meal.name, items: cloneItems(meal.items) }
+}
+
+/** Dania z szablonu do wstawienia w posiłku; świeże identyfikatory przy każdym wstawieniu */
+export function itemsFromTemplate(template: Pick<MealTemplate, 'items'>): DietItem[] {
+  return cloneItems(template.items)
+}
+
+/** Uzupełnia brakujące pola dokumentu z bazy (starsze lub ręcznie zmienione dane) */
+export function sanitizeMealTemplate<T extends Pick<MealTemplate, 'items'>>(t: T): T {
+  return {
+    ...t,
+    items: (Array.isArray(t.items) ? t.items : []).map((it) => ({
+      ...it,
+      id: it.id || id(),
+      portions: Number.isFinite(it.portions) && it.portions > 0 ? it.portions : 1,
+      lines: Array.isArray(it.lines) ? it.lines : [],
     })),
   }
 }

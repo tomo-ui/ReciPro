@@ -1,5 +1,5 @@
-import type { Diet } from '@/types/diet'
-import { newMeals, itemFromRecipe, sanitizeDiet, withPortions } from './diet'
+import type { Diet, MealTemplate } from '@/types/diet'
+import { newMeals, itemFromRecipe, sanitizeDiet, sanitizeMealTemplate, withPortions } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
 import type { Backend, FeedMode, ProfilePatch, RecipeSort } from './backend'
 import { emit, on } from './events'
@@ -25,6 +25,7 @@ const KEYS = {
   comments: 'przepisy:v2:comments',
   notifications: 'przepisy:v2:notifications',
   diets: 'przepisy:v2:diets',
+  mealTemplates: 'przepisy:v2:mealTemplates',
   interests: 'przepisy:v2:interests',
   hideTestAccounts: 'przepisy:v2:hide-test-accounts',
 }
@@ -192,6 +193,9 @@ function visibleNotifications(): AppNotification[] {
 
 const loadMyDiets = () => read<Diet[]>(KEYS.diets, () => []).map(sanitizeDiet)
 const saveMyDiets = (list: Diet[]) => write(KEYS.diets, list)
+
+const loadMealTemplates = () => read<MealTemplate[]>(KEYS.mealTemplates, () => []).map(sanitizeMealTemplate)
+const saveMealTemplatesList = (list: MealTemplate[]) => write(KEYS.mealTemplates, list)
 
 let demoDietCache: Diet[] | undefined
 /** Jedna przykładowa, udostępniona dieta Anny, żeby dało się wypróbować oglądanie i zapisywanie cudzej diety */
@@ -584,6 +588,31 @@ export const localBackend: Backend = {
 
   async deleteDiet(id) {
     saveMyDiets(loadMyDiets().filter((d) => d.id !== id))
+  },
+
+  async listMealTemplates() {
+    return loadMealTemplates().sort((a, b) => b.created_at.localeCompare(a.created_at))
+  },
+
+  async saveMealTemplate(draft) {
+    if (!draft.name.trim()) throw new Error('Podaj nazwę posiłku.')
+    const now = new Date().toISOString()
+    const list = loadMealTemplates()
+    const existing = draft.id ? list.find((t) => t.id === draft.id) : undefined
+    if (draft.id && !existing) throw new Error('Brak uprawnień do tego posiłku.')
+    const saved: MealTemplate = {
+      ...draft,
+      name: draft.name.trim(),
+      id: existing?.id ?? crypto.randomUUID(),
+      user_id: LOCAL_USER_ID,
+      created_at: existing?.created_at ?? now,
+    }
+    saveMealTemplatesList(existing ? list.map((t) => (t.id === saved.id ? saved : t)) : [saved, ...list])
+    return saved
+  },
+
+  async deleteMealTemplate(id) {
+    saveMealTemplatesList(loadMealTemplates().filter((t) => t.id !== id))
   },
 
   async getRecipeStats(ids) {

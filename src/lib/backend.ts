@@ -1,4 +1,4 @@
-import type { Diet, DietDraft } from '@/types/diet'
+import type { Diet, DietDraft, MealTemplate, MealTemplateDraft } from '@/types/diet'
 import type {
   AppNotification,
   Comment,
@@ -84,6 +84,13 @@ export interface Backend {
   /** Bez `id` tworzy nową dietę, z `id` zapisuje zmiany we własnej */
   saveDiet(diet: DietDraft): Promise<Diet>
   deleteDiet(id: string): Promise<void>
+
+  /* — zapisane posiłki (np. stałe śniadanie, do wstawienia w przyszłych dietach) — */
+  /** Moje zapisane posiłki, od ostatnio dodanego */
+  listMealTemplates(): Promise<MealTemplate[]>
+  /** Bez `id` tworzy nowy szablon, z `id` zapisuje zmiany we własnym */
+  saveMealTemplate(template: MealTemplateDraft): Promise<MealTemplate>
+  deleteMealTemplate(id: string): Promise<void>
 
   /* — odkrywanie — */
   searchRecipes(query: string, sort: RecipeSort, offset: number, limit: number): Promise<Recipe[]>

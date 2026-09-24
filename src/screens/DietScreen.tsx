@@ -22,7 +22,8 @@ import { useFoodDb } from '@/hooks/useFoodDb'
 import { Avatar } from '@/components/Avatar'
 import { DietItemSheet } from '@/components/DietItemSheet'
 import { DishPicker } from '@/components/DishPicker'
-import { CheckIcon, ChevronDownIcon, MinusIcon, PlusIcon, SpinnerIcon, TrashIcon } from '@/components/Icons'
+import { BookmarkIcon, CheckIcon, ChevronDownIcon, MinusIcon, PlusIcon, SpinnerIcon, TrashIcon } from '@/components/Icons'
+import { MealTemplateSheet } from '@/components/MealTemplateSheet'
 import { Bar, MacroLine, NutritionSummary } from '@/components/NutritionSummary'
 import { TargetsEditor } from '@/components/TargetsEditor'
 import { Toggle } from '@/components/formParts'
@@ -64,6 +65,7 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
   const [saveError, setSaveError] = useState<string | null>(null)
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [picking, setPicking] = useState<string | null>(null) // id posiłku, do którego dodajemy
+  const [templating, setTemplating] = useState<string | null>(null) // id posiłku, do którego wstawiamy zapisany szablon
   const [editing, setEditing] = useState<{ mealId: string; itemId: string } | null>(null)
   const [copying, setCopying] = useState(false)
 
@@ -147,6 +149,7 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
   const patchMeal = (mealId: string, fn: (m: DietMeal) => DietMeal) => setMeals((meals) => meals.map((m) => (m.id === mealId ? fn(m) : m)))
   const patchItem = (mealId: string, item: DietItem) => patchMeal(mealId, (m) => ({ ...m, items: m.items.map((i) => (i.id === item.id ? item : i)) }))
   const addItem = (mealId: string, item: DietItem) => patchMeal(mealId, (m) => ({ ...m, items: [...m.items, item] }))
+  const addItems = (mealId: string, items: DietItem[]) => patchMeal(mealId, (m) => ({ ...m, items: [...m.items, ...items] }))
   const removeItem = (mealId: string, itemId: string) => patchMeal(mealId, (m) => ({ ...m, items: m.items.filter((i) => i.id !== itemId) }))
 
   function setShare(mealId: string, share: number) {
@@ -359,9 +362,14 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
               </ul>
 
               {!readOnly && (
-                <button onClick={() => setPicking(meal.id)} className="flex w-full items-center justify-center gap-1.5 border-t border-separator py-3 text-[15px] font-semibold text-accent active:bg-surface-2">
-                  <PlusIcon width={16} height={16} /> Dodaj danie
-                </button>
+                <div className="flex border-t border-separator">
+                  <button onClick={() => setPicking(meal.id)} className="flex flex-1 items-center justify-center gap-1.5 py-3 text-[15px] font-semibold text-accent active:bg-surface-2">
+                    <PlusIcon width={16} height={16} /> Dodaj danie
+                  </button>
+                  <button onClick={() => setTemplating(meal.id)} aria-label="Zapisane posiłki" className="flex w-14 items-center justify-center border-l border-separator text-accent active:bg-surface-2">
+                    <BookmarkIcon width={18} height={18} />
+                  </button>
+                </div>
               )}
             </section>
           )
@@ -409,6 +417,17 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
               addItem(picking, itemFromFood(food, grams))
               setPicking(null)
             }}
+          />
+        )}
+        {templating && (
+          <MealTemplateSheet
+            key="templates"
+            currentMeal={diet.meals.find((m) => m.id === templating) ?? { name: '', items: [] }}
+            onInsert={(items) => {
+              addItems(templating, items)
+              setTemplating(null)
+            }}
+            onClose={() => setTemplating(null)}
           />
         )}
         {editingMeal && editingItem && analysis && (
