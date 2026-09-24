@@ -177,6 +177,7 @@ export function copyDiet(diet: Pick<Diet, 'id' | 'user_id' | 'title' | 'descript
       ...m,
       id: id(),
       items: m.items.map((it) => ({ ...it, id: id(), lines: it.lines.map((l) => ({ ...l })) })),
+      savedTemplateId: undefined, // kopia to inny właściciel — jeszcze nie zapisał tego posiłku jako swojego szablonu
     })),
   }
 }
@@ -221,6 +222,7 @@ export function sanitizeDiet<T extends Pick<Diet, 'meals' | 'targets'>>(d: T): T
       portions: Number.isFinite(it.portions) && it.portions > 0 ? it.portions : 1,
       lines: Array.isArray(it.lines) ? it.lines : [],
     })),
+    savedTemplateId: m.savedTemplateId,
   }))
   return { ...d, targets, meals: meals.length ? normalizeShares(meals) : meals }
 }

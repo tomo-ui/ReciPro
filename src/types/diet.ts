@@ -19,6 +19,8 @@ export interface DietMeal {
   /** Jaka część dziennych kalorii przypada na ten posiłek (w procentach, suma wszystkich = 100) */
   share: number
   items: DietItem[]
+  /** Id zapisanego szablonu, jeśli ten posiłek już zapisano — blokuje ponowny zapis (bez duplikatów) */
+  savedTemplateId?: string
 }
 
 /** Cele dzienne */

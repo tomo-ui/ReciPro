@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { Profile, Recipe } from '@/types/recipe'
+import type { Profile } from '@/types/recipe'
 import type { Diet, DietDraft, DietItem, DietMeal } from '@/types/diet'
 import { backend } from '@/lib/data'
 import {
@@ -8,31 +8,30 @@ import {
   copyDiet,
   dayTargetOf,
   itemFromFood,
-  itemFromRecipe,
   mealLayout,
   mealTargetOf,
   MAX_MEALS,
   normalizeShares,
   sumNutrients,
+  templateFromMeal,
   withPortions,
 } from '@/lib/diet'
 import { IDX, formatAmount } from '@/lib/nutrients'
-import { coverGradient, timeAgo } from '@/lib/ui'
+import { coverGradient, spring, timeAgo } from '@/lib/ui'
 import { useFoodDb } from '@/hooks/useFoodDb'
 import { Avatar } from '@/components/Avatar'
+import { AddDishSheet } from '@/components/AddDishSheet'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DietItemSheet } from '@/components/DietItemSheet'
-import { DishPicker } from '@/components/DishPicker'
 import { BookmarkIcon, CheckIcon, ChevronDownIcon, MinusIcon, PlusIcon, SpinnerIcon, TrashIcon } from '@/components/Icons'
-import { MealTemplateSheet } from '@/components/MealTemplateSheet'
 import { Bar, MacroLine, NutritionSummary } from '@/components/NutritionSummary'
+import { SaveMealSheet } from '@/components/SaveMealSheet'
 import { TargetsEditor } from '@/components/TargetsEditor'
 import { Toggle } from '@/components/formParts'
 
 interface Props {
   dietId: string
   me: Profile
-  /** Moje przepisy do wyboru przy dodawaniu dania */
-  recipes: Recipe[]
   onOpenProfile: (username: string) => void
   /** Cudza dieta została zapisana u mnie — pokazujemy kopię do dalszych zmian */
   onCopied: (diet: Diet) => void
@@ -57,17 +56,26 @@ type SaveState = 'saved' | 'pending' | 'saving' | 'error'
  * Dieta: dzienne podsumowanie względem celu, posiłki z daniami, dodawanie dań, zmiana porcji i gramatur,
  * dopasowanie dania do celu posiłku. Własna dieta zapisuje się sama; cudzą można obejrzeć i zapisać u siebie.
  */
-export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDeleted, onChanged }: Props) {
+export function DietScreen({ dietId, me, onOpenProfile, onCopied, onDeleted, onChanged }: Props) {
   const db = useFoodDb()
   const [diet, setDiet] = useState<Diet | null | undefined>(undefined)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [goalsOpen, setGoalsOpen] = useState(false)
-  const [picking, setPicking] = useState<string | null>(null) // id posiłku, do którego dodajemy
-  const [templating, setTemplating] = useState<string | null>(null) // id posiłku, do którego wstawiamy zapisany szablon
+  const [adding, setAdding] = useState<string | null>(null) // id posiłku, do którego dodajemy składnik
   const [editing, setEditing] = useState<{ mealId: string; itemId: string } | null>(null)
   const [copying, setCopying] = useState(false)
+  const [saving, setSaving] = useState<string | null>(null) // id posiłku, dla którego otwarty jest panel zapisu
+  const [toast, setToast] = useState<string | null>(null)
+  const [confirmDeleteDiet, setConfirmDeleteDiet] = useState(false)
+  const [pendingMealCount, setPendingMealCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 1400)
+    return () => clearTimeout(t)
+  }, [toast])
 
   useEffect(() => {
     let alive = true
@@ -162,18 +170,25 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
     })
   }
 
-  function setMealCount(n: number) {
-    const count = Math.min(MAX_MEALS, Math.max(1, n))
-    if (count === diet!.meals.length) return
-    if (count < diet!.meals.length) {
-      const removed = diet!.meals.slice(count)
-      if (removed.some((m) => m.items.length > 0) && !confirm('Usunięte posiłki zawierają dania. Usunąć je z diety?')) return
-    }
+  function applyMealCount(count: number) {
     setMeals((meals) => {
       const layout = mealLayout(count)
       const next = Array.from({ length: count }, (_, i): DietMeal => meals[i] ?? { id: crypto.randomUUID(), name: layout[i].name, share: layout[i].share, items: [] })
       return next.map((m, i) => ({ ...m, share: layout[i].share })) // domyślny podział kalorii dla nowej liczby posiłków
     })
+  }
+
+  function setMealCount(n: number) {
+    const count = Math.min(MAX_MEALS, Math.max(1, n))
+    if (count === diet!.meals.length) return
+    if (count < diet!.meals.length) {
+      const removed = diet!.meals.slice(count)
+      if (removed.some((m) => m.items.length > 0)) {
+        setPendingMealCount(count)
+        return
+      }
+    }
+    applyMealCount(count)
   }
 
   async function saveCopy() {
@@ -188,6 +203,16 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
       setSaveError(e instanceof Error ? e.message : 'Nie udało się zapisać diety.')
       setCopying(false)
     }
+  }
+
+  /** Zapisuje posiłek jako szablon pod podaną (edytowalną) nazwą. Tylko raz na posiłek. */
+  async function saveMealAs(mealId: string, name: string) {
+    const meal = diet!.meals.find((m) => m.id === mealId)
+    if (!meal) return
+    const saved = await backend.saveMealTemplate(templateFromMeal({ ...meal, name }))
+    patchMeal(mealId, (m) => ({ ...m, savedTemplateId: saved.id }))
+    setSaving(null)
+    setToast('Zapisano posiłek')
   }
 
   const editingMeal = editing ? diet.meals.find((m) => m.id === editing.mealId) : undefined
@@ -331,8 +356,8 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
               <ul className="divide-y divide-separator border-t border-separator">
                 {meal.items.map((item, i) => {
                   const n = mealAnalysis?.items[i]?.n
-                  return (
-                    <li key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                  const row = (
+                    <>
                       <button onClick={() => setEditing({ mealId: meal.id, itemId: item.id })} className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-label={`Otwórz: ${item.title}`}>
                         <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[10px]" style={{ background: coverGradient(item.title) }}>
                           {item.image_url && <img src={item.image_url} alt="" draggable={false} loading="lazy" className="absolute inset-0 h-full w-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />}
@@ -355,7 +380,16 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
                           </MiniStep>
                         </span>
                       )}
+                    </>
+                  )
+                  return readOnly ? (
+                    <li key={item.id} className="flex items-center gap-3 bg-surface px-4 py-2.5">
+                      {row}
                     </li>
+                  ) : (
+                    <SwipeableRow key={item.id} onDelete={() => removeItem(meal.id, item.id)}>
+                      {row}
+                    </SwipeableRow>
                   )
                 })}
                 {meal.items.length === 0 && <li className="px-4 py-3 text-[14px] text-label-2">Brak dań w tym posiłku.</li>}
@@ -363,11 +397,17 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
 
               {!readOnly && (
                 <div className="flex border-t border-separator">
-                  <button onClick={() => setPicking(meal.id)} className="flex flex-1 items-center justify-center gap-1.5 py-3 text-[15px] font-semibold text-accent active:bg-surface-2">
-                    <PlusIcon width={16} height={16} /> Dodaj danie
+                  <button onClick={() => setAdding(meal.id)} className="flex flex-1 items-center justify-center gap-1.5 py-3 text-[15px] font-semibold text-accent active:bg-surface-2">
+                    <PlusIcon width={16} height={16} /> Dodaj składnik
                   </button>
-                  <button onClick={() => setTemplating(meal.id)} aria-label="Zapisane posiłki" className="flex w-14 items-center justify-center border-l border-separator text-accent active:bg-surface-2">
-                    <BookmarkIcon width={18} height={18} />
+                  <button
+                    onClick={() => setSaving(meal.id)}
+                    disabled={meal.items.length === 0 || !!meal.savedTemplateId}
+                    aria-label={meal.savedTemplateId ? 'Posiłek zapisany' : 'Zapisz posiłek na później'}
+                    // Puste = przygaszone (nic do zapisania); już zapisane zostaje w pełni widoczne — to potwierdzenie, nie blokada
+                    className={`flex w-14 items-center justify-center border-l border-separator text-accent active:bg-surface-2 ${meal.items.length === 0 ? 'opacity-40' : ''}`}
+                  >
+                    <BookmarkIcon width={18} height={18} filled={!!meal.savedTemplateId} />
                   </button>
                 </div>
               )}
@@ -389,13 +429,7 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
           </div>
 
           <button
-            onClick={() => {
-              if (confirm('Usunąć tę dietę?')) void backend.deleteDiet(diet.id).then(() => {
-                dirty.current = false
-                onChanged()
-                onDeleted()
-              })
-            }}
+            onClick={() => setConfirmDeleteDiet(true)}
             className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-surface py-3.5 text-[16px] font-medium text-red-500 active:opacity-60"
           >
             <TrashIcon width={18} height={18} /> Usuń dietę
@@ -404,30 +438,26 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
       )}
 
       <AnimatePresence>
-        {picking && (
-          <DishPicker
-            key="picker"
-            recipes={recipes}
-            onClose={() => setPicking(null)}
-            onPickRecipe={(r) => {
-              addItem(picking, itemFromRecipe(r))
-              setPicking(null)
-            }}
+        {adding && (
+          <AddDishSheet
+            key="add-dish"
             onPickFood={(food, grams) => {
-              addItem(picking, itemFromFood(food, grams))
-              setPicking(null)
+              addItem(adding, itemFromFood(food, grams))
+              setAdding(null)
             }}
+            onInsertTemplate={(items) => {
+              addItems(adding, items)
+              setAdding(null)
+            }}
+            onClose={() => setAdding(null)}
           />
         )}
-        {templating && (
-          <MealTemplateSheet
-            key="templates"
-            currentMeal={diet.meals.find((m) => m.id === templating) ?? { name: '', items: [] }}
-            onInsert={(items) => {
-              addItems(templating, items)
-              setTemplating(null)
-            }}
-            onClose={() => setTemplating(null)}
+        {saving && (
+          <SaveMealSheet
+            key="save-meal"
+            meal={diet.meals.find((m) => m.id === saving) ?? { name: '', items: [] }}
+            onSave={(name) => saveMealAs(saving, name)}
+            onClose={() => setSaving(null)}
           />
         )}
         {editingMeal && editingItem && analysis && (
@@ -443,6 +473,50 @@ export function DietScreen({ dietId, me, recipes, onOpenProfile, onCopied, onDel
             onRemove={() => removeItem(editingMeal.id, editingItem.id)}
             onClose={() => setEditing(null)}
           />
+        )}
+        {confirmDeleteDiet && (
+          <ConfirmDialog
+            key="confirm-delete-diet"
+            title="Usunąć tę dietę?"
+            onCancel={() => setConfirmDeleteDiet(false)}
+            onConfirm={() => {
+              setConfirmDeleteDiet(false)
+              void backend.deleteDiet(diet.id).then(() => {
+                dirty.current = false
+                onChanged()
+                onDeleted()
+              })
+            }}
+          />
+        )}
+        {pendingMealCount !== null && (
+          <ConfirmDialog
+            key="confirm-meal-count"
+            title="Usunięte posiłki zawierają dania"
+            message="Usunąć je z diety?"
+            onCancel={() => setPendingMealCount(null)}
+            onConfirm={() => {
+              applyMealCount(pendingMealCount)
+              setPendingMealCount(null)
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {toast && (
+          <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center px-8">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="flex items-center gap-2 rounded-[14px] border border-separator bg-surface px-4 py-3 text-[15px] font-medium shadow-2xl"
+            >
+              <CheckIcon width={18} height={18} className="shrink-0 text-accent" />
+              {toast}
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
@@ -472,5 +546,46 @@ function MiniStep({ children, label, onClick }: { children: React.ReactNode; lab
     <motion.button whileTap={{ scale: 0.85 }} onClick={onClick} aria-label={label} className="flex h-7 w-7 items-center justify-center rounded-full bg-surface-2 text-label">
       {children}
     </motion.button>
+  )
+}
+
+/** Danie z posiłku, jak w iOS: przesunięcie w lewo odsłania przycisk usuwania pod spodem */
+const SWIPE_REVEAL = 76
+
+function SwipeableRow({ onDelete, children }: { onDelete: () => void; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <li className="relative overflow-hidden">
+      <div className="absolute inset-y-0 right-0" style={{ width: SWIPE_REVEAL }}>
+        <motion.button
+          whileTap={{ opacity: 0.7 }}
+          onClick={() => {
+            onDelete()
+            setOpen(false)
+          }}
+          aria-label="Usuń danie"
+          className="flex h-full w-full items-center justify-center bg-red-500 text-white"
+        >
+          <TrashIcon width={20} height={20} />
+        </motion.button>
+      </div>
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -SWIPE_REVEAL, right: 0 }}
+        dragElastic={{ left: 0.08, right: 0 }}
+        animate={{ x: open ? -SWIPE_REVEAL : 0 }}
+        transition={spring}
+        // Gdy otwarte, dowolne dotknięcie wiersza zamyka je zamiast otwierać szczegóły dania pod spodem
+        onClickCapture={(e) => {
+          if (!open) return
+          e.stopPropagation()
+          setOpen(false)
+        }}
+        onDragEnd={(_, info) => setOpen(info.offset.x < -SWIPE_REVEAL / 2 || info.velocity.x < -500)}
+        className="relative z-10 flex items-center gap-3 bg-surface px-4 py-2.5"
+      >
+        {children}
+      </motion.div>
+    </li>
   )
 }

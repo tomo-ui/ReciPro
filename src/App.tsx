@@ -319,7 +319,6 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               <DietScreen
                 dietId={entry.id}
                 me={me}
-                recipes={mine.recipes}
                 onOpenProfile={openProfile}
                 onCopied={(d) => replaceWithOwnDiet(d.id)}
                 onDeleted={pop}

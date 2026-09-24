@@ -14,6 +14,8 @@ interface Props {
   /** true = po wyborze produktu pytamy o gramaturę (dodawanie składnika); false = tylko wybór produktu */
   askAmount?: boolean
   initialQuery?: string
+  /** true = bez własnego Sheet/nagłówka — do osadzenia w cudzym arkuszu (np. jako zakładka). Rodzic daje „Anuluj”/„Gotowe”. */
+  embedded?: boolean
   onPick: (food: Food, grams?: number) => void
   onClose: () => void
 }
@@ -32,7 +34,7 @@ export const gramStep = (g: number) => (g < 50 ? 5 : g < 250 ? 10 : g < 1000 ? 2
 const countStep = (unit: PortionKey) => (unit === 't' || unit === 's' || unit === 'c' ? 0.5 : 1)
 
 /** Wyszukiwarka składników z bazy (kilka tysięcy produktów, lokalnie) z wyborem gramatury */
-export function FoodPicker({ title = 'Baza składników', askAmount, initialQuery = '', onPick, onClose }: Props) {
+export function FoodPicker({ title = 'Baza składników', askAmount, initialQuery = '', embedded, onPick, onClose }: Props) {
   const db = useFoodDb()
   const [query, setQuery] = useState(initialQuery)
   const debounced = useDebounced(query, 150)
@@ -49,18 +51,37 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
     else onPick(food)
   }
 
-  return createPortal(
-    <Sheet onClose={onClose}>
-      <header className="flex h-11 shrink-0 items-center justify-between px-4">
-        <button onClick={selected ? () => setSelected(null) : onClose} className="text-[17px] text-accent active:opacity-50">
-          {selected ? 'Wstecz' : 'Anuluj'}
-        </button>
-        <h2 className="text-[17px] font-semibold">{title}</h2>
-        <span className="w-14" />
-      </header>
+  const content = (
+    <>
+      {/* embedded: rodzic ma własny nagłówek — tu tylko „Wstecz” z gramatury do listy, gdy trzeba */}
+      {embedded ? (
+        selected && (
+          <div className="flex h-9 shrink-0 items-center px-4">
+            <button onClick={() => setSelected(null)} className="text-[15px] text-accent active:opacity-50">
+              ‹ Wstecz
+            </button>
+          </div>
+        )
+      ) : (
+        <header className="flex h-11 shrink-0 items-center justify-between px-4">
+          <button onClick={selected ? () => setSelected(null) : onClose} className="text-[17px] text-accent active:opacity-50">
+            {selected ? 'Wstecz' : 'Anuluj'}
+          </button>
+          <h2 className="text-[17px] font-semibold">{title}</h2>
+          <span className="w-14" />
+        </header>
+      )}
 
       {selected ? (
-        <AmountStep food={selected} onAdd={(grams) => onPick(selected, grams)} />
+        <AmountStep
+          food={selected}
+          onAdd={(grams) => {
+            onPick(selected, grams)
+            // Wraca do listy — rodzic (osadzenie) nie musi zamykać arkusza po każdym dodaniu
+            setSelected(null)
+            setQuery('')
+          }}
+        />
       ) : (
         <>
           <div className="px-4 pt-1 pb-3">
@@ -142,9 +163,11 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
           </div>
         </>
       )}
-    </Sheet>,
-    document.body,
+    </>
   )
+
+  if (embedded) return content
+  return createPortal(<Sheet onClose={onClose}>{content}</Sheet>, document.body)
 }
 
 /**
