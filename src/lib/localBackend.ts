@@ -22,6 +22,7 @@ const KEYS = {
   profile: 'przepisy:v2:profile',
   follows: 'przepisy:v2:follows',
   likes: 'przepisy:v2:likes',
+  views: 'przepisy:v2:views',
   comments: 'przepisy:v2:comments',
   notifications: 'przepisy:v2:notifications',
   diets: 'przepisy:v2:diets',
@@ -318,6 +319,10 @@ const saveComments = (list: Comment[]) => write(KEYS.comments, list)
 
 /** Liczby polubień pod przykładowymi przepisami są stałe (z hasha id), własne polubienie dolicza się do nich */
 const baseLikes = (recipeId: string) => (recipeId.startsWith('demo-') ? hash(recipeId) % 23 : 0)
+/** Wyświetlenia i zapisania przykładowych przepisów: też stałe z hasha, żeby ranking popularności miał na czym stanąć */
+const baseViews = (recipeId: string) => (recipeId.startsWith('demo-') ? hash(`${recipeId}v`) % 500 : 0)
+const baseSaves = (recipeId: string) => (recipeId.startsWith('demo-') ? hash(`${recipeId}s`) % 12 : 0)
+const loadViews = () => new Set(read<string[]>(KEYS.views, () => []))
 
 /** Obserwujący i obserwowani w trybie demo: przykładowe osoby (prawdziwych relacji tu nie ma) */
 function demoPeople(target: Profile, kind: 'followers' | 'following'): Profile[] {
@@ -459,8 +464,14 @@ export const localBackend: Backend = {
 
   /** Odpowiednik supabase/engagement.sql (public.feed): obserwowani i pasujący do zainteresowań/polubień, potem reszta */
   async feed(mode: FeedMode, seed: string, offset, limit) {
+    const me = loadMe()
     const followed = loadFollows()
-    const flagged = publicDemoRecipes().map((r) => ({ ...r, author: { ...r.author!, followed: followed.has(r.user_id ?? '') } }))
+    // Własne posty widzę tak, jakbym siebie obserwował — trafiają do „Obserwowani” i są rekomendowane w „Dla Ciebie”
+    const own = loadOwn().filter(isPost).map((r) => withAuthor(r, me))
+    const flagged = [...own, ...publicDemoRecipes()].map((r) => ({
+      ...r,
+      author: { ...r.author!, followed: r.user_id === me.id || followed.has(r.user_id ?? '') },
+    }))
     if (mode === 'newest') return page(flagged.filter((r) => r.author.followed).sort(newestFirst), offset, limit)
 
     const interests = loadInterests().map(fold)
@@ -484,6 +495,36 @@ export const localBackend: Backend = {
     })
     scored.sort((a, b) => Number(b.recommended) - Number(a.recommended) || (a.recommended ? b.rank - a.rank : newestFirst(a.r, b.r)))
     return page(scored.map((s) => s.r), offset, limit)
+  },
+
+  async recordView(recipeId) {
+    const v = loadViews()
+    v.add(recipeId)
+    write(KEYS.views, [...v])
+  },
+
+  /** Odpowiednik supabase/trending.sql (public.trending_recipes): wyświetlenia + polubienia×3 + komentarze×4 + zapisania×5 */
+  async trending(limit) {
+    const me = loadMe()
+    const own = loadOwn().filter(isPost).map((r) => withAuthor(r, me))
+    const all = [...own, ...publicDemoRecipes()]
+    const cutoffMs = 14 * 86_400_000
+    const withinWindow = all.filter((r) => Date.now() - new Date(r.created_at).getTime() <= cutoffMs)
+
+    const views = loadViews()
+    const liked = loadLikes()
+    const comments = loadComments()
+    const savedCopies = loadOwn()
+    const scored = withinWindow.map((r) => {
+      const viewCount = baseViews(r.id) + (views.has(r.id) ? 1 : 0)
+      const likeCount = baseLikes(r.id) + (liked.has(r.id) ? 1 : 0)
+      const commentCount = comments.filter((c) => c.recipe_id === r.id).length
+      const saveCount = baseSaves(r.id) + savedCopies.filter((s) => s.saved_from?.recipe_id === r.id).length
+      const score = viewCount + likeCount * 3 + commentCount * 4 + saveCount * 5
+      return { r, score }
+    })
+    scored.sort((a, b) => b.score - a.score || newestFirst(a.r, b.r))
+    return scored.slice(0, limit).map((s) => s.r)
   },
 
   async getAdminSettings() {

@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type Ref } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Recipe } from '@/types/recipe'
 import { fold } from '@/lib/text'
 import { isSavedRecipe } from '@/lib/cookbook'
-import { LargeTitleScreen } from '@/components/LargeTitleScreen'
+import { LargeTitleScreen, type LargeTitleScreenHandle } from '@/components/LargeTitleScreen'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { RecipeCard } from '@/components/RecipeCard'
 import { SearchIcon } from '@/components/Icons'
@@ -15,6 +15,8 @@ interface Props {
   onRetry: () => void
   onOpen: (recipe: Recipe) => void
   onAdd: () => void
+  /** Dotknięcie zakładki „Przepisy”, gdy już na niej jesteśmy, przewija ją do góry */
+  topRef?: Ref<LargeTitleScreenHandle>
 }
 
 type Scope = 'all' | 'own' | 'saved'
@@ -23,7 +25,7 @@ type Scope = 'all' | 'own' | 'saved'
  * Zakładka „Przepisy”: moja książka kucharska (archiwum) — moje przepisy (posty i te tylko dla mnie) oraz zapisane od innych,
  * z oznaczeniem autora oryginału i szybkim filtrem po tytule, tagach i składnikach.
  */
-export function RecipeListScreen({ recipes, loading, error, onRetry, onOpen, onAdd }: Props) {
+export function RecipeListScreen({ recipes, loading, error, onRetry, onOpen, onAdd, topRef }: Props) {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<Scope>('all')
 
@@ -38,9 +40,7 @@ export function RecipeListScreen({ recipes, loading, error, onRetry, onOpen, onA
   }, [recipes, query, scope])
 
   return (
-    <LargeTitleScreen
-      title="Przepisy"
-    >
+    <LargeTitleScreen ref={topRef} title="Przepisy">
       <div className="mb-3">
         <SegmentedControl<Scope>
           value={scope}

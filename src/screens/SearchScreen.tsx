@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type Ref } from 'react'
 import type { Recipe } from '@/types/recipe'
 import type { RecipeSort } from '@/lib/backend'
 import { backend } from '@/lib/data'
 import { useDebounced } from '@/hooks/useDebounced'
 import { usePaged } from '@/hooks/usePaged'
 import { SearchIcon, XIcon } from '@/components/Icons'
-import { LargeTitleScreen } from '@/components/LargeTitleScreen'
+import { LargeTitleScreen, type LargeTitleScreenHandle } from '@/components/LargeTitleScreen'
 import { LoadMore } from '@/components/LoadMore'
 import { PersonRow } from '@/components/PersonRow'
 import { RecipeCard } from '@/components/RecipeCard'
@@ -14,6 +14,8 @@ import { SegmentedControl } from '@/components/SegmentedControl'
 interface Props {
   onOpenRecipe: (r: Recipe) => void
   onOpenProfile: (username: string) => void
+  /** Dotknięcie zakładki „Szukaj”, gdy już na niej jesteśmy, przewija ją do góry */
+  topRef?: Ref<LargeTitleScreenHandle>
 }
 
 type Scope = 'recipes' | 'people'
@@ -22,7 +24,7 @@ type Scope = 'recipes' | 'people'
  * Wyszukiwarka po całej społeczności: przepisy (tytuł, opis, tagi, składniki — bez rozróżniania
  * ogonków i wielkości liter, wszystkie słowa muszą pasować) oraz osoby (nazwa użytkownika lub imię i nazwisko).
  */
-export function SearchScreen({ onOpenRecipe, onOpenProfile }: Props) {
+export function SearchScreen({ onOpenRecipe, onOpenProfile, topRef }: Props) {
   const [text, setText] = useState('')
   const [scope, setScope] = useState<Scope>('recipes')
   const [sort, setSort] = useState<RecipeSort>('relevance')
@@ -40,7 +42,7 @@ export function SearchScreen({ onOpenRecipe, onOpenProfile }: Props) {
   const list = scope === 'recipes' ? recipes : people
 
   return (
-    <LargeTitleScreen title="Szukaj" noLargeTitle>
+    <LargeTitleScreen ref={topRef} title="Szukaj" noLargeTitle>
       <label className="mb-3 flex items-center gap-2 rounded-[10px] bg-surface-2 px-2.5 py-2 text-label-2">
         <SearchIcon width={17} height={17} />
         <input

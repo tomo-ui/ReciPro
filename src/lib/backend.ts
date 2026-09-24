@@ -96,6 +96,10 @@ export interface Backend {
   searchRecipes(query: string, sort: RecipeSort, offset: number, limit: number): Promise<Recipe[]>
   feed(mode: FeedMode, seed: string, offset: number, limit: number): Promise<Recipe[]>
   popularTags(limit: number): Promise<{ tag: string; uses: number }[]>
+  /** Zapisuje wyświetlenie przepisu (raz na osobę) — do rankingu popularności */
+  recordView(recipeId: string): Promise<void>
+  /** Najpopularniejsze przepisy z ostatnich 14 dni (pasek nad feedem, jak Instastories) */
+  trending(limit: number): Promise<Recipe[]>
 
   /* — panel admina — */
   /** null = zwykły użytkownik (bez panelu admina) */

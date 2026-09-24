@@ -161,7 +161,7 @@ function fail(error: { code?: string; message: string }, context?: 'profile'): n
     /could not find the (function|table)/i.test(error.message)
   if (migrationMissing) {
     throw new Error(
-      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql, engagement.sql, notifications.sql, diets.sql i meal_templates.sql w SQL Editorze Supabase.',
+      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql, engagement.sql, notifications.sql, diets.sql, meal_templates.sql i trending.sql w SQL Editorze Supabase.',
     )
   }
   if (context === 'profile' && error.code === '23505') throw new Error('Ta nazwa użytkownika jest już zajęta.')
@@ -449,6 +449,17 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
 
     async feed(mode, seed, offset, limit) {
       const { data, error } = await client().rpc('feed', { p_mode: mode, p_seed: seed, p_limit: limit, p_offset: offset })
+      if (error) fail(error)
+      return (data as RecipeWithAuthorRow[]).map(rowWithAuthorToRecipe)
+    },
+
+    async recordView(recipeId) {
+      const { error } = await client().from('recipe_views').insert({ recipe_id: recipeId })
+      if (error && error.code !== '23505') fail(error) // 23505 = już widziałem ten przepis
+    },
+
+    async trending(limit) {
+      const { data, error } = await client().rpc('trending_recipes', { p_limit: limit })
       if (error) fail(error)
       return (data as RecipeWithAuthorRow[]).map(rowWithAuthorToRecipe)
     },

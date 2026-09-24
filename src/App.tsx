@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Session } from '@supabase/supabase-js'
 import type { Profile, Recipe, RecipeDraft } from '@/types/recipe'
@@ -14,7 +14,7 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { useRecipes } from '@/hooks/useRecipes'
 import { useSession } from '@/hooks/useSession'
 import { MenuIcon } from '@/components/Icons'
-import { LargeTitleScreen } from '@/components/LargeTitleScreen'
+import { LargeTitleScreen, type LargeTitleScreenHandle } from '@/components/LargeTitleScreen'
 import { NotificationToast } from '@/components/NotificationToast'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { PushedScreen } from '@/components/PushedScreen'
@@ -129,7 +129,19 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
   const [dietVersion, setDietVersion] = useState(0)
   const bumpDiets = useCallback(() => setDietVersion((v) => v + 1), [])
 
+  // Dotknięcie ikonki zakładki, w której już jesteśmy (i bez wepchniętych ekranów) przewija ją do góry, jak w iOS
+  const topRefs = {
+    feed: useRef<LargeTitleScreenHandle>(null),
+    search: useRef<LargeTitleScreenHandle>(null),
+    mine: useRef<LargeTitleScreenHandle>(null),
+    profile: useRef<LargeTitleScreenHandle>(null),
+  } as const
+
   function changeTab(next: Tab) {
+    if (next === tab && stack.length === 0) {
+      topRefs[next].current?.scrollToTop()
+      return
+    }
     setTab(next)
     setVisited((v) => (v.has(next) ? v : new Set(v).add(next)))
     setStack([]) // dotknięcie zakładki wraca do jej początku, jak w iOS
@@ -218,6 +230,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         transition={spring}
       >
         {screen('feed', <FeedScreen
+            topRef={topRefs.feed}
             onOpenRecipe={openRecipe}
             onOpenProfile={openProfile}
             onGoSearch={() => changeTab('search')}
@@ -227,10 +240,11 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onToggleSave={toggleSave}
             unread={notes.unread}
           />)}
-        {screen('search', <SearchScreen onOpenRecipe={openRecipe} onOpenProfile={openProfile} />)}
+        {screen('search', <SearchScreen topRef={topRefs.search} onOpenRecipe={openRecipe} onOpenProfile={openProfile} />)}
         {screen(
           'mine',
           <RecipeListScreen
+            topRef={topRefs.mine}
             recipes={mine.recipes}
             loading={mine.loading}
             error={mine.error}
@@ -242,6 +256,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         {screen(
           'profile',
           <LargeTitleScreen
+            ref={topRefs.profile}
             title={me.username}
             titleBadge={<VerifiedBadge username={me.username} size={19} className="ml-1.5" />}
             variant="inline"

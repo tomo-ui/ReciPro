@@ -377,11 +377,12 @@ language sql stable set search_path = public as $$
     group by 1
   ),
   cand as (
+    -- Własne posty widzę tak, jakbym siebie obserwował — trafiają do „Obserwowani” i są rekomendowane w „Dla Ciebie”
     select r.*, p.username as a_username, p.full_name as a_full_name, p.avatar_url as a_avatar_url,
-           exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = r.user_id) as followed
+           (r.user_id = auth.uid() or exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = r.user_id)) as followed
     from public.recipes r
     join public.profiles p on p.id = r.user_id
-    where r.user_id <> auth.uid() and r.is_post
+    where r.is_post
   ),
   scored as (
     select c.*,

@@ -1,6 +1,7 @@
-import { useRef, type ReactNode } from 'react'
+import { forwardRef, useImperativeHandle, useRef, useState, type ReactNode, type TouchEvent } from 'react'
 import { motion, useMotionValue, useScroll, useTransform } from 'framer-motion'
 import { TAB_BAR_PADDING } from './TabBar'
+import { SpinnerIcon } from './Icons'
 
 interface Props {
   title?: string
@@ -17,13 +18,25 @@ interface Props {
   center?: ReactNode
   /** Wariant `large` bez dużego tytułu: mały tytuł na pasku jest widoczny od początku (nie ma czego chować) */
   noLargeTitle?: boolean
+  /** Przeciągnięcie w dół na samej górze odświeża zawartość (jak w iOS) */
+  onRefresh?: () => Promise<void>
   children: ReactNode
+}
+
+/** Imperatywne API ekranu: dotknięcie tej samej zakładki w pasku na dole przewija ją do góry */
+export interface LargeTitleScreenHandle {
+  scrollToTop: () => void
 }
 
 /** Mały tytuł wjeżdża płynnie na tym odcinku (px), w którym duży tytuł chowa się pod górnym paskiem */
 const FADE_DISTANCE = 18
 /** Dolny margines dużego tytułu (pb-3) — do położenia samych liter, bez pustego marginesu pod nimi */
 const BIG_TITLE_PADDING_BOTTOM = 12
+/** Ile px trzeba przeciągnąć w dół, żeby puszczenie palca wywołało odświeżenie */
+const REFRESH_THRESHOLD = 64
+/** Tłumienie przeciągnięcia (jak „gumowy” scroll w iOS) — 1 px palca = tyle px wizualnego przesunięcia */
+const PULL_DAMPING = 0.5
+const MAX_PULL = 100
 
 /**
  * Szkielet ekranu zakładki w stylu iOS: górny pasek (rozmyte tło bez obrysu, pojawia się przy przewijaniu)
@@ -31,12 +44,19 @@ const BIG_TITLE_PADDING_BOTTOM = 12
  * zniknie pod paskiem — dopóki duży jest widoczny (także na samym początku i przy „gumowym” pociągnięciu w dół),
  * małego nie ma.
  */
-export function LargeTitleScreen({ title, titleBadge, left, right, variant = 'large', center, noLargeTitle, children }: Props) {
+export const LargeTitleScreen = forwardRef<LargeTitleScreenHandle, Props>(function LargeTitleScreen(
+  { title, titleBadge, left, right, variant = 'large', center, noLargeTitle, onRefresh, children },
+  ref,
+) {
   const inline = variant === 'inline'
   const bare = variant === 'bare'
   const scrollRef = useRef<HTMLDivElement>(null)
   const { scrollY } = useScroll({ container: scrollRef })
   const barBgOpacity = useTransform(scrollY, [0, 24], [0, 1])
+
+  useImperativeHandle(ref, () => ({
+    scrollToTop: () => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }),
+  }))
 
   // Mały tytuł zależy od położenia dużego: przezroczysty, dopóki duży tytuł jest choć trochę pod paskiem widoczny
   const barRef = useRef<HTMLDivElement>(null)
@@ -49,6 +69,43 @@ export function LargeTitleScreen({ title, titleBadge, left, right, variant = 'la
     if (!bar || !big) return // bez dużego tytułu mały jest zawsze widoczny (patrz poniżej)
     const hidden = bar.getBoundingClientRect().bottom - (big.getBoundingClientRect().bottom - BIG_TITLE_PADDING_BOTTOM) // >0: litery dużego tytułu są już pod paskiem
     smallTitleOpacity.set(Math.min(1, Math.max(0, hidden / FADE_DISTANCE)))
+  }
+
+  /* — pull-to-refresh: tylko gdy jesteśmy na samej górze i ktoś przeciąga w dół palcem — */
+  const [pull, setPull] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const touchStartY = useRef<number | null>(null)
+
+  function onTouchStart(e: TouchEvent) {
+    if (!onRefresh || refreshing || (scrollRef.current?.scrollTop ?? 0) > 0) {
+      touchStartY.current = null
+      return
+    }
+    touchStartY.current = e.touches[0].clientY
+    setDragging(true)
+  }
+  function onTouchMove(e: TouchEvent) {
+    if (touchStartY.current === null) return
+    const dy = e.touches[0].clientY - touchStartY.current
+    setPull(dy <= 0 ? 0 : Math.min(MAX_PULL, dy * PULL_DAMPING))
+  }
+  async function onTouchEnd() {
+    if (touchStartY.current === null) return
+    touchStartY.current = null
+    setDragging(false)
+    if (pull >= REFRESH_THRESHOLD && onRefresh) {
+      setRefreshing(true)
+      setPull(REFRESH_THRESHOLD)
+      try {
+        await onRefresh()
+      } finally {
+        setRefreshing(false)
+        setPull(0)
+      }
+    } else {
+      setPull(0)
+    }
   }
 
   return (
@@ -73,15 +130,33 @@ export function LargeTitleScreen({ title, titleBadge, left, right, variant = 'la
         </div>
       </div>
 
-      <div ref={scrollRef} onScroll={updateSmallTitle} className="scroll-y h-full">
+      <div
+        ref={scrollRef}
+        onScroll={updateSmallTitle}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+        className="scroll-y h-full"
+      >
+        {onRefresh && (pull > 0 || refreshing) && (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex justify-center pt-[calc(env(safe-area-inset-top,0px)+50px)]"
+            style={{ opacity: Math.min(1, pull / REFRESH_THRESHOLD) }}
+          >
+            <SpinnerIcon width={20} height={20} className="text-label-2" />
+          </div>
+        )}
         <div
+          style={{ transform: pull ? `translateY(${pull}px)` : undefined, transition: dragging ? 'none' : 'transform 0.25s ease-out' }}
           className="px-[max(16px,env(safe-area-inset-left))] pt-[calc(env(safe-area-inset-top,0px)+44px)]"
-          style={{ paddingBottom: TAB_BAR_PADDING }}
         >
-          {variant === 'large' && !noLargeTitle && <h1 ref={bigTitleRef} className="pt-1 pb-3 text-[34px] leading-tight font-bold tracking-tight">{title}</h1>}
-          {children}
+          <div style={{ paddingBottom: TAB_BAR_PADDING }}>
+            {variant === 'large' && !noLargeTitle && <h1 ref={bigTitleRef} className="pt-1 pb-3 text-[34px] leading-tight font-bold tracking-tight">{title}</h1>}
+            {children}
+          </div>
         </div>
       </div>
     </div>
   )
-}
+})

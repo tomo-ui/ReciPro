@@ -6,6 +6,7 @@ import { on } from '@/lib/events'
 import { formatMinutes, timeAgo, totalTime } from '@/lib/ui'
 import { kcalPerServing } from '@/lib/nutrition'
 import { useRecipeNutrition } from '@/hooks/useFoodDb'
+import { useOnVisible } from '@/hooks/useOnVisible'
 import { Avatar } from './Avatar'
 import { VerifiedBadge } from './VerifiedBadge'
 import { FollowButton } from './FollowButton'
@@ -33,17 +34,25 @@ interface Props {
   /** Zapisane w mojej książce kucharskiej (zakładka Przepisy) */
   saved: boolean
   onToggleSave: () => Promise<void>
+  /** Karta stała się widoczna na ekranie — do liczenia wyświetleń (ranking popularności) */
+  onView?: () => void
 }
 
 /** Duża karta do feedu: autor (z przyciskiem obserwowania), zdjęcie 4:3, tytuł, czas, porcje, tagi i komentarze */
-export function FeedCard({ recipe, stats, showFollow, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments, saved, onToggleSave }: Props) {
+export function FeedCard({ recipe, stats, showFollow, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments, saved, onToggleSave, onView }: Props) {
   const [saving, setSaving] = useState(false)
+  const visibleRef = useOnVisible<HTMLElement>(() => onView?.())
   const author = recipe.author
   const time = formatMinutes(totalTime(recipe))
   const last = stats?.last_comment
   const count = stats?.comment_count ?? 0
   const nutrition = useRecipeNutrition(recipe.ingredients, recipe.servings)
   const kcal = nutrition ? kcalPerServing(nutrition) : null
+
+  const [descExpanded, setDescExpanded] = useState(false)
+  // Bez pomiaru DOM: przy tej szerokości karty i rozmiarze tekstu 2 linijki mieszczą z grubsza tyle znaków
+  const DESC_CLAMP_CHARS = 100
+  const descNeedsClamp = (recipe.description?.length ?? 0) > DESC_CLAMP_CHARS
 
   const [expanded, setExpanded] = useState(false)
   const [comments, setComments] = useState<Comment[] | null>(null)
@@ -68,6 +77,7 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
 
   return (
     <motion.article
+      ref={visibleRef}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
@@ -122,6 +132,17 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
           )}
         </div>
       </motion.button>
+
+      {recipe.description && (
+        <div className="px-3.5 pb-2.5" data-selectable>
+          <p className={`text-[14px] whitespace-pre-line text-label-2 ${descExpanded ? '' : 'line-clamp-2'}`}>{recipe.description}</p>
+          {descNeedsClamp && !descExpanded && (
+            <button onClick={() => setDescExpanded(true)} className="text-[13px] font-medium text-label-2 active:opacity-60">
+              Zobacz więcej
+            </button>
+          )}
+        </div>
+      )}
 
       <div className={`flex items-center gap-5 px-3.5 ${last ? 'pb-2.5' : 'pb-3.5'}`}>
         <LikeButton recipeId={recipe.id} stats={stats} onChange={onStatsChange} />

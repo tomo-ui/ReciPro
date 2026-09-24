@@ -55,13 +55,21 @@ describe('tryb lokalny: feed Dla Ciebie i zainteresowania', () => {
     await b.unfollow(anna.id)
     await b.setInterests([])
     const plain = await b.feed('foryou', 's', 0, 50)
-    const chronological = [...plain].sort((x, y) => y.created_at.localeCompare(x.created_at)).map((r) => r.title)
-    expect(plain.map((r) => r.title)).toEqual(chronological) // bez obserwowanych i zainteresowań: od najnowszych
+    // Własne przepisy mają stały bonus „obserwowany” (widzę siebie tak, jakbym się obserwował), więc idą przed resztą
+    const ownCount = plain.filter((r) => r.user_id === LOCAL_USER_ID).length
+    expect(plain.slice(0, ownCount).every((r) => r.user_id === LOCAL_USER_ID)).toBe(true)
+    const rest = plain.slice(ownCount)
+    const chronological = [...rest].sort((x, y) => y.created_at.localeCompare(x.created_at)).map((r) => r.title)
+    expect(rest.map((r) => r.title)).toEqual(chronological) // reszta, bez obserwowanych i zainteresowań: od najnowszych
 
     const oldest = chronological.at(-1)!
-    const oldestRecipe = plain.find((r) => r.title === oldest)!
+    const oldestRecipe = rest.find((r) => r.title === oldest)!
     await b.setInterests([oldestRecipe.tags[0] ?? oldest])
-    expect((await titlesOf('foryou'))[0]).toBe(oldest) // najstarszy przepis z pasującym tagiem wychodzi na czoło
+    // Najstarszy dopasowany przepis wyprzedza resztę cudzych bez dopasowania (własne mają osobny, stały bonus)
+    const withInterest = await b.feed('foryou', 's', 0, 50)
+    const idxOldest = withInterest.findIndex((r) => r.title === oldest)
+    const idxOtherNonOwn = withInterest.map((r, i) => ({ i, r })).filter(({ r }) => r.user_id !== LOCAL_USER_ID && r.title !== oldest).map(({ i }) => i)
+    expect(idxOtherNonOwn.every((i) => i > idxOldest)).toBe(true)
     await b.setInterests([])
     // przywracamy stan wyjściowy, żeby nie wpływać na kolejne testy
     if (zosia.is_following) await b.follow(zosia.id)
@@ -72,7 +80,9 @@ describe('tryb lokalny: feed Dla Ciebie i zainteresowania', () => {
     const all = await titlesOf('foryou', 'x')
     const paged = [...(await b.feed('foryou', 'x', 0, 3)), ...(await b.feed('foryou', 'x', 3, 3)), ...(await b.feed('foryou', 'x', 6, 50))].map((r) => r.title)
     expect(paged).toEqual(all)
-    expect(new Set(all).size).toBe(all.length)
+    // Po id, nie po tytule — różni autorzy mogą przez przypadek nazwać dania tak samo
+    const ids = (await b.feed('foryou', 'x', 0, 50)).map((r) => r.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })
 
@@ -87,9 +97,10 @@ describe('tryb lokalny: panel admina (przykładowi użytkownicy jako konta testo
       await b.setShowTestAccounts(false)
       expect((await b.getAdminSettings())?.show_test_accounts).toBe(false)
       expect(await b.searchProfiles('anna', 0, 10)).toHaveLength(0)
-      expect(await b.feed('foryou', 's', 0, 50)).toHaveLength(0)
+      const ownOnly = await b.feed('foryou', 's', 0, 50)
+      expect(ownOnly.every((r) => r.user_id === LOCAL_USER_ID)).toBe(true) // konta testowe ukryte: zostają tylko własne przepisy
       await b.setShowTestAccounts(true)
-      expect((await b.feed('foryou', 's', 0, 50)).length).toBeGreaterThan(0)
+      expect((await b.feed('foryou', 's', 0, 50)).length).toBeGreaterThan(ownOnly.length)
     } finally {
       await b.setShowTestAccounts(true)
       await b.updateProfile({ username: original!.username })

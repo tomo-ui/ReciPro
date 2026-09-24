@@ -29,7 +29,8 @@ export function usePaged<T>(
       const g = reset ? ++generation.current : generation.current
       const offset = reset ? 0 : stateRef.current.items.length
       setState((s) => (reset ? { items: [], loading: true, done: false, error: null } : { ...s, loading: true, error: null }))
-      fetchRef
+      // Zwracamy obietnicę, żeby dało się na nią poczekać (np. pull-to-refresh trzyma wskaźnik do zakończenia)
+      return fetchRef
         .current(offset, pageSize)
         .then((rows) => {
           if (g !== generation.current) return
