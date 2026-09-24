@@ -302,8 +302,12 @@ async function withEstimatedServings(
   return { draft, estimated: false }
 }
 
+// Zmierzone na żywo: przy przeciążonym Gemini pojedyncze zapytanie (4 modele × 2 próby) potrafi
+// zająć 45-50 s. Przy budżecie 50 s zostawało tylko ~10 s zapasu do twardego limitu Vercela (60 s) —
+// po doliczeniu weryfikacji sesji Supabase i transferu odpowiedzi to za mało: funkcja bywała ubijana
+// w trakcie, zanim zdążyła odesłać czytelny błąd, a przeglądarka widziała to jako zerwane połączenie.
 /** Czas na całą operację — z zapasem względem `maxDuration` funkcji na Vercelu (60 s) */
-const TOTAL_BUDGET_MS = 50_000
+const TOTAL_BUDGET_MS = 42_000
 
 export async function parseRecipeUrl(
   url: string,
