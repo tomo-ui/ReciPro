@@ -64,7 +64,7 @@ export function Splash() {
           animate(icon, { y: [0, Math.min(0, jump.y) - 34, jump.y] }, { duration: 0.62, times: [0, 0.45, 1], ease: ['easeOut', 'easeIn'] }),
           animate(icon, { scale: [1, 1.07, 1] }, { duration: 0.62, times: [0, 0.45, 1] }),
         ]
-      : [animate(icon, { scale: 1.12, opacity: 0 }, { duration: 0.35, ease: 'easeIn' })]
+      : [animate(icon, { scale: 1.12, opacity: 0 }, { duration: 0.45, ease: 'easeIn' })]
     void Promise.all(runs.map((r) => r.finished ?? r)).then(done)
     return () => {
       cancelled = true
@@ -81,7 +81,9 @@ export function Splash() {
       <motion.div
         className="absolute inset-0 bg-bg"
         animate={{ opacity: leaving ? 0 : 1 }}
-        transition={{ duration: 0.35, delay: leaving && jump ? 0.12 : 0 }}
+        // Tyle, żeby ciemne tło zniknęło mniej więcej wtedy, gdy logo dolatuje na miejsce (nie wcześniej) —
+        // inaczej pod spodem odsłania się od razu w pełni jasna treść (zdjęcia przepisów), co wygląda jak mignięcie.
+        transition={{ duration: leaving && jump ? 0.5 : 0.45, delay: leaving && jump ? 0.12 : 0 }}
       />
       <div className="absolute inset-0 flex items-center justify-center">
         <div ref={iconRef}>
