@@ -390,7 +390,17 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         )}
         {sheet?.kind === 'calories' && isCreator(me.username) && (
           <Sheet key="calories" onClose={() => setSheet(null)}>
-            <CaloriesScreen recipes={mine.recipes} onSaveRecipe={saveAdaptedRecipe} onClose={() => setSheet(null)} />
+            <CaloriesScreen
+              username={me.username}
+              recipes={mine.recipes}
+              onSaveRecipe={saveAdaptedRecipe}
+              onOpenDiet={(id) => {
+                setSheet(null) // dieta wjeżdża na stos ekranów — arkusz musi się najpierw zamknąć, żeby było ją widać
+                openDiet(id)
+              }}
+              dietVersion={dietVersion}
+              onClose={() => setSheet(null)}
+            />
           </Sheet>
         )}
         {sheet?.kind === 'comments' && (

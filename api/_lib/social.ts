@@ -238,7 +238,14 @@ export function parseInstagramEmbedImage(html: string): string | undefined {
 
 async function fetchInstagramEmbedImage(code: string, fetchImpl: typeof fetch): Promise<string | undefined> {
   try {
-    const { html } = await fetchHtml(`https://www.instagram.com/p/${code}/embed/captioned/`, { fetchImpl, timeoutMs: 6000, maxBytes: 2_000_000 })
+    // Ten sam UA robota podglądów co strona głównego posta: z przeglądarkowym UA Instagram serwuje inną,
+    // dużo cięższą stronę (osadzenie na JS) bez elementu ze zdjęciem, więc parsowanie nic by nie znalazło
+    const { html } = await fetchHtml(`https://www.instagram.com/p/${code}/embed/captioned/`, {
+      fetchImpl,
+      timeoutMs: 6000,
+      maxBytes: 2_000_000,
+      headers: { 'user-agent': PREVIEW_BOT_UA },
+    })
     return parseInstagramEmbedImage(html)
   } catch {
     return undefined

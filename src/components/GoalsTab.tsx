@@ -17,14 +17,16 @@ interface Props {
   recipes: Recipe[]
   /** Zapisuje dopasowaną wersję jako nowy przepis */
   onSaveRecipe: (draft: RecipeDraft) => Promise<void>
+  /** Bez sekcji „Dopasuj danie do celu” — tylko cele dzienne (kalorie i makro) */
+  hideAdapt?: boolean
 }
 
 /**
- * Zakładka „Cele” na moim profilu: ustawiam kalorie i makro na dzień, widzę, jak moje dania mają się do celu
- * jednego posiłku, i dopasowuję wybrane danie (gramatury składników) tak, żeby w nie trafiało.
+ * Zakładka „Cele”: ustawiam kalorie i makro na dzień i (poza `hideAdapt`) widzę, jak moje dania mają się
+ * do celu jednego posiłku, i dopasowuję wybrane danie (gramatury składników) tak, żeby w nie trafiało.
  */
-export function GoalsTab({ recipes, onSaveRecipe }: Props) {
-  const db = useFoodDb()
+export function GoalsTab({ recipes, onSaveRecipe, hideAdapt }: Props) {
+  const db = useFoodDb(!hideAdapt)
   const { prefs, update } = usePrefs()
   const [adapting, setAdapting] = useState<Recipe | null>(null)
 
@@ -33,13 +35,13 @@ export function GoalsTab({ recipes, onSaveRecipe }: Props) {
 
   const rows = useMemo(
     () =>
-      db
+      db && !hideAdapt
         ? recipes.map((r) => {
             const a = analyzeRecipe(r.ingredients, db, r.servings)
             return { recipe: r, kcal: kcalPerServing(a) }
           })
         : [],
-    [db, recipes],
+    [db, recipes, hideAdapt],
   )
 
   return (
@@ -57,7 +59,8 @@ export function GoalsTab({ recipes, onSaveRecipe }: Props) {
         </p>
       </section>
 
-      <section>
+      {!hideAdapt && (
+        <section>
         <p className="mb-1.5 px-1 text-[13px] text-label-2 uppercase">Dopasuj danie do celu</p>
         {recipes.length === 0 ? (
           <p className="rounded-[14px] bg-surface p-4 text-[14px] text-label-2">Nie masz jeszcze przepisów. Dodaj przepis, a tutaj dopasujesz go do swoich celów.</p>
@@ -95,7 +98,8 @@ export function GoalsTab({ recipes, onSaveRecipe }: Props) {
           </ul>
         )}
         <p className="mt-1.5 px-1 text-[12px] text-label-2">Kalorie liczone z bazy składników (USDA), na porcję przepisu. Dopasowany przepis zapisuje się jako nowy.</p>
-      </section>
+        </section>
+      )}
 
       <AnimatePresence>
         {adapting && (
