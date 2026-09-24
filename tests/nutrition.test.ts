@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { buildFoodDb, cleanedName, shortName, stem, type FoodData, type FoodDb } from '../src/lib/foodDb'
+import { buildFoodDb, cleanedName, shortName, stem, type FoodData, type FoodDb, type Portions } from '../src/lib/foodDb'
 import { ALIASES } from '../src/lib/foodAliases'
 import { IDX, macroShares, saltGrams } from '../src/lib/nutrients'
 import { analyzeLine, analyzeRecipe, kcalPerServing, withAmount } from '../src/lib/nutrition'
@@ -48,7 +48,8 @@ describe('wyszukiwanie po polsku', () => {
   it('rdzeń słowa łączy odmiany', () => {
     expect(stem('mąki')).toBe(stem('mąka'))
     expect(stem('pomidorów')).toBe(stem('pomidory'))
-    expect(cleanedName('świeżej posiekanej pietruszki (opcjonalnie)')).toBe('swiezej posiekanej pietruszki')
+    // rdzeń łapie też odmiany słów opisowych spoza listy dosłownych form („posiekanej”, nie tylko „posiekana”)
+    expect(cleanedName('świeżej posiekanej pietruszki (opcjonalnie)')).toBe('pietruszki')
   })
 
   it('szuka po nazwie, także w odmianie i po angielsku', () => {
@@ -252,6 +253,26 @@ describe('dokładniejsze wyszukiwanie', () => {
     expect(db.search('penne', { limit: 3 })[0]).toBeDefined()
   })
 
+  it('liczby i słowa opisowe wpisane wprost w szukajkę nie psują wyszukiwania (nie tylko w liniach przepisu)', () => {
+    expect(db.search('1 żółtko jajka')[0]?.name).toMatch(/żółtko/)
+    expect(db.search('2 łyżki drobno posiekanej pietruszki')[0]?.name).toMatch(/pietruszk/i)
+  })
+
+  it('zbędne, luźno dopasowane wyniki (daleko za najlepszym trafieniem) trafiają na sam koniec albo znikają', () => {
+    // „cukier” (sam produkt) nie ma pokazywać cukierków (inny produkt, tylko podobny rdzeń słowa) przed prawdziwym cukrem
+    const r = db.search('cukier', { limit: 60 })
+    const firstCandy = r.findIndex((f) => /^Cukierki/.test(f.name))
+    const lastSugar = r.findLastIndex((f) => /^Cukier[, ]/.test(f.name)) // nie "Cukierki" — to inny produkt
+    expect(firstCandy === -1 || firstCandy > lastSugar).toBe(true)
+    expect(r[0].name).toMatch(/^Cukier[, ]/)
+  })
+
+  it('automatyczne dopasowanie składnika odrzuca zbyt słabe trafienie zamiast zgadywać', () => {
+    for (const bad of ['szczypta magii', '2 łyżki miłości', 'garść niewiadomego składnika', 'odrobina xyzabc123']) {
+      expect(db.match(bad), bad).toBeUndefined()
+    }
+  })
+
   it('żółtko ma własną wagę, a nie wagę całego jajka', () => {
     const yolk = analyzeLine({ text: '1 żółtko jajka' }, db)
     expect(yolk.food?.name).toMatch(/żółtko/)
@@ -261,12 +282,23 @@ describe('dokładniejsze wyszukiwanie', () => {
     expect(analyzeLine({ text: '1 jajko' }, db).grams).toBe(55)
   })
 
-  it('hideJunk usuwa produkty dla niemowląt, markowe i z restauracji', () => {
-    const all = db.search('mleko', { limit: 60 })
-    const clean = db.search('mleko', { limit: 60, hideJunk: true })
-    expect(all.some((f) => f.catEn === 'Baby Foods')).toBe(true)
-    expect(clean.some((f) => f.catEn === 'Baby Foods')).toBe(false)
-    expect(clean.length).toBeGreaterThan(5)
+  it('domyślnie już nie pokazuje odległych trafień (np. odżywki dla niemowląt przy zwykłym „mleko”)', () => {
+    expect(db.search('mleko', { limit: 60 }).some((f) => f.catEn === 'Baby Foods')).toBe(false)
+  })
+
+  it('hideJunk usuwa kategorie fast food/restauracyjne/dla niemowląt nawet, gdy dobrze pasują do zapytania', () => {
+    // Baza syntetyczna: dwa niemal identycznie pasujące produkty, jeden z nich w kategorii „fast food”
+    const cats = ['Mięso i wędliny', 'Fast Foods']
+    const mk = (id: number, name: string, cat: number): [number, string, string, number, number[], 0] => [id, name, name, cat, new Array(24).fill(0), 0]
+    const tiny: FoodData = {
+      v: 1,
+      cats,
+      catsEn: cats,
+      foods: [mk(1, 'Burger wołowy, surowy', 0), mk(2, 'Burger wołowy, smażony, fast food', 1)],
+    }
+    const tinyDb = buildFoodDb(tiny)
+    expect(tinyDb.search('burger wołowy', { limit: 10 }).map((f) => f.id).sort()).toEqual([1, 2])
+    expect(tinyDb.search('burger wołowy', { limit: 10, hideJunk: true }).map((f) => f.id)).toEqual([1])
   })
 })
 
@@ -275,9 +307,9 @@ describe('produkty z opakowań (Open Food Facts)', () => {
   const off = {
     v: 1,
     products: [
-      [5900000000001, 'Makaron spaghetti', 'Lubella', [350, 12, 1.5, 72, 3, 3, 0.3, 6, 0, ...new Array(15).fill(0)]],
-      [5900000000002, 'Jogurt naturalny', 'Bakoma', [63, 4.3, 3.2, 4.8, 4.8, 0, 2, 50, 0, ...new Array(15).fill(0)]],
-    ] as [number, string, string, number[]][],
+      [5900000000001, 'Makaron spaghetti', 'Lubella', [350, 12, 1.5, 72, 3, 3, 0.3, 6, 0, ...new Array(15).fill(0)], 0],
+      [5900000000002, 'Jogurt naturalny', 'Bakoma', [63, 4.3, 3.2, 4.8, 4.8, 0, 2, 50, 0, ...new Array(15).fill(0)], { pc: 150 }],
+    ] as [number, string, string, number[], Portions | 0][],
   }
   const both = buildFoodDb(usda, off)
 
@@ -309,17 +341,34 @@ describe('produkty z opakowań (Open Food Facts)', () => {
 })
 
 describe('dane Open Food Facts w repozytorium', () => {
-  const off = JSON.parse(readFileSync('src/data/off-products.json', 'utf8')) as { products: [number, string, string, number[]][] }
+  const off = JSON.parse(readFileSync('src/data/off-products.json', 'utf8')) as { products: [number, string, string, number[], Portions | 0][] }
   const usda = JSON.parse(readFileSync('src/data/foods.json', 'utf8')) as FoodData
   const all = buildFoodDb(usda, off as never)
 
-  it('ma ponad 10 tysięcy polskich produktów z poprawnymi wartościami i unikalnymi kodami', () => {
-    expect(off.products.length).toBeGreaterThan(10000)
+  it('ma kilkanaście tysięcy polskich produktów z poprawnymi wartościami i unikalnymi kodami', () => {
+    expect(off.products.length).toBeGreaterThan(15000)
     expect(new Set(off.products.map((p) => p[0])).size).toBe(off.products.length)
     expect(off.products.every(([code, name, , n]) => Number.isSafeInteger(code) && name.length >= 3 && n.length === 24 && n.every(Number.isFinite))).toBe(true)
     // kody OFF nie mogą się zderzać z identyfikatorami USDA (food_id jest wspólny)
     const usdaIds = new Set(usda.foods.map((f) => f[0]))
     expect(off.products.some(([code]) => usdaIds.has(code))).toBe(false)
+  })
+
+  it('wartości odżywcze są w fizycznie możliwym zakresie (bez błędów jednostek ze źródła)', () => {
+    const CAPS = [902, 100, 100, 100, 100, 100, 100, 40000, 3100, 3000, 200, 1000, 5000, 100, 2000, 5000, 30000, 3000, 250, 150, 1500, 100, 50, 3000]
+    expect(off.products.every(([, , , n]) => n.every((v, i) => v >= 0 && v <= CAPS[i]))).toBe(true)
+  })
+
+  it('część produktów ma wagę miary (łyżka, sztuka…), przeliczaną z serving_size przez off-extract.mjs', () => {
+    const withPortion = off.products.filter(([, , , , p]) => p && Object.keys(p).length > 0)
+    expect(withPortion.length).toBeGreaterThan(100)
+    for (const [, , , , p] of withPortion) {
+      for (const [key, grams] of Object.entries(p as Portions)) {
+        expect(['c', 't', 's', 'pc', 'sl', 'cl', 'cn']).toContain(key)
+        expect(grams).toBeGreaterThan(0)
+        expect(grams).toBeLessThan(2000)
+      }
+    }
   })
 
   it('wyszukiwanie znajduje polskie produkty z opakowań (spaghetti, jajka, mąka)', () => {

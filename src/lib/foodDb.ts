@@ -28,10 +28,10 @@ export interface Food {
   brand?: string
 }
 
-/** Polskie produkty z Open Food Facts (ODbL): [kod kreskowy, nazwa, marka, wartości na 100 g] */
+/** Polskie produkty z Open Food Facts (ODbL): [kod kreskowy, nazwa, marka, wartości na 100 g, miara porcji] */
 export interface OffData {
   v: number
-  products: [number, string, string, number[]][]
+  products: [number, string, string, number[], Portions | 0][]
 }
 
 export interface FoodData {
@@ -67,10 +67,15 @@ const NOISE = new Set([
   'plaster', 'plastry', 'plasterki', 'plasterek', 'zabek', 'zabki', 'zabkow', 'garsc', 'szczypta', 'sztuka', 'sztuki', 'sztuk', 'peczek', 'peczki',
   'puszka', 'puszki', 'puszek', 'opakowanie', 'opakowania', 'kostka', 'kostki', 'lyzka', 'lyzki', 'lyzek', 'lyzeczka', 'lyzeczki', 'lyzeczek', 'szklanka', 'szklanki', 'szklanek',
 ])
+// Porównanie po rdzeniu, nie dosłownym słowie — inaczej odmiana spoza listy („posiekanej”, nie „posiekana”) by przeciekała
+const STEMMED_NOISE = new Set([...NOISE].map(stem))
 
 export function ingredientQueryTokens(name: string): string[] {
   const head = name.replace(/\([^)]*\)/g, ' ').split(/[,;:]/)[0]
-  const out = (fold(head).match(WORD) ?? []).filter((w) => !STOP.has(w) && !NOISE.has(w) && !/^\d+$/.test(w)).map(stem)
+  const out = (fold(head).match(WORD) ?? [])
+    .filter((w) => !STOP.has(w) && !/^\d+$/.test(w))
+    .map(stem)
+    .filter((s) => !STEMMED_NOISE.has(s))
   return [...new Set(out)]
 }
 
@@ -133,7 +138,7 @@ export interface FoodDb {
 /** Nazwa składnika bez ogonków, ilości i słów opisowych — do porównania ze wzorcami aliasów */
 export function cleanedName(name: string): string {
   const head = name.replace(/\([^)]*\)/g, ' ').split(/[,;:]/)[0]
-  return (fold(head).match(WORD) ?? []).filter((w) => !NOISE.has(w)).join(' ')
+  return (fold(head).match(WORD) ?? []).filter((w) => !STEMMED_NOISE.has(stem(w))).join(' ')
 }
 
 const pad = (n: number[]) => (n.length === NUTRIENT_COUNT ? n : [...n, ...new Array(Math.max(0, NUTRIENT_COUNT - n.length)).fill(0)])
@@ -149,8 +154,8 @@ export function buildFoodDb(data: FoodData, off?: OffData): FoodDb {
     p: p || {},
     source: 'usda' as const,
   }))
-  for (const [id, name, brand, n] of off?.products ?? []) {
-    foods.push({ id, name, en: '', cat: OFF_CATEGORY, catEn: OFF_CATEGORY_EN, n: pad(n), p: {}, source: 'off', brand: brand || undefined })
+  for (const [id, name, brand, n, p] of off?.products ?? []) {
+    foods.push({ id, name, en: '', cat: OFF_CATEGORY, catEn: OFF_CATEGORY_EN, n: pad(n), p: p || {}, source: 'off', brand: brand || undefined })
   }
   const byId = new Map(foods.map((f) => [f.id, f]))
   const byEn = new Map(foods.map((f) => [f.en, f]))
@@ -207,9 +212,13 @@ export function buildFoodDb(data: FoodData, off?: OffData): FoodDb {
 
   const cache = new Map<string, Food[]>()
 
-  function rank(qs: string[][], minRatio: number, limit: number, hideJunk = false, genericOnly = false): Food[] {
-    if (qs.length === 0) return []
-    const need = Math.max(1, Math.ceil(qs.length * minRatio - 1e-9))
+  /** Wynik poniżej tego ułamka najlepszego trafienia znika z listy — zbędne, luźno dopasowane produkty nie zaśmiecają wyników */
+  const RELATIVE_CUTOFF = 0.6
+  /** Automatyczne dopasowanie składnika z przepisu (match): poniżej tego wyniku wolimy nie zgadywać niż podstawić zły produkt */
+  const MIN_MATCH_SCORE = 1.35
+
+  /** Wszystkie produkty pasujące do zapytania (co najmniej `need` słów), posortowane od najlepszego */
+  function scoreAll(qs: string[][], hideJunk: boolean, genericOnly: boolean, need: number): [number, Food][] {
     const best = new Map<number, number[]>() // produkt → najlepsza waga dla każdego słowa zapytania
     qs.forEach((alts, qi) => {
       for (const q of alts) {
@@ -231,17 +240,38 @@ export function buildFoodDb(data: FoodData, off?: OffData): FoodDb {
       if (hideJunk && JUNK_CATEGORIES.has(f.catEn)) continue
       if (genericOnly && f.source === 'off') continue
       const extra = Math.max(0, tokenCount[idx] - matched)
+      // Bonus za główny rzeczownik na początku nazwy: pełny tylko dla dokładnego trafienia rdzenia, żeby np. luźno
+      // podobny „cukierki” (rdzeń „cukierk”) nie awansował obok prawdziwego „cukier” tylko dlatego, że zaczyna się tak samo
+      const firstTokenBonus = flat.some((q) => firstToken[idx] === q)
+        ? 1.2
+        : flat.some((q) => (q.length >= 4 && firstToken[idx].startsWith(q)) || (firstToken[idx].length >= 4 && q.startsWith(firstToken[idx])))
+          ? 0.35
+          : 0
       const score =
         arr.reduce((a, b) => a + b, 0) -
         0.12 * extra -
         (CAT_PENALTY[f.catEn] ?? 0) -
         0.004 * f.name.length +
         (isRaw(f) ? 0.45 : 0) +
-        (flat.some((q) => firstToken[idx] === q || (q.length >= 4 && firstToken[idx].startsWith(q)) || (firstToken[idx].length >= 4 && q.startsWith(firstToken[idx]))) ? 1.2 : 0)
+        firstTokenBonus
       scored.push([score, f])
     }
     scored.sort((a, b) => b[0] - a[0] || a[1].name.length - b[1].name.length)
-    return scored.slice(0, limit).map((s) => s[1])
+    return scored
+  }
+
+  function rank(qs: string[][], minRatio: number, limit: number, hideJunk = false, genericOnly = false): Food[] {
+    if (qs.length === 0) return []
+    const need = Math.max(1, Math.ceil(qs.length * minRatio - 1e-9))
+    const scored = scoreAll(qs, hideJunk, genericOnly, need)
+    if (scored.length === 0) return []
+    // Reszta listy zostaje tylko blisko najlepszego trafienia (np. inne % tłuszczu tego samego produktu);
+    // dużo słabsze, przypadkowe dopasowania (np. przez rozmyty prefiks) odpadają.
+    const floor = scored[0][0] * RELATIVE_CUTOFF
+    return scored
+      .filter(([s]) => s >= floor)
+      .slice(0, limit)
+      .map((s) => s[1])
   }
 
   return {
@@ -253,7 +283,10 @@ export function buildFoodDb(data: FoodData, off?: OffData): FoodDb {
       const key = `${query}|${opts.minRatio ?? 1}|${limit}|${opts.hideJunk ? 1 : 0}`
       const hit = cache.get(key)
       if (hit) return hit
-      let res = rank(withSynonyms([...new Set(tokens(query))]), opts.minRatio ?? 1, limit, opts.hideJunk)
+      // Liczby i słowa opisowe („1 łyżka”, „drobno posiekana”) nie są nazwą składnika — pomijamy je jak przy dopasowaniu linii,
+      // żeby np. „1 żółtko jajka” wpisane wprost w szukajkę też znalazło produkt, a nie zero wyników
+      const qTokens = [...new Set(ingredientQueryTokens(query))]
+      let res = rank(withSynonyms(qTokens), opts.minRatio ?? 1, limit, opts.hideJunk)
       // Popularny składnik (np. „mąka pszenna”) na pierwszym miejscu: to zwykle ten, o który chodzi
       const preferred = aliasFor(query, true) // tylko gdy zapytanie zaczyna się od tego składnika (nie „marka + składnik”)
       if (preferred && res.length > 0) res = [preferred, ...res.filter((f) => f.id !== preferred.id)].slice(0, limit)
@@ -266,8 +299,11 @@ export function buildFoodDb(data: FoodData, off?: OffData): FoodDb {
       const aliased = aliasFor(name)
       if (aliased) return aliased
       const qs = ingredientQueryTokens(name)
-      const top = rank(withSynonyms(qs), qs.length > 1 ? 0.5 : 1, 1, false, true)[0]
-      return top
+      if (qs.length === 0) return undefined
+      const need = Math.max(1, Math.ceil(qs.length * (qs.length > 1 ? 0.5 : 1) - 1e-9))
+      const [top] = scoreAll(withSynonyms(qs), false, true, need)
+      // Za słabe dopasowanie: lepiej zostawić składnik bez produktu (widać to w aplikacji) niż podstawić zły
+      return top && top[0] >= MIN_MATCH_SCORE ? top[1] : undefined
     },
   }
 }

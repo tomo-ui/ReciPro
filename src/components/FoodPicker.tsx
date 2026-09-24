@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import type { Food } from '@/lib/foodDb'
+import type { Food, PortionKey } from '@/lib/foodDb'
 import { FEATURES } from '@/lib/features'
 import { IDX, formatAmount } from '@/lib/nutrients'
 import { useDebounced } from '@/hooks/useDebounced'
@@ -22,8 +22,14 @@ const QUICK = ['mąka', 'mleko', 'jajko', 'masło', 'kurczak', 'ziemniaki', 'ry�
 const PRESET_GRAMS = [50, 100, 150, 200, 250]
 const TOP = 8
 
+/** Kolejność miar do pokazania (łyżka/łyżeczka/sztuka najpierw — to o nie pytają najczęściej), z polską nazwą */
+const PORTION_KEYS: PortionKey[] = ['t', 's', 'pc', 'c', 'sl', 'cl', 'cn']
+const PORTION_LABEL: Record<PortionKey, string> = { t: 'łyżka', s: 'łyżeczka', pc: 'sztuka', c: 'szklanka', sl: 'plasterek', cl: 'ząbek', cn: 'puszka' }
+
 /** Krok zmiany gramatury: drobny dla małych ilości, większy dla dużych */
 export const gramStep = (g: number) => (g < 50 ? 5 : g < 250 ? 10 : g < 1000 ? 25 : 100)
+/** Krok zmiany liczby miar: łyżki, łyżeczki i szklanki wygodnie dzieli się na pół */
+const countStep = (unit: PortionKey) => (unit === 't' || unit === 's' || unit === 'c' ? 0.5 : 1)
 
 /** Wyszukiwarka składników z bazy (kilka tysięcy produktów, lokalnie) z wyborem gramatury */
 export function FoodPicker({ title = 'Baza składników', askAmount, initialQuery = '', onPick, onClose }: Props) {
@@ -31,7 +37,6 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
   const [query, setQuery] = useState(initialQuery)
   const debounced = useDebounced(query, 150)
   const [selected, setSelected] = useState<Food | null>(null)
-  const [grams, setGrams] = useState(100)
 
   // Domyślnie bez produktów markowych, z restauracji i dla niemowląt; najpierw kilka najlepszych trafień
   const [brands, setBrands] = useState(false)
@@ -40,10 +45,8 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
   const visible = expanded ? results : results.slice(0, TOP)
 
   function choose(food: Food) {
-    if (askAmount) {
-      setSelected(food)
-      setGrams(100)
-    } else onPick(food)
+    if (askAmount) setSelected(food)
+    else onPick(food)
   }
 
   return createPortal(
@@ -57,7 +60,7 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
       </header>
 
       {selected ? (
-        <AmountStep food={selected} grams={grams} setGrams={setGrams} onAdd={() => onPick(selected, grams)} />
+        <AmountStep food={selected} onAdd={(grams) => onPick(selected, grams)} />
       ) : (
         <>
           <div className="px-4 pt-1 pb-3">
@@ -144,10 +147,28 @@ export function FoodPicker({ title = 'Baza składników', askAmount, initialQuer
   )
 }
 
-function AmountStep({ food, grams, setGrams, onAdd }: { food: Food; grams: number; setGrams: (g: number) => void; onAdd: () => void }) {
-  const k = grams / 100
+/**
+ * Gramatura wybranego produktu: wprost w gramach albo miarą (łyżka, łyżeczka, sztuka, szklanka, plasterek,
+ * ząbek, puszka), gdy baza zna wagę jednej takiej miary — wtedy liczbę miar przeliczamy na gramy automatycznie.
+ */
+function AmountStep({ food, onAdd }: { food: Food; onAdd: (grams: number) => void }) {
+  const units = useMemo(() => PORTION_KEYS.filter((k) => food.p[k]), [food])
+  const [mode, setMode] = useState<'g' | PortionKey>('g')
+  const [grams, setGrams] = useState(100)
+  const [count, setCount] = useState(1)
+
+  const unitGrams = mode === 'g' ? 0 : (food.p[mode] ?? 0)
+  const total = mode === 'g' ? grams : Math.round(count * unitGrams * 10) / 10
+  const k = total / 100
   const kcal = food.n[IDX.kcal] * k
-  const step = gramStep(grams)
+  const gStep = gramStep(grams)
+  const cStep = mode === 'g' ? 1 : countStep(mode)
+
+  function step(dir: 1 | -1) {
+    if (mode === 'g') setGrams((g) => Math.min(5000, Math.max(0, g + dir * gStep)))
+    else setCount((c) => Math.max(0, Math.round((c + dir * cStep) * 100) / 100))
+  }
+
   return (
     <div className="scroll-y flex-1 space-y-5 px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
       <div>
@@ -156,36 +177,72 @@ function AmountStep({ food, grams, setGrams, onAdd }: { food: Food; grams: numbe
       </div>
 
       <div className="rounded-[16px] bg-surface p-4">
-        <p className="text-center text-[13px] text-label-2 uppercase">Gramatura</p>
-        <div className="mt-2 flex items-center justify-center gap-4">
-          <Step label="Mniej" onClick={() => setGrams(Math.max(1, grams - step))}>
+        <p className="text-center text-[13px] text-label-2 uppercase">{mode === 'g' ? 'Gramatura' : 'Ilość'}</p>
+
+        {units.length > 0 && (
+          <div className="mt-2 mb-3 flex flex-wrap justify-center gap-1.5">
+            <UnitChip active={mode === 'g'} onClick={() => setMode('g')}>
+              gramy
+            </UnitChip>
+            {units.map((u) => (
+              <UnitChip key={u} active={mode === u} onClick={() => setMode(u)}>
+                {PORTION_LABEL[u]}
+              </UnitChip>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center justify-center gap-4">
+          <Step label="Mniej" onClick={() => step(-1)}>
             <MinusIcon width={20} height={20} />
           </Step>
-          <label className="flex items-baseline gap-1">
-            <input
-              value={grams}
-              inputMode="numeric"
-              aria-label="Gramatura w gramach"
-              onChange={(e) => setGrams(Math.min(5000, Math.max(0, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)))}
-              className="w-24 bg-transparent text-center text-[38px] font-bold tabular-nums outline-none"
-            />
-            <span className="text-[17px] text-label-2">g</span>
-          </label>
-          <Step label="Więcej" onClick={() => setGrams(Math.min(5000, grams + step))}>
+          {mode === 'g' ? (
+            <label className="flex items-baseline gap-1">
+              <input
+                value={grams}
+                inputMode="numeric"
+                aria-label="Gramatura w gramach"
+                onChange={(e) => setGrams(Math.min(5000, Math.max(0, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)))}
+                className="w-24 bg-transparent text-center text-[38px] font-bold tabular-nums outline-none"
+              />
+              <span className="text-[17px] text-label-2">g</span>
+            </label>
+          ) : (
+            <label className="flex flex-col items-center">
+              <span className="flex items-baseline gap-1.5">
+                <input
+                  value={count}
+                  inputMode="decimal"
+                  aria-label={`Liczba: ${PORTION_LABEL[mode]}`}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, '')
+                    setCount(Math.min(100, Math.max(0, Number(v) || 0)))
+                  }}
+                  className="w-16 bg-transparent text-center text-[38px] font-bold tabular-nums outline-none"
+                />
+                <span className="text-[17px] text-label-2">× {PORTION_LABEL[mode]}</span>
+              </span>
+              <span className="mt-0.5 text-[13px] text-label-2 tabular-nums">≈ {formatAmount(total)} g</span>
+            </label>
+          )}
+          <Step label="Więcej" onClick={() => step(1)}>
             <PlusIcon width={20} height={20} />
           </Step>
         </div>
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
-          {PRESET_GRAMS.map((g) => (
-            <button
-              key={g}
-              onClick={() => setGrams(g)}
-              className={`rounded-full px-3.5 py-1.5 text-[14px] ${g === grams ? 'bg-accent text-white' : 'bg-surface-2'}`}
-            >
-              {g} g
-            </button>
-          ))}
-        </div>
+
+        {mode === 'g' && (
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {PRESET_GRAMS.map((g) => (
+              <button
+                key={g}
+                onClick={() => setGrams(g)}
+                className={`rounded-full px-3.5 py-1.5 text-[14px] ${g === grams ? 'bg-accent text-white' : 'bg-surface-2'}`}
+              >
+                {g} g
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {FEATURES.nutrition && (
@@ -199,8 +256,8 @@ function AmountStep({ food, grams, setGrams, onAdd }: { food: Food; grams: numbe
 
       <motion.button
         whileTap={{ scale: 0.97 }}
-        onClick={onAdd}
-        disabled={grams <= 0}
+        onClick={() => onAdd(total)}
+        disabled={total <= 0}
         className="w-full rounded-[14px] bg-accent py-3.5 text-[17px] font-semibold text-white disabled:opacity-40"
       >
         Dodaj do przepisu
@@ -219,6 +276,14 @@ function Step({ children, label, onClick }: { children: React.ReactNode; label: 
     >
       {children}
     </motion.button>
+  )
+}
+
+function UnitChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className={`rounded-full px-3 py-1 text-[13px] ${active ? 'bg-accent text-white' : 'bg-surface-2 text-label-2'}`}>
+      {children}
+    </button>
   )
 }
 

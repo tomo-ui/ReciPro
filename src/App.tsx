@@ -5,6 +5,7 @@ import type { Profile, Recipe, RecipeDraft } from '@/types/recipe'
 import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { draftForSaving } from '@/lib/cookbook'
+import { isCreator } from '@/lib/verified'
 import { deleteRecipeImage } from '@/lib/images'
 import { markAppReady } from '@/lib/splash'
 import { spring } from '@/lib/ui'
@@ -23,6 +24,7 @@ import { Sheet } from '@/components/Sheet'
 import { TabBar, type Tab } from '@/components/TabBar'
 import { ActivityScreen } from '@/screens/ActivityScreen'
 import { AddRecipeScreen } from '@/screens/AddRecipeScreen'
+import { CaloriesScreen } from '@/screens/CaloriesScreen'
 import { EditProfileScreen } from '@/screens/EditProfileScreen'
 import { InterestsScreen } from '@/screens/InterestsScreen'
 import { CommentsSheet } from '@/components/CommentsSheet'
@@ -109,6 +111,7 @@ type SheetState =
   | { kind: 'edit'; recipe: Recipe }
   | { kind: 'edit-profile' }
   | { kind: 'interests' }
+  | { kind: 'calories' }
   | { kind: 'comments'; recipe: Recipe; focus: boolean }
   | null
 
@@ -348,6 +351,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onActivity={openActivity}
             onEditProfile={() => setSheet({ kind: 'edit-profile' })}
             onInterests={() => setSheet({ kind: 'interests' })}
+            onCalories={isCreator(me.username) ? () => setSheet({ kind: 'calories' }) : undefined}
             onSignOut={onSignOut}
           />
         )}
@@ -382,6 +386,11 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         {sheet?.kind === 'interests' && (
           <Sheet key="interests" onClose={() => setSheet(null)}>
             <InterestsScreen onClose={() => setSheet(null)} />
+          </Sheet>
+        )}
+        {sheet?.kind === 'calories' && isCreator(me.username) && (
+          <Sheet key="calories" onClose={() => setSheet(null)}>
+            <CaloriesScreen recipes={mine.recipes} onSaveRecipe={saveAdaptedRecipe} onClose={() => setSheet(null)} />
           </Sheet>
         )}
         {sheet?.kind === 'comments' && (

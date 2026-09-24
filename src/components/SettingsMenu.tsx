@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { spring } from '@/lib/ui'
-import { HeartIcon, PencilIcon, SlidersIcon } from './Icons'
+import { FlameIcon, HeartIcon, PencilIcon, SlidersIcon } from './Icons'
 
 interface Props {
   unread: number
@@ -9,11 +9,13 @@ interface Props {
   onActivity: () => void
   onEditProfile: () => void
   onInterests: () => void
+  /** Licznik kalorii: tylko dla konta twórcy aplikacji, i tylko stąd da się go otworzyć */
+  onCalories?: () => void
   onSignOut?: () => void
 }
 
 /** Menu z burgera na profilu: aktywność i ustawienia konta (dolny arkusz, jak w Instagramie) */
-export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onSignOut }: Props) {
+export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onCalories, onSignOut }: Props) {
   return (
     <>
       <motion.div
@@ -47,6 +49,7 @@ export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInt
           <Item icon={<HeartIcon width={22} height={22} />} label="Aktywność" badge={unread} onClick={onActivity} />
           <Item icon={<PencilIcon width={22} height={22} />} label="Edytuj profil" onClick={onEditProfile} />
           <Item icon={<SlidersIcon width={22} height={22} />} label="Zainteresowania" onClick={onInterests} />
+          {onCalories && <Item icon={<FlameIcon width={22} height={22} />} label="Licznik kalorii" onClick={onCalories} />}
         </ul>
 
         {onSignOut && (
