@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Session } from '@supabase/supabase-js'
 import type { Profile, Recipe, RecipeDraft } from '@/types/recipe'
+import type { TopCreator } from '@/lib/backend'
 import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { draftForSaving } from '@/lib/cookbook'
@@ -28,6 +29,7 @@ import { CaloriesScreen } from '@/screens/CaloriesScreen'
 import { EditProfileScreen } from '@/screens/EditProfileScreen'
 import { InterestsScreen } from '@/screens/InterestsScreen'
 import { CommentsSheet } from '@/components/CommentsSheet'
+import { CreatorRecipesSheet } from '@/components/CreatorRecipesSheet'
 import { EditRecipeScreen } from '@/screens/EditRecipeScreen'
 import { FeedScreen } from '@/screens/FeedScreen'
 import { LoginScreen } from '@/screens/LoginScreen'
@@ -113,6 +115,7 @@ type SheetState =
   | { kind: 'interests' }
   | { kind: 'calories' }
   | { kind: 'comments'; recipe: Recipe; focus: boolean }
+  | { kind: 'creator-recipes'; creator: TopCreator }
   | null
 
 function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Profile) => void; onSignOut?: () => void }) {
@@ -236,6 +239,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onGoSearch={() => changeTab('search')}
             onOpenActivity={openActivity}
             onOpenComments={(recipe, focus) => setSheet({ kind: 'comments', recipe, focus })}
+            onOpenCreator={(creator) => setSheet({ kind: 'creator-recipes', creator })}
             savedIds={savedIds}
             onToggleSave={toggleSave}
             unread={notes.unread}
@@ -428,6 +432,22 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               onClose={() => setSheet(null)}
               onOpenAuthor={(username) => {
                 setSheet(null) // arkusz jest ponad ekranami stosu, więc zamykamy go przed wejściem w profil
+                openProfile(username)
+              }}
+            />
+          </Sheet>
+        )}
+        {sheet?.kind === 'creator-recipes' && (
+          <Sheet key={`creator-${sheet.creator.user_id}`} onClose={() => setSheet(null)}>
+            <CreatorRecipesSheet
+              creator={sheet.creator}
+              onClose={() => setSheet(null)}
+              onOpenRecipe={(recipe) => {
+                setSheet(null)
+                openRecipe(recipe)
+              }}
+              onOpenProfile={(username) => {
+                setSheet(null)
                 openProfile(username)
               }}
             />

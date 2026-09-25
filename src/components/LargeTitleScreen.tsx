@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState, type ReactNode, type TouchEvent } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
 import { motion, useMotionValue, useScroll, useTransform } from 'framer-motion'
 import { TAB_BAR_PADDING } from './TabBar'
 import { SpinnerIcon } from './Icons'
@@ -71,42 +71,80 @@ export const LargeTitleScreen = forwardRef<LargeTitleScreenHandle, Props>(functi
     smallTitleOpacity.set(Math.min(1, Math.max(0, hidden / FADE_DISTANCE)))
   }
 
-  /* — pull-to-refresh: tylko gdy jesteśmy na samej górze i ktoś przeciąga w dół palcem — */
+  /* — pull-to-refresh: tylko gdy jesteśmy na samej górze i ktoś przeciąga w dół palcem —
+     Nasłuch przez natywny addEventListener (nie onTouch* z Reacta): React 17+ dopina touchmove
+     jako pasywny, więc preventDefault() w nim jest po cichu ignorowany. Bez przechwycenia
+     natywnego zdarzenia przeglądarka scrolluje RÓWNOLEGLE z naszym przesunięciem — stąd „szarpanie”
+     i brak płynnego cofnięcia, gdy palec wraca w górę. Blokujemy scroll tylko w trakcie realnego
+     ciągnięcia w dół na pozycji 0 — cofnięcie palca natychmiast oddaje kontrolę z powrotem scrollowi. */
   const [pull, setPull] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const pullRef = useRef(0)
+  const refreshingRef = useRef(false)
   const touchStartY = useRef<number | null>(null)
 
-  function onTouchStart(e: TouchEvent) {
-    if (!onRefresh || refreshing || (scrollRef.current?.scrollTop ?? 0) > 0) {
-      touchStartY.current = null
-      return
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !onRefresh) return
+
+    function onTouchStart(e: TouchEvent) {
+      if (refreshingRef.current || el!.scrollTop > 0) {
+        touchStartY.current = null
+        return
+      }
+      touchStartY.current = e.touches[0].clientY
     }
-    touchStartY.current = e.touches[0].clientY
-    setDragging(true)
-  }
-  function onTouchMove(e: TouchEvent) {
-    if (touchStartY.current === null) return
-    const dy = e.touches[0].clientY - touchStartY.current
-    setPull(dy <= 0 ? 0 : Math.min(MAX_PULL, dy * PULL_DAMPING))
-  }
-  async function onTouchEnd() {
-    if (touchStartY.current === null) return
-    touchStartY.current = null
-    setDragging(false)
-    if (pull >= REFRESH_THRESHOLD && onRefresh) {
-      setRefreshing(true)
-      setPull(REFRESH_THRESHOLD)
-      try {
-        await onRefresh()
-      } finally {
-        setRefreshing(false)
+    function onTouchMove(e: TouchEvent) {
+      if (touchStartY.current === null) return
+      const dy = e.touches[0].clientY - touchStartY.current
+      // Ciągnięcie w dół, wciąż na samej górze: przejmujemy gest i blokujemy natywny scroll pod nim
+      if (dy > 0 && el!.scrollTop === 0) {
+        e.preventDefault()
+        setDragging(true)
+        const next = Math.min(MAX_PULL, dy * PULL_DAMPING)
+        pullRef.current = next
+        setPull(next)
+      } else {
+        // Palec wrócił w górę (albo coś już przewinęło stronę) — oddajemy scroll przeglądarce od razu
+        pullRef.current = 0
         setPull(0)
       }
-    } else {
-      setPull(0)
     }
-  }
+    async function onTouchEnd() {
+      if (touchStartY.current === null) return
+      touchStartY.current = null
+      setDragging(false)
+      if (pullRef.current >= REFRESH_THRESHOLD) {
+        refreshingRef.current = true
+        setRefreshing(true)
+        pullRef.current = REFRESH_THRESHOLD
+        setPull(REFRESH_THRESHOLD)
+        try {
+          await onRefresh!()
+        } finally {
+          refreshingRef.current = false
+          setRefreshing(false)
+          pullRef.current = 0
+          setPull(0)
+        }
+      } else {
+        pullRef.current = 0
+        setPull(0)
+      }
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [onRefresh])
 
   return (
     <div className="relative h-full">
@@ -130,15 +168,7 @@ export const LargeTitleScreen = forwardRef<LargeTitleScreenHandle, Props>(functi
         </div>
       </div>
 
-      <div
-        ref={scrollRef}
-        onScroll={updateSmallTitle}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onTouchCancel={onTouchEnd}
-        className="scroll-y h-full"
-      >
+      <div ref={scrollRef} onScroll={updateSmallTitle} className="scroll-y h-full">
         {onRefresh && (pull > 0 || refreshing) && (
           <div
             className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex justify-center pt-[calc(env(safe-area-inset-top,0px)+50px)]"

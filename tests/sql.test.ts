@@ -513,4 +513,57 @@ describe('wyświetlenia i najpopularniejsze przepisy', () => {
   it('trending_recipes niedostępny dla anon', async () => {
     expect(await asOk(null, 'select * from public.trending_recipes(10)')).toMatch(/permission denied/i)
   })
+
+  it('top_creators: suma viralowości postów z ostatnich 14 dni, zgrupowana na osobę', async () => {
+    const R1 = '10000000-0000-0000-0000-0000000000b1' // Anny, 1 polubienie = 3 pkt
+    const R2 = '10000000-0000-0000-0000-0000000000b2' // Jana, 2 wyświetlenia = 2 pkt
+    const R3 = '10000000-0000-0000-0000-0000000000b3' // Jana, 1 komentarz = 4 pkt (razem z R2: 6 pkt — Jan przed Anną)
+    const STARY = '10000000-0000-0000-0000-0000000000b4' // Anny, sprzed 14 dni — nie liczy się mimo polubienia
+    await db.query(`insert into public.recipes (id, user_id, title, created_at) values ($1, $2, 'B1', now() - interval '1 day')`, [R1, ANNA])
+    await db.query(`insert into public.recipes (id, user_id, title, created_at) values ($1, $2, 'B2', now() - interval '1 day')`, [R2, JAN])
+    await db.query(`insert into public.recipes (id, user_id, title, created_at) values ($1, $2, 'B3', now() - interval '1 day')`, [R3, JAN])
+    await db.query(`insert into public.recipes (id, user_id, title, created_at) values ($1, $2, 'Stary', now() - interval '20 days')`, [STARY, ANNA])
+    await as(JAN, `insert into public.recipe_likes (recipe_id, user_id) values ('${R1}', '${JAN}')`)
+    await as(JAN, `insert into public.recipe_likes (recipe_id, user_id) values ('${STARY}', '${JAN}')`)
+    await as(JAN, `insert into public.recipe_views (recipe_id) values ('${R2}')`)
+    await as(PRIV, `insert into public.recipe_views (recipe_id) values ('${R2}')`)
+    await as(ANNA, `insert into public.recipe_comments (recipe_id, user_id, body) values ('${R3}', '${ANNA}', 'Super!')`)
+
+    const rows = await as<{ user_id: string; username: string; score: number }>(JAN, 'select * from public.top_creators(30)')
+    const jan = rows.find((r) => r.user_id === JAN)!
+    const anna = rows.find((r) => r.user_id === ANNA)!
+    expect(Number(jan.score)).toBe(6) // 2 (wyświetlenia) + 4 (komentarz)
+    expect(Number(anna.score)).toBe(3) // tylko polubienie z ostatnich 14 dni — stary przepis się nie liczy
+    expect(rows.findIndex((r) => r.user_id === JAN)).toBeLessThan(rows.findIndex((r) => r.user_id === ANNA))
+    expect(jan.username).toBe('jan.kucharz')
+
+    await db.exec(`delete from public.recipes where id in ('${R1}', '${R2}', '${R3}', '${STARY}')`)
+  })
+
+  it('top_creators niedostępny dla anon', async () => {
+    expect(await asOk(null, 'select * from public.top_creators(10)')).toMatch(/permission denied/i)
+  })
+
+  it('top_recipes_by_user: najlepsze przepisy jednej osoby, bez okna 14 dni', async () => {
+    const NOWY_HIT = '10000000-0000-0000-0000-0000000000c1'
+    const STARY_HIT = '10000000-0000-0000-0000-0000000000c2' // sprzed 20 dni, ale wciąż najlepszy — top_recipes_by_user nie filtruje po dacie
+    const SLABY = '10000000-0000-0000-0000-0000000000c3'
+    await db.query(`insert into public.recipes (id, user_id, title, created_at) values ($1, $2, 'Nowy hit', now() - interval '1 day')`, [NOWY_HIT, JAN])
+    await db.query(`insert into public.recipes (id, user_id, title, created_at) values ($1, $2, 'Stary hit', now() - interval '20 days')`, [STARY_HIT, JAN])
+    await db.query(`insert into public.recipes (id, user_id, title, created_at) values ($1, $2, 'Słaby', now() - interval '1 day')`, [SLABY, JAN])
+    await as(ANNA, `insert into public.recipe_likes (recipe_id, user_id) values ('${STARY_HIT}', '${ANNA}')`)
+    await as(ANNA, `insert into public.recipe_comments (recipe_id, user_id, body) values ('${STARY_HIT}', '${ANNA}', 'Super!')`)
+    await as(ANNA, `insert into public.recipe_likes (recipe_id, user_id) values ('${NOWY_HIT}', '${ANNA}')`)
+
+    const rows = await as<{ id: string }>(JAN, `select * from public.top_recipes_by_user('${JAN}', 3)`)
+    const ids = rows.map((r) => r.id)
+    expect(ids).toEqual([STARY_HIT, NOWY_HIT, SLABY]) // stary, ale lepszy przepis wciąż na pierwszym miejscu
+    expect(ids).not.toContain(ZUREK) // tylko przepisy podanego użytkownika
+
+    await db.exec(`delete from public.recipes where id in ('${NOWY_HIT}', '${STARY_HIT}', '${SLABY}')`)
+  })
+
+  it('top_recipes_by_user niedostępny dla anon', async () => {
+    expect(await asOk(null, `select * from public.top_recipes_by_user('${JAN}', 3)`)).toMatch(/permission denied/i)
+  })
 })

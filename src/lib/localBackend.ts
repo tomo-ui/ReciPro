@@ -1,7 +1,7 @@
 import type { Diet, MealTemplate } from '@/types/diet'
 import { newMeals, itemFromRecipe, sanitizeDiet, sanitizeMealTemplate, withPortions } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
-import type { Backend, FeedMode, ProfilePatch, RecipeSort } from './backend'
+import type { Backend, FeedMode, ProfilePatch, RecipeSort, TopCreator } from './backend'
 import { emit, on } from './events'
 import { normalizeInterests } from './interests'
 import { seedRecipes } from './seed'
@@ -324,6 +324,15 @@ const baseViews = (recipeId: string) => (recipeId.startsWith('demo-') ? hash(`${
 const baseSaves = (recipeId: string) => (recipeId.startsWith('demo-') ? hash(`${recipeId}s`) % 12 : 0)
 const loadViews = () => new Set(read<string[]>(KEYS.views, () => []))
 
+/** Viralowość jednego przepisu: wyświetlenia + polubienia×3 + komentarze×4 + zapisania×5 (jak recipe_engagement_score w SQL) */
+function engagementScore(r: Recipe, ctx: { views: Set<string>; liked: Set<string>; comments: Comment[]; savedCopies: Recipe[] }): number {
+  const viewCount = baseViews(r.id) + (ctx.views.has(r.id) ? 1 : 0)
+  const likeCount = baseLikes(r.id) + (ctx.liked.has(r.id) ? 1 : 0)
+  const commentCount = ctx.comments.filter((c) => c.recipe_id === r.id).length
+  const saveCount = baseSaves(r.id) + ctx.savedCopies.filter((s) => s.saved_from?.recipe_id === r.id).length
+  return viewCount + likeCount * 3 + commentCount * 4 + saveCount * 5
+}
+
 /** Obserwujący i obserwowani w trybie demo: przykładowe osoby (prawdziwych relacji tu nie ma) */
 function demoPeople(target: Profile, kind: 'followers' | 'following'): Profile[] {
   const me = loadMe()
@@ -511,18 +520,43 @@ export const localBackend: Backend = {
     const cutoffMs = 14 * 86_400_000
     const withinWindow = all.filter((r) => Date.now() - new Date(r.created_at).getTime() <= cutoffMs)
 
-    const views = loadViews()
-    const liked = loadLikes()
-    const comments = loadComments()
-    const savedCopies = loadOwn()
-    const scored = withinWindow.map((r) => {
-      const viewCount = baseViews(r.id) + (views.has(r.id) ? 1 : 0)
-      const likeCount = baseLikes(r.id) + (liked.has(r.id) ? 1 : 0)
-      const commentCount = comments.filter((c) => c.recipe_id === r.id).length
-      const saveCount = baseSaves(r.id) + savedCopies.filter((s) => s.saved_from?.recipe_id === r.id).length
-      const score = viewCount + likeCount * 3 + commentCount * 4 + saveCount * 5
-      return { r, score }
-    })
+    const ctx = { views: loadViews(), liked: loadLikes(), comments: loadComments(), savedCopies: loadOwn() }
+    const scored = withinWindow.map((r) => ({ r, score: engagementScore(r, ctx) }))
+    scored.sort((a, b) => b.score - a.score || newestFirst(a.r, b.r))
+    return scored.slice(0, limit).map((s) => s.r)
+  },
+
+  /** Odpowiednik supabase/trending.sql (public.top_creators): suma viralowości postów z ostatnich 14 dni, na osobę */
+  async topCreators(limit) {
+    const me = loadMe()
+    const own = loadOwn().filter(isPost).map((r) => withAuthor(r, me))
+    const all = [...own, ...publicDemoRecipes()]
+    const cutoffMs = 14 * 86_400_000
+    const withinWindow = all.filter((r) => Date.now() - new Date(r.created_at).getTime() <= cutoffMs)
+
+    const ctx = { views: loadViews(), liked: loadLikes(), comments: loadComments(), savedCopies: loadOwn() }
+    const byUser = new Map<string, TopCreator>()
+    for (const r of withinWindow) {
+      if (!r.user_id || !r.author) continue
+      const score = engagementScore(r, ctx)
+      const existing = byUser.get(r.user_id)
+      if (existing) existing.score += score
+      else byUser.set(r.user_id, { user_id: r.user_id, username: r.author.username, full_name: r.author.full_name, avatar_url: r.author.avatar_url, score })
+    }
+    return [...byUser.values()]
+      .filter((c) => c.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+  },
+
+  /** Odpowiednik supabase/trending.sql (public.top_recipes_by_user): najlepsze przepisy jednej osoby, bez okna 14 dni */
+  async topRecipesByUser(userId, limit) {
+    const me = loadMe()
+    const own = loadOwn().filter(isPost).map((r) => withAuthor(r, me))
+    const all = [...own, ...publicDemoRecipes()].filter((r) => r.user_id === userId)
+
+    const ctx = { views: loadViews(), liked: loadLikes(), comments: loadComments(), savedCopies: loadOwn() }
+    const scored = all.map((r) => ({ r, score: engagementScore(r, ctx) }))
     scored.sort((a, b) => b.score - a.score || newestFirst(a.r, b.r))
     return scored.slice(0, limit).map((s) => s.r)
   },

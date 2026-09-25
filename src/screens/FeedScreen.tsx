@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Ref } from 'react'
 import { motion } from 'framer-motion'
 import type { Recipe } from '@/types/recipe'
-import type { FeedMode } from '@/lib/backend'
+import type { FeedMode, TopCreator } from '@/lib/backend'
 import { backend } from '@/lib/data'
 import { on } from '@/lib/events'
 import { spreadAuthors } from '@/lib/feedOrder'
@@ -12,11 +12,13 @@ import { HeartIcon } from '@/components/Icons'
 import { LargeTitleScreen, type LargeTitleScreenHandle } from '@/components/LargeTitleScreen'
 import { LoadMore } from '@/components/LoadMore'
 import { FeedTitle } from '@/components/FeedTitle'
-import { TrendingBar } from '@/components/TrendingBar'
+import { TopCreatorsList } from '@/components/TopCreatorsList'
 
 interface Props {
   onOpenRecipe: (r: Recipe) => void
   onOpenProfile: (username: string) => void
+  /** Otwiera arkusz z podglądem najlepszych przepisów dotkniętego top twórcy */
+  onOpenCreator: (creator: TopCreator) => void
   /** Otwiera komentarze pod przepisem; `focus` = z kursorem w polu nowego komentarza */
   onOpenComments: (recipe: Recipe, focus: boolean) => void
   /** Id przepisów z feedu zapisanych już w mojej książce kucharskiej */
@@ -39,7 +41,7 @@ const newSeed = () => crypto.randomUUID()
  * w obrębie jednego odświeżenia (ziarno), więc doładowywanie nie powtarza pozycji.
  * „Najnowsze” pokazuje chronologicznie tylko obserwowanych.
  */
-export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, savedIds, onToggleSave, onGoSearch, onOpenActivity, unread, topRef }: Props) {
+export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenComments, savedIds, onToggleSave, onGoSearch, onOpenActivity, unread, topRef }: Props) {
   const [mode, setMode] = useState<FeedMode>('foryou')
   const [seed, setSeed] = useState(newSeed)
   // Przepisy tego samego autora nie idą jeden po drugim (także na granicy stron; wyświetlone karty się nie przestawiają)
@@ -98,7 +100,7 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenComments, savedI
         </div>
       }
     >
-      <TrendingBar onOpen={onOpenRecipe} />
+      <TopCreatorsList onOpen={onOpenCreator} />
       {empty ? (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-2 pt-14 text-center">
           <p className="text-[20px] font-semibold">{mode === 'foryou' ? 'Na razie nic tu nie ma' : 'Nie obserwujesz nikogo'}</p>

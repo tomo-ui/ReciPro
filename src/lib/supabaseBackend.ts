@@ -59,6 +59,13 @@ const toSummary = (r: ProfileSummaryRow): ProfileSummary => ({
   is_following: r.is_following,
   is_me: r.is_me,
 })
+interface TopCreatorRow {
+  user_id: string
+  username: string
+  full_name: string | null
+  avatar_url: string | null
+  score: number
+}
 interface StatsRow {
   recipe_id: string
   like_count: number
@@ -460,6 +467,24 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
 
     async trending(limit) {
       const { data, error } = await client().rpc('trending_recipes', { p_limit: limit })
+      if (error) fail(error)
+      return (data as RecipeWithAuthorRow[]).map(rowWithAuthorToRecipe)
+    },
+
+    async topCreators(limit) {
+      const { data, error } = await client().rpc('top_creators', { p_limit: limit })
+      if (error) fail(error)
+      return (data as TopCreatorRow[]).map((r) => ({
+        user_id: r.user_id,
+        username: r.username,
+        full_name: r.full_name ?? undefined,
+        avatar_url: r.avatar_url ?? undefined,
+        score: r.score,
+      }))
+    },
+
+    async topRecipesByUser(userId, limit) {
+      const { data, error } = await client().rpc('top_recipes_by_user', { p_user_id: userId, p_limit: limit })
       if (error) fail(error)
       return (data as RecipeWithAuthorRow[]).map(rowWithAuthorToRecipe)
     },

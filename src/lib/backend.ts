@@ -18,6 +18,15 @@ import type {
 
 /** `foryou` = Dla Ciebie (polecane wg zainteresowań i polubień + obserwowani), `newest` = chronologicznie obserwowani */
 export type FeedMode = 'foryou' | 'newest'
+
+/** Wiersz na liście top 10 twórców (suma viralowości ich postów z ostatnich 14 dni) */
+export interface TopCreator {
+  user_id: string
+  username: string
+  full_name?: string
+  avatar_url?: string
+  score: number
+}
 export type RecipeSort = 'relevance' | 'newest'
 
 export interface ProfilePatch {
@@ -100,6 +109,10 @@ export interface Backend {
   recordView(recipeId: string): Promise<void>
   /** Najpopularniejsze przepisy z ostatnich 14 dni (pasek nad feedem, jak Instastories) */
   trending(limit: number): Promise<Recipe[]>
+  /** Top twórcy z ostatnich 14 dni (suma viralowości ich postów) */
+  topCreators(limit: number): Promise<TopCreator[]>
+  /** Najlepsze przepisy danego twórcy (podgląd po rozwinięciu wiersza na liście top twórców) */
+  topRecipesByUser(userId: string, limit: number): Promise<Recipe[]>
 
   /* — panel admina — */
   /** null = zwykły użytkownik (bez panelu admina) */
