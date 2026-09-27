@@ -142,106 +142,112 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
   }
 
   return (
-    <div>
-      <form onSubmit={send} className="relative flex items-center gap-2.5">
-        {mentionQuery !== null && suggestions.length > 0 && (
-          <div className="absolute top-full left-0 z-10 mt-2 max-h-56 w-full overflow-y-auto rounded-[14px] bg-surface shadow-lg">
-            {suggestions.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => pickMention(p.username)}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-surface-2"
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Lista komentarzy — jedyna przewijana część; pole niżej zostaje na stałe u dołu panelu */}
+      <div className="scroll-y min-h-0 flex-1">
+        <ul className="space-y-4 pb-3">
+          <AnimatePresence initial={false}>
+            {list.items.map((c) => (
+              <motion.li
+                key={c.id}
+                layout
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex gap-2.5"
               >
-                <Avatar name={p.username} src={p.avatar_url} size={30} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center text-[14px] font-semibold">
-                    <span className="truncate">{p.username}</span>
-                    <VerifiedBadge username={p.username} size={12} />
-                  </span>
-                  {p.full_name && <span className="block truncate text-[12px] text-label-2">{p.full_name}</span>}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-        <Avatar name={me.username} src={me.avatar_url} size={34} />
-        {/* Wyraźnie obrysowane pole obok mojego zdjęcia; po dotknięciu podświetla się na kolor akcentu */}
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[20px] border-[1.5px] border-label-3 bg-surface py-0.5 pr-1 pl-3.5 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]">
-          <textarea
-            ref={inputRef}
-            autoFocus={autoFocus}
-            value={text}
-            onChange={handleChange}
-            placeholder="Dodaj komentarz…"
-            rows={1}
-            aria-label="Komentarz"
-            className="max-h-32 min-h-[28px] min-w-0 flex-1 resize-none bg-transparent py-1 leading-snug outline-none [field-sizing:content] placeholder:text-label-3"
-          />
-          <motion.button
-            type="submit"
-            whileTap={{ scale: 0.9 }}
-            disabled={!text.trim() || sending}
-            aria-label="Wyślij komentarz"
-            className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
-          >
-            {sending ? <SpinnerIcon width={16} height={16} /> : <SendIcon width={15} height={15} strokeWidth={2.6} />}
-          </motion.button>
-        </div>
-      </form>
-      {text.length > MAX - 60 && <p className="mt-1 pr-2 text-right text-[12px] text-label-2">{text.length}/{MAX}</p>}
-      {error && <p className="mt-2 px-1 text-[13px] text-red-500">{error}</p>}
-
-      <ul className="mt-4 space-y-4">
-        <AnimatePresence initial={false}>
-          {list.items.map((c) => (
-            <motion.li
-              key={c.id}
-              layout
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, height: 0 }}
-              className="flex gap-2.5"
-            >
-              <button onClick={() => onOpenAuthor(c.author.username)} className="shrink-0 self-start" aria-label={`Profil ${c.author.username}`}>
-                <Avatar name={c.author.username} src={c.author.avatar_url} size={34} />
-              </button>
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center text-[13px] text-label-2">
-                  <button onClick={() => onOpenAuthor(c.author.username)} className="font-semibold text-label">
-                    {c.author.username}
-                  </button>
-                  <VerifiedBadge username={c.author.username} size={12} className="align-baseline" />
-                  <span className="ml-1.5">· {timeAgo(c.created_at)}</span>
-                </p>
-                <p className="text-[15px] leading-snug break-words whitespace-pre-wrap" data-selectable>
-                  {renderBody(c.body)}
-                </p>
-              </div>
-              {/* Serce z licznikiem po prawej, w linii z awatarem — jak w Instagramie */}
-              <button
-                onClick={() => toggleLike(c)}
-                aria-label={c.liked ? 'Cofnij polubienie komentarza' : 'Polub komentarz'}
-                aria-pressed={c.liked}
-                className={`flex shrink-0 flex-col items-center gap-0.5 self-start pt-0.5 transition-colors ${c.liked ? 'text-red-500' : 'text-label-2'}`}
-              >
-                <HeartIcon width={14} height={14} filled={c.liked} />
-                {c.like_count > 0 && <span className="text-[11px] tabular-nums">{c.like_count}</span>}
-              </button>
-              {(c.user_id === me.id || isRecipeOwner) && (
-                <button onClick={() => remove(c)} aria-label="Usuń komentarz" className="shrink-0 self-start p-1 text-label-3 active:text-red-500">
-                  <TrashIcon width={16} height={16} />
+                <button onClick={() => onOpenAuthor(c.author.username)} className="shrink-0 self-start" aria-label={`Profil ${c.author.username}`}>
+                  <Avatar name={c.author.username} src={c.author.avatar_url} size={34} />
                 </button>
-              )}
-            </motion.li>
-          ))}
-        </AnimatePresence>
-      </ul>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center text-[13px] text-label-2">
+                    <button onClick={() => onOpenAuthor(c.author.username)} className="font-semibold text-label">
+                      {c.author.username}
+                    </button>
+                    <VerifiedBadge username={c.author.username} size={12} className="align-baseline" />
+                    <span className="ml-1.5">· {timeAgo(c.created_at)}</span>
+                  </p>
+                  <p className="text-[15px] leading-snug break-words whitespace-pre-wrap" data-selectable>
+                    {renderBody(c.body)}
+                  </p>
+                </div>
+                {/* Serce z licznikiem po prawej, w linii z awatarem — jak w Instagramie */}
+                <button
+                  onClick={() => toggleLike(c)}
+                  aria-label={c.liked ? 'Cofnij polubienie komentarza' : 'Polub komentarz'}
+                  aria-pressed={c.liked}
+                  className={`flex shrink-0 flex-col items-center gap-0.5 self-start pt-0.5 transition-colors ${c.liked ? 'text-red-500' : 'text-label-2'}`}
+                >
+                  <HeartIcon width={14} height={14} filled={c.liked} />
+                  {c.like_count > 0 && <span className="text-[11px] tabular-nums">{c.like_count}</span>}
+                </button>
+                {(c.user_id === me.id || isRecipeOwner) && (
+                  <button onClick={() => remove(c)} aria-label="Usuń komentarz" className="shrink-0 self-start p-1 text-label-3 active:text-red-500">
+                    <TrashIcon width={16} height={16} />
+                  </button>
+                )}
+              </motion.li>
+            ))}
+          </AnimatePresence>
+        </ul>
 
-      {list.items.length === 0 && !list.loading && !list.error && (
-        <p className="pt-4 text-center text-[14px] text-label-2">Jeszcze nikt nie skomentował. Napisz pierwszy komentarz.</p>
-      )}
-      <LoadMore loading={list.loading} done={list.done} error={list.error} onLoadMore={list.loadMore} onRetry={list.retry} />
+        {list.items.length === 0 && !list.loading && !list.error && (
+          <p className="pt-4 text-center text-[14px] text-label-2">Jeszcze nikt nie skomentował. Napisz pierwszy komentarz.</p>
+        )}
+        <LoadMore loading={list.loading} done={list.done} error={list.error} onLoadMore={list.loadMore} onRetry={list.retry} />
+      </div>
+
+      {/* Pole komentarza — zawsze u dołu panelu; gdy panel rośnie nad klawiaturę (Sheet.tsx), jedzie razem z nim */}
+      <div className="shrink-0 pt-3">
+        <form onSubmit={send} className="relative flex items-center gap-2.5">
+          {mentionQuery !== null && suggestions.length > 0 && (
+            <div className="absolute bottom-full left-0 z-10 mb-2 max-h-56 w-full overflow-y-auto rounded-[14px] bg-surface shadow-lg">
+              {suggestions.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => pickMention(p.username)}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-surface-2"
+                >
+                  <Avatar name={p.username} src={p.avatar_url} size={30} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center text-[14px] font-semibold">
+                      <span className="truncate">{p.username}</span>
+                      <VerifiedBadge username={p.username} size={12} />
+                    </span>
+                    {p.full_name && <span className="block truncate text-[12px] text-label-2">{p.full_name}</span>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <Avatar name={me.username} src={me.avatar_url} size={34} />
+          {/* Wyraźnie obrysowane pole obok mojego zdjęcia; po dotknięciu podświetla się na kolor akcentu */}
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[20px] border-[1.5px] border-label-3 bg-surface py-0.5 pr-1 pl-3.5 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]">
+            <textarea
+              ref={inputRef}
+              autoFocus={autoFocus}
+              value={text}
+              onChange={handleChange}
+              placeholder="Dodaj komentarz…"
+              rows={1}
+              aria-label="Komentarz"
+              className="max-h-32 min-h-[28px] min-w-0 flex-1 resize-none bg-transparent py-1 leading-snug outline-none [field-sizing:content] placeholder:text-label-3"
+            />
+            <motion.button
+              type="submit"
+              whileTap={{ scale: 0.9 }}
+              disabled={!text.trim() || sending}
+              aria-label="Wyślij komentarz"
+              className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity disabled:opacity-30"
+            >
+              {sending ? <SpinnerIcon width={16} height={16} /> : <SendIcon width={15} height={15} strokeWidth={2.6} />}
+            </motion.button>
+          </div>
+        </form>
+        {text.length > MAX - 60 && <p className="mt-1 pr-2 text-right text-[12px] text-label-2">{text.length}/{MAX}</p>}
+        {error && <p className="mt-2 px-1 text-[13px] text-red-500">{error}</p>}
+      </div>
     </div>
   )
 }

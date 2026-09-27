@@ -25,7 +25,7 @@ export function CommentsSheet({ recipeId, recipeTitle, isRecipeOwner, me, autoFo
         </button>
       </header>
       <p className="truncate px-4 pb-2 text-center text-[13px] text-label-2">{recipeTitle}</p>
-      <div className="scroll-y flex-1 px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
+      <div className="flex min-h-0 flex-1 flex-col px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
         <CommentsSection
           recipeId={recipeId}
           me={me}

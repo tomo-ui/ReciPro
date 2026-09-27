@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion, useDragControls } from 'framer-motion'
 import { spring } from '@/lib/ui'
 
@@ -10,33 +10,47 @@ interface Props {
 }
 
 /**
- * Ile px u dołu układu strony zasłania teraz klawiatura ekranowa (różnica między pełnym
- * viewportem a visualViewport). Bez tego elementy `position: fixed` przypięte do dołu
- * (pole komentarza, przyciski) chowają się pod klawiaturą zamiast zostać nad nią.
+ * Rzeczywiście widoczny obszar ekranu (visualViewport), nie window.innerHeight — na iOS klawiatura
+ * ekranowa różnie wpływa na te dwie wielkości w zależności od trybu (Safari kontra zainstalowana PWA;
+ * w PWA obie potrafią skurczyć się razem). Dlatego NIE liczymy różnicy między nimi — zawsze pozycjonujemy
+ * panel wprost względem bieżącego obszaru, a „klawiatura otwarta” poznajemy po tym, że jest on wyraźnie
+ * mniejszy niż największa dotąd zmierzona wysokość (czyli stan sprzed pojawienia się klawiatury).
  */
-function useKeyboardInset(): number {
-  const [inset, setInset] = useState(0)
+function useVisibleViewport() {
+  const [state, setState] = useState(() => ({ top: 0, height: typeof window === 'undefined' ? 0 : window.innerHeight }))
+  const maxHeight = useRef(state.height)
+
   useEffect(() => {
     const vv = window.visualViewport
-    if (!vv) return
-    const update = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+    const update = () => {
+      const next = vv ? { top: vv.offsetTop, height: vv.height } : { top: 0, height: window.innerHeight }
+      if (next.height > maxHeight.current) maxHeight.current = next.height
+      setState(next)
+    }
     update()
-    vv.addEventListener('resize', update)
-    vv.addEventListener('scroll', update)
+    vv?.addEventListener('resize', update)
+    vv?.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
+    window.addEventListener('orientationchange', update)
     return () => {
-      vv.removeEventListener('resize', update)
-      vv.removeEventListener('scroll', update)
+      vv?.removeEventListener('resize', update)
+      vv?.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
     }
   }, [])
-  return inset
+
+  const bottomInset = Math.max(0, maxHeight.current - (state.top + state.height))
+  const keyboardOpen = state.height < maxHeight.current - 80
+  return { top: state.top, height: state.height, bottomInset, keyboardOpen }
 }
 
 /** Modalny sheet w stylu iOS: sprężynowy wjazd, przeciągnięcie za uchwyt zamyka */
 export function Sheet({ onClose, size = 'full', children }: Props) {
   const controls = useDragControls()
   // Klawiatura otwarta: panel „large” rośnie w górę i zostaje tuż nad nią, jak w Instagramie
-  const keyboardInset = useKeyboardInset()
-  const top = size === 'large' ? (keyboardInset > 0 ? '10vh' : '25vh') : 'calc(env(safe-area-inset-top, 0px) + 10px)'
+  const { top: vvTop, height: vvHeight, bottomInset, keyboardOpen } = useVisibleViewport()
+  const top = size === 'large' ? vvTop + vvHeight * (keyboardOpen ? 0.1 : 0.25) : 'calc(env(safe-area-inset-top, 0px) + 10px)'
 
   return (
     <>
@@ -52,7 +66,7 @@ export function Sheet({ onClose, size = 'full', children }: Props) {
         role="dialog"
         aria-modal="true"
         className="fixed inset-x-0 z-50 flex flex-col overflow-hidden rounded-t-[28px] bg-bg shadow-2xl"
-        style={{ top, bottom: keyboardInset, transition: 'top 0.25s ease, bottom 0.25s ease' }}
+        style={{ top, bottom: bottomInset, transition: 'top 0.2s ease, bottom 0.2s ease' }}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
