@@ -54,3 +54,19 @@ export function normalizeBio(raw: string): string | undefined {
   const t = lines.slice(0, BIO_MAX_LINES).join('\n').slice(0, BIO_MAX_LENGTH).trim()
   return t || undefined
 }
+
+export const WEBSITE_MAX_LENGTH = 200
+
+/** Link pod opisem profilu: dodaje https:// gdy brak schematu; puste albo nieprawidłowe → undefined */
+export function normalizeWebsite(raw: string): string | undefined {
+  const t = raw.trim()
+  if (!t) return undefined
+  const withScheme = /^https?:\/\//i.test(t) ? t : `https://${t}`
+  try {
+    const u = new URL(withScheme)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return undefined
+    return withScheme.slice(0, WEBSITE_MAX_LENGTH)
+  } catch {
+    return undefined
+  }
+}

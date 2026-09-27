@@ -5,6 +5,7 @@ import { usePaged } from '@/hooks/usePaged'
 import { LockIcon, SpinnerIcon } from '@/components/Icons'
 import { LoadMore } from '@/components/LoadMore'
 import { PersonRow } from '@/components/PersonRow'
+import { SegmentedControl } from '@/components/SegmentedControl'
 
 export type ListKind = 'followers' | 'following'
 
@@ -15,10 +16,12 @@ interface Props {
   username: string
   kind: ListKind
   onOpenProfile: (username: string) => void
+  /** Przełącza na drugą listę (obserwujący ↔ obserwowani) tego samego profilu, bez powrotu na poprzedni ekran */
+  onSwitchKind: (kind: ListKind) => void
 }
 
 /** Lista obserwujących albo obserwowanych danego profilu; odświeża się sama, gdy zmienią się jego liczniki */
-export function PeopleListScreen({ username, kind, onOpenProfile }: Props) {
+export function PeopleListScreen({ username, kind, onOpenProfile, onSwitchKind }: Props) {
   const [profile, setProfile] = useState<ProfileSummary | null | undefined>(undefined)
 
   useEffect(() => {
@@ -78,7 +81,6 @@ export function PeopleListScreen({ username, kind, onOpenProfile }: Props) {
     )
   }
 
-  const total = kind === 'followers' ? profile.followers_count : profile.following_count
   const setFollowing = (id: string, following: boolean) => {
     lastLocalChange.current = Date.now()
     people.setItems((items) =>
@@ -88,9 +90,16 @@ export function PeopleListScreen({ username, kind, onOpenProfile }: Props) {
 
   return (
     <div className="px-[max(16px,env(safe-area-inset-left))] pt-4">
-      <p className="mb-2 px-1 text-[13px] font-semibold text-label-2 uppercase">
-        {kind === 'followers' ? 'Obserwujący' : 'Obserwowani'} · <span className="tabular-nums">{total}</span>
-      </p>
+      <div className="mb-3">
+        <SegmentedControl<ListKind>
+          value={kind}
+          onChange={onSwitchKind}
+          options={[
+            { value: 'followers', label: `Obserwujący (${profile.followers_count})` },
+            { value: 'following', label: `Obserwowani (${profile.following_count})` },
+          ]}
+        />
+      </div>
       {people.items.length === 0 && !people.loading && !people.error ? (
         <p className="pt-12 text-center text-[15px] text-label-2">
           {kind === 'followers' ? 'Nikt jeszcze nie obserwuje tego profilu.' : 'Ten profil nikogo jeszcze nie obserwuje.'}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, useDragControls } from 'framer-motion'
-import type { Profile, Recipe, RecipeDraft } from '@/types/recipe'
+import type { Recipe, RecipeDraft } from '@/types/recipe'
 import { normalizeIngredient } from '@/lib/ingredients'
 import { scaleFactor, scaleIngredient } from '@/lib/scale'
 import { formatMinutes, spring, totalTime } from '@/lib/ui'
@@ -8,7 +8,6 @@ import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { Avatar } from '@/components/Avatar'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { BookmarkIcon, ChevronLeftIcon, ClockIcon, LockIcon, CommentIcon, MinusIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
-import { CommentsSection } from '@/components/CommentsSection'
 import { LikeButton } from '@/components/LikeButton'
 import { NutritionSection } from '@/components/NutritionSection'
 import { FEATURES } from '@/lib/features'
@@ -16,14 +15,16 @@ import { Cover } from '@/components/RecipeCard'
 
 interface Props {
   recipe: Recipe
-  /** Zalogowany użytkownik (autor nowych komentarzy) */
-  me: Profile
   /** Autor może edytować i usuwać; pozostali tylko oglądają */
   isOwner: boolean
   onBack: () => void
   onEdit: () => void
   onDelete: () => void
   onOpenAuthor: (username: string) => void
+  /** Otwiera panel komentarzy (ten sam co w feedzie), bez fokusu na polu */
+  onOpenComments: () => void
+  /** Otwiera listę osób, które polubiły przepis */
+  onOpenLikers: () => void
   /** Zapisuje dopasowaną wersję przepisu jako nowy przepis użytkownika */
   onSaveCopy?: (draft: RecipeDraft) => Promise<void>
   /** Cudzy przepis: czy jest już w mojej książce kucharskiej; dotknięcie zapisuje albo usuwa zapis */
@@ -44,10 +45,10 @@ function groupLines<T extends { group?: string }>(lines: T[]) {
 
 const MAX_SERVINGS = 99
 
-export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDelete, onOpenAuthor, onSaveCopy, saved, onToggleSave }: Props) {
+export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, onOpenAuthor, onOpenComments, onOpenLikers, onSaveCopy, saved, onToggleSave }: Props) {
   const [savingBook, setSavingBook] = useState(false)
   const controls = useDragControls()
-  const { stats, set: setStats, update: updateStats } = useRecipeStats([recipe])
+  const { stats, set: setStats } = useRecipeStats([recipe])
   const recipeStats = stats[recipe.id]
   const time = formatMinutes(totalTime(recipe))
 
@@ -140,12 +141,8 @@ export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDele
           </div>
 
           <div className="mt-5 flex items-center gap-6 border-y border-separator py-3">
-            <LikeButton large recipeId={recipe.id} stats={recipeStats} onChange={(next) => setStats(recipe.id, next)} />
-            <button
-              onClick={() => document.getElementById('komentarze')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              aria-label="Przejdź do komentarzy"
-              className="flex items-center gap-1.5 text-[16px] font-semibold text-label-2"
-            >
+            <LikeButton large recipeId={recipe.id} stats={recipeStats} onChange={(next) => setStats(recipe.id, next)} onOpenLikers={onOpenLikers} />
+            <button onClick={onOpenComments} aria-label="Komentarze" className="flex items-center gap-1.5 text-[16px] font-semibold text-label-2">
               <CommentIcon width={26} height={26} />
               <span className="tabular-nums">{recipeStats?.comment_count ?? '–'}</span>
             </button>
@@ -247,18 +244,6 @@ export function RecipeDetailScreen({ recipe, me, isOwner, onBack, onEdit, onDele
                 </ol>
               </div>
             ))}
-          </Section>
-
-          <Section title={recipeStats ? `Komentarze (${recipeStats.comment_count})` : 'Komentarze'}>
-            <div id="komentarze">
-              <CommentsSection
-                recipeId={recipe.id}
-                me={me}
-                isRecipeOwner={isOwner}
-                onOpenAuthor={onOpenAuthor}
-                onCountChange={(delta) => updateStats(recipe.id, (st) => ({ ...st, comment_count: Math.max(0, st.comment_count + delta) }))}
-              />
-            </div>
           </Section>
 
           {recipe.source_url && (

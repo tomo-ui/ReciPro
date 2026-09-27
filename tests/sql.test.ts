@@ -567,3 +567,130 @@ describe('wyświetlenia i najpopularniejsze przepisy', () => {
     expect(await asOk(null, `select * from public.top_recipes_by_user('${JAN}', 3)`)).toMatch(/permission denied/i)
   })
 })
+
+describe('kody zaproszeń do zamkniętej bety', () => {
+  const TK = '20000000-0000-0000-0000-000000000001' // admin (konto twórcy)
+  const NOWY_UZYTKOWNIK = '20000000-0000-0000-0000-000000000002' // drugie konto bez profilu
+
+  beforeAll(async () => {
+    await db.query('insert into auth.users (id, email) values ($1, $2)', [TK, `${TK}@x.pl`])
+    await db.exec(`insert into public.profiles (id, username, full_name) values ('${TK}', 'tk', 'Twórca')`)
+    await db.exec(`insert into public.app_admins (user_id) values ('${TK}')`)
+    await db.query('insert into auth.users (id, email) values ($1, $2)', [NOWY_UZYTKOWNIK, `${NOWY_UZYTKOWNIK}@x.pl`])
+  })
+
+  it('admin_create_invite_code: 5 różnych znaków (wielkie litery i cyfry), tylko dla admina', async () => {
+    const rows = await as<{ admin_create_invite_code: string }>(TK, 'select public.admin_create_invite_code()')
+    const code = rows[0].admin_create_invite_code
+    expect(code).toMatch(/^[A-Z0-9]{5}$/)
+    expect(new Set(code.split('')).size).toBe(5) // wszystkie znaki różne
+
+    expect(await asOk(ANNA, 'select public.admin_create_invite_code()')).toMatch(/permission denied/i)
+    expect(await asOk(null, 'select public.admin_create_invite_code()')).toMatch(/permission denied/i)
+  })
+
+  it('admin_list_invite_codes: widzi tylko admin, reszta dostaje pustą listę', async () => {
+    const asAdmin = await as<{ code: string }>(TK, 'select * from public.admin_list_invite_codes()')
+    expect(asAdmin.length).toBeGreaterThan(0)
+
+    const asAnna = await as(ANNA, 'select * from public.admin_list_invite_codes()')
+    expect(asAnna).toEqual([])
+
+    expect(await asOk(null, 'select * from public.admin_list_invite_codes()')).toMatch(/permission denied/i)
+  })
+
+  it('create_profile_with_invite: zużywa kod jednorazowo, potem ten sam kod już nie działa', async () => {
+    const created = await as<{ admin_create_invite_code: string }>(TK, 'select public.admin_create_invite_code()')
+    const code = created[0].admin_create_invite_code
+
+    const profile = await as<{ username: string }>(
+      NOPROFILE,
+      `select * from public.create_profile_with_invite('bez.profilu.beta', 'Nowy', '${code}')`,
+    )
+    expect(profile[0].username).toBe('bez.profilu.beta')
+
+    const [{ used_at }] = await as<{ used_at: string | null }>(
+      TK,
+      `select used_at from public.admin_list_invite_codes() where code = '${code}'`,
+    )
+    expect(used_at).not.toBeNull()
+
+    // Ten sam kod drugi raz — dla innego, wciąż bezprofilowego konta — już nie działa
+    expect(
+      await asOk(NOWY_UZYTKOWNIK, `select * from public.create_profile_with_invite('ktos.inny', 'Ktoś', '${code}')`),
+    ).toMatch(/invite_code_invalid/)
+
+    // Nieistniejący kod też nie działa
+    expect(
+      await asOk(NOWY_UZYTKOWNIK, `select * from public.create_profile_with_invite('ktos.inny', 'Ktoś', 'ZZZZZ')`),
+    ).toMatch(/invite_code_invalid/)
+
+    await db.exec(`delete from public.profiles where id = '${NOPROFILE}'`) // posprzątanie: dalej użytkownik jest „bez profilu”
+  })
+
+  it('create_profile_with_invite niedostępny dla anon', async () => {
+    expect(await asOk(null, `select * from public.create_profile_with_invite('x', 'x', 'AAAAA')`)).toMatch(/permission denied/i)
+  })
+})
+
+describe('polubienia komentarzy, oznaczenia @ i lista polubień przepisu', () => {
+  const RECIPE = '10000000-0000-0000-0000-000000000001' // Żurek staropolski, Anny
+
+  it('polubienie komentarza: licznik i „liked” w list_comments, jednorazowo (klucz główny)', async () => {
+    const [{ id: commentId }] = await as<{ id: string }>(
+      JAN,
+      `insert into public.recipe_comments (recipe_id, user_id, body) values ('${RECIPE}', '${JAN}', 'Pyszne!') returning id`,
+    )
+    await as(ANNA, `insert into public.recipe_comment_likes (comment_id) values ('${commentId}')`)
+
+    const asAnna = await as<{ id: string; like_count: number; liked: boolean }>(ANNA, `select * from public.list_comments('${RECIPE}', 20, 0)`)
+    const row = asAnna.find((r) => r.id === commentId)!
+    expect(row.like_count).toBe(1)
+    expect(row.liked).toBe(true)
+
+    const asJan = await as<{ id: string; liked: boolean }>(JAN, `select * from public.list_comments('${RECIPE}', 20, 0)`)
+    expect(asJan.find((r) => r.id === commentId)!.liked).toBe(false)
+
+    // Drugie polubienie tej samej osoby narusza klucz główny (comment_id, user_id)
+    expect(await asOk(ANNA, `insert into public.recipe_comment_likes (comment_id) values ('${commentId}')`)).toMatch(/duplicate key/i)
+
+    await as(ANNA, `delete from public.recipe_comment_likes where comment_id = '${commentId}'`)
+    const afterUnlike = await as<{ id: string; like_count: number }>(ANNA, `select * from public.list_comments('${RECIPE}', 20, 0)`)
+    expect(afterUnlike.find((r) => r.id === commentId)!.like_count).toBe(0)
+
+    await db.exec(`delete from public.recipe_comments where id = '${commentId}'`)
+  })
+
+  it('oznaczenie @nazwa w komentarzu tworzy powiadomienie „mention” dla tej osoby, nieznana nazwa nic nie tworzy', async () => {
+    const [{ id: commentId }] = await as<{ id: string }>(
+      JAN,
+      `insert into public.recipe_comments (recipe_id, user_id, body) values ('${RECIPE}', '${JAN}', 'Super, @anna_gotuje spróbuj też z koperkiem! I @nieistniejący.') returning id`,
+    )
+    const notifs = await as<{ type: string; actor_id: string; comment_id: string }>(ANNA, `select * from public.notifications where type = 'mention'`)
+    const mine = notifs.filter((n) => n.comment_id === commentId)
+    expect(mine).toHaveLength(1) // tylko realna nazwa, „nieistniejący” pominięty
+    expect(mine[0].actor_id).toBe(JAN)
+
+    await db.exec(`delete from public.recipe_comments where id = '${commentId}'`)
+  })
+
+  it('oznaczenie samego siebie nie tworzy powiadomienia', async () => {
+    const [{ id: commentId }] = await as<{ id: string }>(
+      ANNA,
+      `insert into public.recipe_comments (recipe_id, user_id, body) values ('${RECIPE}', '${ANNA}', 'Robię to zawsze, @anna_gotuje poleca!') returning id`,
+    )
+    const notifs = await as<{ comment_id: string }>(ANNA, `select * from public.notifications where type = 'mention'`)
+    expect(notifs.some((n) => n.comment_id === commentId)).toBe(false)
+    await db.exec(`delete from public.recipe_comments where id = '${commentId}'`)
+  })
+
+  it('list_likers: zwraca osoby, które polubiły przepis; niedostępny dla anon', async () => {
+    await as(JAN, `insert into public.recipe_likes (recipe_id) values ('${RECIPE}')`)
+    const rows = await as<{ username: string }>(ANNA, `select * from public.list_likers('${RECIPE}', 30, 0)`)
+    expect(rows.map((r) => r.username)).toContain('jan.kucharz')
+
+    expect(await asOk(null, `select * from public.list_likers('${RECIPE}', 30, 0)`)).toMatch(/permission denied/i)
+
+    await db.exec(`delete from public.recipe_likes where recipe_id = '${RECIPE}'`)
+  })
+})

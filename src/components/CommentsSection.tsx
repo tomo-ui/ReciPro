@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { Comment, Profile } from '@/types/recipe'
+import type { Comment, Profile, ProfileSummary } from '@/types/recipe'
 import { backend } from '@/lib/data'
 import { emit } from '@/lib/events'
 import { timeAgo } from '@/lib/ui'
 import { usePaged } from '@/hooks/usePaged'
 import { Avatar } from './Avatar'
 import { VerifiedBadge } from './VerifiedBadge'
-import { SendIcon, SpinnerIcon, TrashIcon } from './Icons'
+import { HeartIcon, SendIcon, SpinnerIcon, TrashIcon } from './Icons'
 import { LoadMore } from './LoadMore'
 
 const MAX = 500
+/** Token „@nazwa” pisany właśnie teraz, tuż przed kursorem (spacja albo początek linii przed @) */
+const MENTION_TOKEN_RE = /(?:^|\s)@([a-zA-Z0-9_.]{0,30})$/
+/** Wszystkie „@nazwa” w już wysłanym komentarzu — do podświetlenia na pomarańczowo */
+const MENTION_SPLIT_RE = /(@[a-zA-Z0-9_.]+)/g
 
 interface Props {
   recipeId: string
@@ -24,6 +28,15 @@ interface Props {
   autoFocus?: boolean
 }
 
+/** Treść komentarza z „@nazwa” podświetlonymi na pomarańczowo (kolor akcentu) */
+function renderBody(body: string) {
+  return body.split(MENTION_SPLIT_RE).map((part, i) => (part.startsWith('@') ? (
+    <span key={i} className="font-semibold text-accent">{part}</span>
+  ) : (
+    <span key={i}>{part}</span>
+  )))
+}
+
 export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onCountChange, autoFocus }: Props) {
   const list = usePaged((o, l) => backend.listComments(recipeId, o, l), [recipeId], 15)
   const [text, setText] = useState('')
@@ -35,6 +48,49 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus({ preventScroll: true })
   }, [autoFocus])
+
+  /* — podpowiedzi @nazwa podczas pisania, jak w Instagramie — */
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<ProfileSummary[]>([])
+  useEffect(() => {
+    if (mentionQuery === null) {
+      setSuggestions([])
+      return
+    }
+    let alive = true
+    backend
+      .searchProfiles(mentionQuery, 0, 6)
+      .then((r) => alive && setSuggestions(r))
+      .catch(() => alive && setSuggestions([]))
+    return () => {
+      alive = false
+    }
+  }, [mentionQuery])
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value.slice(0, MAX)
+    setText(value)
+    const pos = e.target.selectionStart ?? value.length
+    const m = MENTION_TOKEN_RE.exec(value.slice(0, pos))
+    setMentionQuery(m ? m[1] : null)
+  }
+
+  function pickMention(username: string) {
+    const el = inputRef.current
+    const pos = el?.selectionStart ?? text.length
+    const m = MENTION_TOKEN_RE.exec(text.slice(0, pos))
+    if (!m) return
+    const start = pos - m[1].length - 1 // pozycja znaku „@”
+    const next = `${text.slice(0, start)}@${username} ${text.slice(pos)}`
+    setText(next)
+    setMentionQuery(null)
+    setSuggestions([])
+    const caret = start + username.length + 2
+    requestAnimationFrame(() => {
+      el?.focus()
+      el?.setSelectionRange(caret, caret)
+    })
+  }
 
   async function send(e: FormEvent) {
     e.preventDefault()
@@ -52,6 +108,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
       onCountChange(1)
       emit('comments-changed')
       setText('')
+      setMentionQuery(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nie udało się dodać komentarza.')
     } finally {
@@ -71,9 +128,43 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
     }
   }
 
+  async function toggleLike(c: Comment) {
+    const nextLiked = !c.liked
+    list.setItems((items) =>
+      items.map((x) => (x.id === c.id ? { ...x, liked: nextLiked, like_count: Math.max(0, x.like_count + (nextLiked ? 1 : -1)) } : x)),
+    )
+    try {
+      await (nextLiked ? backend.likeComment(c.id) : backend.unlikeComment(c.id))
+    } catch (err) {
+      list.setItems((items) => items.map((x) => (x.id === c.id ? c : x)))
+      alert(err instanceof Error ? err.message : 'Nie udało się zmienić polubienia komentarza.')
+    }
+  }
+
   return (
     <div>
-      <form onSubmit={send} className="flex items-center gap-2.5">
+      <form onSubmit={send} className="relative flex items-center gap-2.5">
+        {mentionQuery !== null && suggestions.length > 0 && (
+          <div className="absolute top-full left-0 z-10 mt-2 max-h-56 w-full overflow-y-auto rounded-[14px] bg-surface shadow-lg">
+            {suggestions.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => pickMention(p.username)}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-surface-2"
+              >
+                <Avatar name={p.username} src={p.avatar_url} size={30} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center text-[14px] font-semibold">
+                    <span className="truncate">{p.username}</span>
+                    <VerifiedBadge username={p.username} size={12} />
+                  </span>
+                  {p.full_name && <span className="block truncate text-[12px] text-label-2">{p.full_name}</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         <Avatar name={me.username} src={me.avatar_url} size={34} />
         {/* Wyraźnie obrysowane pole obok mojego zdjęcia; po dotknięciu podświetla się na kolor akcentu */}
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[20px] border-[1.5px] border-label-3 bg-surface py-0.5 pr-1 pl-3.5 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]">
@@ -81,7 +172,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
             ref={inputRef}
             autoFocus={autoFocus}
             value={text}
-            onChange={(e) => setText(e.target.value.slice(0, MAX))}
+            onChange={handleChange}
             placeholder="Dodaj komentarz…"
             rows={1}
             aria-label="Komentarz"
@@ -124,8 +215,17 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
                   <span className="ml-1.5">· {timeAgo(c.created_at)}</span>
                 </p>
                 <p className="text-[15px] leading-snug break-words whitespace-pre-wrap" data-selectable>
-                  {c.body}
+                  {renderBody(c.body)}
                 </p>
+                <button
+                  onClick={() => toggleLike(c)}
+                  aria-label={c.liked ? 'Cofnij polubienie komentarza' : 'Polub komentarz'}
+                  aria-pressed={c.liked}
+                  className={`mt-1 flex items-center gap-1 text-[12px] transition-colors ${c.liked ? 'text-red-500' : 'text-label-2'}`}
+                >
+                  <HeartIcon width={14} height={14} filled={c.liked} />
+                  {c.like_count > 0 && <span className="tabular-nums">{c.like_count}</span>}
+                </button>
               </div>
               {(c.user_id === me.id || isRecipeOwner) && (
                 <button onClick={() => remove(c)} aria-label="Usuń komentarz" className="shrink-0 self-start p-1 text-label-3 active:text-red-500">

@@ -17,6 +17,13 @@ alter table public.profiles add constraint profiles_bio_valid check (
 alter table public.profiles add column if not exists followers_count int not null default 0;
 alter table public.profiles add column if not exists following_count int not null default 0;
 
+-- Jeden link pod opisem profilu (jak w Instagramie)
+alter table public.profiles add column if not exists website text;
+alter table public.profiles drop constraint if exists profiles_website_valid;
+alter table public.profiles add constraint profiles_website_valid check (
+  website is null or (char_length(website) <= 200 and website ~* '^https?://')
+);
+
 -- Awatar może wskazywać tylko plik w NASZYM buckecie, w folderze właściciela profilu
 alter table public.profiles drop constraint if exists profiles_avatar_url_valid;
 alter table public.profiles add constraint profiles_avatar_url_valid check (
@@ -28,8 +35,8 @@ alter table public.profiles add constraint profiles_avatar_url_valid check (
 
 -- Klient nie może sam ustawiać liczników (ani innych kolumn poza własnymi danymi profilu)
 revoke insert, update on public.profiles from anon, authenticated;
-grant insert (id, username, full_name, is_public, avatar_url, bio, allow_avatar_zoom) on public.profiles to authenticated;
-grant update (username, full_name, is_public, avatar_url, bio, allow_avatar_zoom) on public.profiles to authenticated;
+grant insert (id, username, full_name, is_public, avatar_url, bio, allow_avatar_zoom, website) on public.profiles to authenticated;
+grant update (username, full_name, is_public, avatar_url, bio, allow_avatar_zoom, website) on public.profiles to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Konta testowe i panel admina: konta oznaczone is_test (dane z supabase/test_accounts.sql) widzi TYLKO admin,
@@ -163,7 +170,7 @@ create function public.get_profile(p_username text)
 returns table (
   id uuid, username text, full_name text, avatar_url text, is_public boolean,
   recipe_count int, followers_count int, following_count int, is_following boolean, is_me boolean,
-  bio text, allow_avatar_zoom boolean
+  bio text, allow_avatar_zoom boolean, website text
 )
 language sql stable security definer set search_path = public as $$
   select p.id, p.username, p.full_name, p.avatar_url, p.is_public,
@@ -172,7 +179,7 @@ language sql stable security definer set search_path = public as $$
     p.followers_count, p.following_count,
     exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = p.id),
     p.id = auth.uid(),
-    p.bio, p.allow_avatar_zoom
+    p.bio, p.allow_avatar_zoom, p.website
   from public.profiles p
   where p.username = lower(p_username) and (not p.is_test or public.can_see_test_accounts())
 $$;
@@ -465,8 +472,10 @@ language sql stable set search_path = public as $$
   ) lc on true
 $$;
 
--- Komentarze pod przepisem z danymi autora, od najnowszych
-create or replace function public.list_comments(p_recipe uuid, p_limit int default 20, p_offset int default 0)
+-- Komentarze pod przepisem z danymi autora, od najnowszych. Kolumny rozszerza comment_likes.sql (like_count/liked),
+-- więc tu (i tam) usuwamy funkcję zamiast „create or replace” — Postgres nie pozwala tak zmienić typu zwracanego.
+drop function if exists public.list_comments(uuid, int, int);
+create function public.list_comments(p_recipe uuid, p_limit int default 20, p_offset int default 0)
 returns table (
   id uuid, recipe_id uuid, user_id uuid, body text, created_at timestamptz,
   author_username text, author_full_name text, author_avatar_url text

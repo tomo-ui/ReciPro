@@ -188,7 +188,7 @@ describe('tryb lokalny: komentarze', () => {
 
     // pod własnym przepisem autor może usunąć komentarz kogokolwiek
     const mine = await b.addRecipe({ title: 'Mój', ingredients: [], steps: [], tags: [], parse_method: 'manual' })
-    const stranger = { id: 'obcy', recipe_id: mine.id, user_id: 'demo-anna', body: 'obcy komentarz', created_at: new Date().toISOString(), author: { username: 'anna_gotuje' } }
+    const stranger = { id: 'obcy', recipe_id: mine.id, user_id: 'demo-anna', body: 'obcy komentarz', created_at: new Date().toISOString(), author: { username: 'anna_gotuje' }, like_count: 0, liked: false }
     await b.addComment(mine.id, 'x', me) // upewnia się, że zapis działa
     await expect(b.deleteComment(stranger)).resolves.toBeUndefined()
   })

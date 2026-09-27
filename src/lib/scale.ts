@@ -285,8 +285,11 @@ function findQuantity(text: string): Quantity | null {
     const sep = RANGE_RE.exec(text)
     if (sep) {
       const second = numberAt(text, first.end + sep[0].length)
-      if (second && second.value >= first.value) {
-        q.max = second.value
+      // Kolejność w tekście czasem jest odwrócona (literówka: „3-2 jajka”) — i tak liczymy to
+      // jako zakres, tylko porządkujemy [min, max], zamiast zostawiać nieprzeliczoną resztę tekstu
+      if (second) {
+        q.value = Math.min(first.value, second.value)
+        q.max = Math.max(first.value, second.value)
         q.separator = sep[0]
         q.end = second.end
       }

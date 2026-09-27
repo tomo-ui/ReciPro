@@ -2,8 +2,15 @@ import type { ReactNode } from 'react'
 import { motion, useDragControls } from 'framer-motion'
 import { spring } from '@/lib/ui'
 
+interface Props {
+  onClose: () => void
+  /** `full` (domyślnie): prawie cały ekran. `large`: ok. ¾ ekranu, jak panel komentarzy w Instagramie */
+  size?: 'full' | 'large'
+  children: ReactNode
+}
+
 /** Modalny sheet w stylu iOS: sprężynowy wjazd, przeciągnięcie za uchwyt zamyka */
-export function Sheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+export function Sheet({ onClose, size = 'full', children }: Props) {
   const controls = useDragControls()
 
   return (
@@ -20,7 +27,7 @@ export function Sheet({ onClose, children }: { onClose: () => void; children: Re
         role="dialog"
         aria-modal="true"
         className="fixed inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-[28px] bg-bg shadow-2xl"
-        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}
+        style={{ top: size === 'large' ? '25vh' : 'calc(env(safe-area-inset-top, 0px) + 10px)' }}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}

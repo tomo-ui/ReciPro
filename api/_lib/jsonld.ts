@@ -79,6 +79,14 @@ function firstImage(v: unknown): string | undefined {
   return undefined
 }
 
+/** schema.org `author`: string, `{name}`, albo tablica dowolnego z nich — bierzemy pierwsze imię/nazwę */
+function authorName(v: unknown): string | undefined {
+  if (typeof v === 'string') return str(v)
+  if (Array.isArray(v)) return v.map(authorName).find(Boolean)
+  if (isObj(v)) return str(v.name)
+  return undefined
+}
+
 function collectSteps(v: unknown, group: string | undefined, out: StepLine[]): void {
   if (typeof v === 'string') {
     const text = oneLine(v)
@@ -117,6 +125,7 @@ export function parseJsonLd(html: string, pageUrl: string): RecipeDraft | null {
   const drafts = found.map((r): RecipeDraft => {
     const category = r.recipeCategory
     const cuisine = r.recipeCuisine
+    const author = authorName(r.author)
     return buildDraft(
       {
         title: str(r.name) ?? str(r.headline),
@@ -129,7 +138,7 @@ export function parseJsonLd(html: string, pageUrl: string): RecipeDraft | null {
         total_minutes: parseDurationMinutes(r.totalTime),
         ingredients: parseIngredients(r.recipeIngredient ?? r.ingredients),
         steps: parseSteps(r.recipeInstructions),
-        tags: normalizeTags(r.keywords, category, cuisine),
+        tags: normalizeTags(r.keywords, category, cuisine, author ? [author] : []),
       },
       'json-ld',
     )

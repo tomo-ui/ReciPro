@@ -32,11 +32,12 @@ const usernames = async (uid: string, sql = `select username from public.profile
 
 describe('dane testowe', () => {
   it('20 kont i 40 przepisów, bez duplikatów po ponownym uruchomieniu; dwa ostatnie konta prywatne', async () => {
+    // Tylko konta z pętli 1..20 (username like 'test\_%') — „test.user.all” i „filler_*” to osobna symulacja niżej w pliku
     const r = await db.query<{ p: number; r: number; priv: number; t: number }>(
-      `select (select count(*) from public.profiles where is_test)::int as p,
-              (select count(*) from public.recipes where user_id in (select id from public.profiles where is_test))::int as r,
-              (select count(*) from public.profiles where is_test and not is_public)::int as priv,
-              (select count(*) from public.profiles where is_test and username !~ '^test_[a-z]+$')::int as t`,
+      `select (select count(*) from public.profiles where is_test and username like 'test\\_%')::int as p,
+              (select count(*) from public.recipes where user_id in (select id from public.profiles where is_test and username like 'test\\_%'))::int as r,
+              (select count(*) from public.profiles where is_test and not is_public and username like 'test\\_%')::int as priv,
+              (select count(*) from public.profiles where is_test and username like 'test\\_%' and username !~ '^test_[a-z]+$')::int as t`,
     )
     expect(r.rows[0]).toEqual({ p: 20, r: 40, priv: 2, t: 0 })
   })
@@ -88,7 +89,8 @@ describe('admin „tk”', () => {
     const feed = await as<{ author_username: string }>(ADMIN, `select * from public.feed('foryou', 's', 50, 0)`)
     const fromTest = feed.filter((r) => r.author_username.startsWith('test_'))
     expect(fromTest.length).toBe(36) // 18 publicznych kont × 2 przepisy; prywatne konta nie trafiają do feedu
-    expect((await as<{ n: number }>(ADMIN, 'select public.admin_test_account_count() as n'))[0].n).toBe(20)
+    // 20 z pętli + „test.user.all” + 100 „filler_*” (symulacja niżej w pliku) = 121 kont testowych łącznie
+    expect((await as<{ n: number }>(ADMIN, 'select public.admin_test_account_count() as n'))[0].n).toBe(121)
   })
 
   it('wyłączenie przełącznika chowa wszystko, także liczniki widoczności; liczba kont zostaje znana adminowi', async () => {
@@ -98,7 +100,7 @@ describe('admin „tk”', () => {
     expect(await as(ADMIN, `select * from public.search_profiles('test')`)).toHaveLength(0)
     const feed = await as<{ author_username: string }>(ADMIN, `select * from public.feed('foryou', 's', 50, 0)`)
     expect(feed.some((r) => r.author_username.startsWith('test_'))).toBe(false)
-    expect((await as<{ n: number }>(ADMIN, 'select public.admin_test_account_count() as n'))[0].n).toBe(20)
+    expect((await as<{ n: number }>(ADMIN, 'select public.admin_test_account_count() as n'))[0].n).toBe(121)
     expect(await asOk(ADMIN, `update public.app_admins set show_test_accounts = true where user_id = '${ADMIN}'`)).toBeNull()
     expect((await usernames(ADMIN)).length).toBe(20)
   })
@@ -115,6 +117,26 @@ describe('admin „tk”', () => {
     expect(await as(USER, `select * from public.list_following('tk')`)).toHaveLength(0)
     expect(await as(USER, `select * from public.list_followers('test_ania')`)).toHaveLength(0)
     await as(ADMIN, `delete from public.follows where follower_id = '${ADMIN}'`)
+  })
+})
+
+describe('test.user.all: stałe konto do symulacji danych', () => {
+  const TEST_ALL_POST = '00000000-0000-4000-c000-000000000002'
+
+  it('ma dokładnie 100 obserwujących i 100 polubień jednego posta (dwie strony po 50 — limit funkcji)', async () => {
+    const followers1 = await as(ADMIN, `select * from public.list_followers('test.user.all', 50, 0)`)
+    const followers2 = await as<{ id: string }>(ADMIN, `select * from public.list_followers('test.user.all', 50, 50)`)
+    expect(followers1).toHaveLength(50)
+    expect(followers2).toHaveLength(50)
+    expect(new Set(followers2.map((f) => f.id)).size).toBe(50) // druga strona to inne osoby, nie powtórka
+
+    const likers1 = await as(ADMIN, `select * from public.list_likers('${TEST_ALL_POST}', 50, 0)`)
+    const likers2 = await as(ADMIN, `select * from public.list_likers('${TEST_ALL_POST}', 50, 50)`)
+    expect(likers1).toHaveLength(50)
+    expect(likers2).toHaveLength(50)
+
+    const totalLikes = await db.query<{ n: number }>(`select count(*)::int as n from public.recipe_likes where recipe_id = '${TEST_ALL_POST}'`)
+    expect(totalLikes.rows[0].n).toBe(100)
   })
 })
 

@@ -189,7 +189,8 @@ export async function parseSocialCaption(
         servings: draft.servings ?? servingsFromText(info.caption),
         total_minutes: total,
         image_url,
-        tags: withoutGenericTags(draft.tags),
+        // Autor filmu/postu trafia do tagów niezależnie od tego, która warstwa sparsowała treść
+        tags: withoutGenericTags(normalizeTags(draft.tags, info.author ? [info.author] : [])),
       },
       thumbnail,
       origin: ORIGIN[info.platform],
@@ -213,7 +214,11 @@ export async function parseSocialCaption(
         ? { image_url: page.image_url, thumbnail: { status: 'none' } as ThumbnailInfo }
         : await persistThumbnail(info.thumbnailUrl, { storage, deadlineAt, fetchImpl, avoidCenter: info.thumbnailMayShowPlayButton })
       return {
-        draft: { ...page, image_url: cover.image_url, tags: normalizeTags([...page.tags, ...hashtagsFromCaption(info.caption)]) },
+        draft: {
+          ...page,
+          image_url: cover.image_url,
+          tags: normalizeTags([...page.tags, ...hashtagsFromCaption(info.caption)], info.author ? [info.author] : []),
+        },
         thumbnail: cover.thumbnail,
         origin: 'post-link' as const,
       }

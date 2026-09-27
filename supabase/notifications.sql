@@ -13,7 +13,7 @@ create table if not exists public.notifications (
   id           uuid primary key default gen_random_uuid(),
   recipient_id uuid not null references public.profiles (id) on delete cascade,
   actor_id     uuid not null references public.profiles (id) on delete cascade,
-  type         text not null check (type in ('like', 'comment', 'follow')),
+  type         text not null check (type in ('like', 'comment', 'follow', 'mention')),
   recipe_id    uuid references public.recipes (id) on delete cascade,
   comment_id   uuid references public.recipe_comments (id) on delete cascade,
   created_at   timestamptz not null default now(),
@@ -22,8 +22,20 @@ create table if not exists public.notifications (
   constraint notifications_shape check (
     (type = 'follow'  and recipe_id is null     and comment_id is null) or
     (type = 'like'    and recipe_id is not null and comment_id is null) or
-    (type = 'comment' and recipe_id is not null and comment_id is not null)
+    (type = 'comment' and recipe_id is not null and comment_id is not null) or
+    (type = 'mention' and recipe_id is not null and comment_id is not null)
   )
+);
+
+-- Baza już istniejąca sprzed „mention”: podnosimy ograniczenia na miejscu (nowa tabela już ma je poprawne)
+alter table public.notifications drop constraint if exists notifications_type_check;
+alter table public.notifications add constraint notifications_type_check check (type in ('like', 'comment', 'follow', 'mention'));
+alter table public.notifications drop constraint if exists notifications_shape;
+alter table public.notifications add constraint notifications_shape check (
+  (type = 'follow'  and recipe_id is null     and comment_id is null) or
+  (type = 'like'    and recipe_id is not null and comment_id is null) or
+  (type = 'comment' and recipe_id is not null and comment_id is not null) or
+  (type = 'mention' and recipe_id is not null and comment_id is not null)
 );
 
 create index if not exists notifications_recipient_idx on public.notifications (recipient_id, created_at desc);
@@ -105,6 +117,26 @@ exception when others then
   return null;
 end $$;
 
+-- Każde „@nazwa” w treści, które pasuje do istniejącego profilu (poza autorem komentarza), dostaje własne powiadomienie
+create or replace function public.notify_mentions() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  mentioned record;
+begin
+  for mentioned in
+    select distinct p.id
+    from regexp_matches(new.body, '@([a-zA-Z0-9_.]+)', 'g') as m(handle)
+    join public.profiles p on lower(p.username) = lower(btrim(m.handle[1], '.'))
+    where p.id <> new.user_id
+  loop
+    insert into public.notifications (recipient_id, actor_id, type, recipe_id, comment_id)
+    values (mentioned.id, new.user_id, 'mention', new.recipe_id, new.id);
+  end loop;
+  return null;
+exception when others then
+  return null;
+end $$;
+
 create or replace function public.notify_follow() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
@@ -135,6 +167,9 @@ create trigger recipe_likes_unnotify after delete on public.recipe_likes
 drop trigger if exists recipe_comments_notify on public.recipe_comments;
 create trigger recipe_comments_notify after insert on public.recipe_comments
   for each row execute function public.notify_comment();
+drop trigger if exists recipe_comments_notify_mentions on public.recipe_comments;
+create trigger recipe_comments_notify_mentions after insert on public.recipe_comments
+  for each row execute function public.notify_mentions();
 drop trigger if exists follows_notify on public.follows;
 create trigger follows_notify after insert on public.follows
   for each row execute function public.notify_follow();
@@ -143,7 +178,7 @@ create trigger follows_unnotify after delete on public.follows
   for each row execute function public.unnotify_follow();
 
 -- Funkcje triggerów nie są wołane przez klientów
-revoke all on function public.notify_like(), public.unnotify_like(), public.notify_comment(),
+revoke all on function public.notify_like(), public.unnotify_like(), public.notify_comment(), public.notify_mentions(),
   public.notify_follow(), public.unnotify_follow() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------

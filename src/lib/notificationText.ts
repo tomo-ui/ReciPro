@@ -8,5 +8,9 @@ export function notificationText(n: AppNotification): { action: string; detail?:
     const body = (n.comment_body ?? '').replace(/\s+/g, ' ').trim()
     return { action: 'skomentował(a):', detail: body.length > 90 ? `${body.slice(0, 90)}…` : body }
   }
+  if (n.type === 'mention') {
+    const body = (n.comment_body ?? '').replace(/\s+/g, ' ').trim()
+    return { action: 'oznaczył(a) Cię w komentarzu:', detail: body.length > 90 ? `${body.slice(0, 90)}…` : body }
+  }
   return { action: 'obserwuje Cię' }
 }

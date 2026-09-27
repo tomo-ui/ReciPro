@@ -92,7 +92,7 @@ export function normalizeTags(...sources: unknown[]): string[] {
       if (t && t.length <= 30) out.add(t)
     }
   }
-  return [...out].slice(0, 8)
+  return [...out].slice(0, 10)
 }
 
 /** Rozwiązuje względny URL i przepuszcza tylko http(s) */

@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Diet, DietDraft, MealTemplate, MealTemplateDraft } from '@/types/diet'
 import { sanitizeDiet, sanitizeMealTemplate } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeStats } from '@/types/recipe'
-import type { Backend } from './backend'
+import type { Backend, InviteCode } from './backend'
 import { deleteRecipeImage } from './images'
 import { supabase } from './supabase'
 import {
@@ -13,7 +13,7 @@ import {
   type RecipeWithAuthorRow,
 } from './supabaseRepository'
 import { normalizeInterests } from './interests'
-import { normalizeBio, normalizeFullName, normalizeUsername, validateUsername } from './username'
+import { normalizeBio, normalizeFullName, normalizeUsername, normalizeWebsite, validateUsername } from './username'
 
 interface ProfileRow {
   id: string
@@ -23,6 +23,7 @@ interface ProfileRow {
   bio?: string | null
   allow_avatar_zoom?: boolean | null
   is_public: boolean
+  website?: string | null
 }
 interface ProfileSummaryRow extends ProfileRow {
   recipe_count: number
@@ -40,6 +41,8 @@ interface CommentRow {
   author_username: string
   author_full_name: string | null
   author_avatar_url: string | null
+  like_count?: number
+  liked?: boolean
 }
 
 const toProfile = (r: ProfileRow): Profile => ({
@@ -50,6 +53,7 @@ const toProfile = (r: ProfileRow): Profile => ({
   bio: r.bio ?? undefined,
   allow_avatar_zoom: r.allow_avatar_zoom ?? true,
   is_public: r.is_public,
+  website: r.website ?? undefined,
 })
 const toSummary = (r: ProfileSummaryRow): ProfileSummary => ({
   ...toProfile(r),
@@ -159,10 +163,13 @@ const toComment = (r: CommentRow): Comment => ({
     full_name: r.author_full_name ?? undefined,
     avatar_url: r.author_avatar_url ?? undefined,
   },
+  like_count: r.like_count ?? 0,
+  liked: r.liked ?? false,
 })
 
 /** Zamienia błąd Postgrest na czytelny komunikat; rozpoznaje niewykonaną migrację */
 function fail(error: { code?: string; message: string }, context?: 'profile'): never {
+  if (error.message === 'invite_code_invalid') throw new Error('Kod zaproszenia jest nieprawidłowy albo już wykorzystany.')
   const migrationMissing =
     error.code === 'PGRST202' || error.code === 'PGRST205' || error.code === 'PGRST204' || error.code === '42P01' || error.code === '42883' || error.code === '42703' ||
     /could not find the (function|table)/i.test(error.message)
@@ -235,15 +242,14 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       return data ? toProfile(data as ProfileRow) : null
     },
 
-    async createProfile(username, fullName) {
+    async createProfile(username, fullName, inviteCode) {
       const invalid = validateUsername(username)
       if (invalid) throw new Error(invalid)
-      const id = await currentUserId()
-      const { data, error } = await client()
-        .from('profiles')
-        .insert({ id, username: normalizeUsername(username), full_name: normalizeFullName(fullName ?? '') ?? null })
-        .select()
-        .single()
+      const { data, error } = await client().rpc('create_profile_with_invite', {
+        p_username: normalizeUsername(username),
+        p_full_name: normalizeFullName(fullName ?? '') ?? null,
+        p_invite_code: (inviteCode ?? '').trim().toUpperCase(),
+      })
       if (error) fail(error, 'profile')
       return toProfile(data as ProfileRow)
     },
@@ -261,6 +267,7 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       if (patch.allow_avatar_zoom !== undefined) changes.allow_avatar_zoom = patch.allow_avatar_zoom
       if (patch.is_public !== undefined) changes.is_public = patch.is_public
       if (patch.avatar_url !== undefined) changes.avatar_url = patch.avatar_url
+      if (patch.website !== undefined) changes.website = normalizeWebsite(patch.website ?? '') ?? null
       const { data, error } = await client().from('profiles').update(changes).eq('id', id).select().single()
       if (error) fail(error, 'profile')
       return toProfile(data as ProfileRow)
@@ -503,6 +510,18 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       if (error) fail(error)
     },
 
+    async listInviteCodes() {
+      const { data, error } = await client().rpc('admin_list_invite_codes')
+      if (error) fail(error)
+      return data as InviteCode[]
+    },
+
+    async createInviteCode() {
+      const { data, error } = await client().rpc('admin_create_invite_code')
+      if (error) fail(error)
+      return data as string
+    },
+
     async getInterests() {
       const id = await currentUserId()
       const { data, error } = await client().from('user_interests').select('interests').eq('user_id', id).maybeSingle()
@@ -578,13 +597,30 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
         .select('id, recipe_id, user_id, body, created_at')
         .single()
       if (error) fail(error)
-      const r = data as Omit<Comment, 'author'>
-      return { ...r, author }
+      const r = data as Omit<Comment, 'author' | 'like_count' | 'liked'>
+      return { ...r, author, like_count: 0, liked: false }
     },
 
     async deleteComment(comment) {
       const { error } = await client().from('recipe_comments').delete().eq('id', comment.id)
       if (error) fail(error)
+    },
+
+    async likeComment(commentId) {
+      const { error } = await client().from('recipe_comment_likes').insert({ comment_id: commentId })
+      if (error && error.code !== '23505') fail(error) // 23505 = już polubione
+    },
+
+    async unlikeComment(commentId) {
+      const me = await currentUserId()
+      const { error } = await client().from('recipe_comment_likes').delete().eq('comment_id', commentId).eq('user_id', me)
+      if (error) fail(error)
+    },
+
+    async listLikers(recipeId, offset, limit) {
+      const { data, error } = await client().rpc('list_likers', { p_recipe_id: recipeId, p_limit: limit, p_offset: offset })
+      if (error) fail(error)
+      return (data as ProfileSummaryRow[]).map(toSummary)
     },
   }
 }

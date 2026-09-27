@@ -75,7 +75,7 @@ function Row({ n, onClick }: { n: AppNotification; onClick: () => void }) {
           {detail && <span className="block truncate text-label-2">{detail}</span>}
           <span className="block text-[12px] text-label-2">{timeAgo(n.created_at)}</span>
         </span>
-        {n.recipe && (n.type === 'like' || n.type === 'comment') && <Thumb title={n.recipe.title} src={n.recipe.image_url} />}
+        {n.recipe && n.type !== 'follow' && <Thumb title={n.recipe.title} src={n.recipe.image_url} />}
         {!n.read && <span aria-label="Nowe" className="h-2 w-2 shrink-0 rounded-full bg-accent" />}
       </motion.button>
     </li>

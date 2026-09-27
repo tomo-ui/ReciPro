@@ -1,10 +1,11 @@
--- 20 kont testowych z przepisami do testowania aplikacji (feed „Dla Ciebie”, obserwowanie, wyszukiwarka, prywatność).
+-- 20 kont testowych z przepisami do testowania aplikacji (feed „Dla Ciebie”, obserwowanie, wyszukiwarka, prywatność),
+-- plus stałe konto „test.user.all” ze 100 obserwującymi i 100 polubieniami jednego posta (symulacja niżej w pliku).
 -- Uruchom w Supabase → SQL Editor PO najnowszym engagement.sql (dodaje kolumnę is_test i regułę widoczności). Skrypt jest idempotentny.
 --
 -- Konta mają is_test = true, więc widzi je WYŁĄCZNIE admin (konto „tk”) z włączonym przełącznikiem
 -- „Konta testowe” w Edytuj profil → Panel admina. Dla wszystkich innych użytkowników nie istnieją.
 -- Nie da się na nie zalogować (brak hasła, adresy w domenie .invalid). Usunięcie wszystkiego:
---   delete from auth.users where email like 'test__@test.invalid';   -- kasuje też profile i przepisy (kaskadowo)
+--   delete from auth.users where email like 'test%@test.invalid' or email like 'filler%@test.invalid';   -- kasuje też profile i przepisy (kaskadowo)
 
 -- Zabezpieczenie: bez mechanizmu widoczności z engagement.sql konta testowe zobaczyliby wszyscy, więc nie wstawiamy nic
 do $$
@@ -96,5 +97,37 @@ begin
               now() - (n * interval '7 hours'), now() - (n * interval '7 hours'))
       on conflict (id) do nothing;
     end loop;
+  end loop;
+end $$;
+
+-- Stałe konto testowe „test.user.all”: do inicjowania symulacji danych (np. 100 obserwujących i 100 polubień
+-- jednego posta), żeby przetestować listy „kto obserwuje” / „kto polubił” na dużej liczbie osób. Osobne od pętli wyżej.
+do $$
+declare
+  test_all uuid := '00000000-0000-4000-c000-000000000001';
+  post_id  uuid := '00000000-0000-4000-c000-000000000002';
+  filler   uuid;
+begin
+  insert into auth.users (id, aud, role, email, created_at, updated_at)
+  values (test_all, 'authenticated', 'authenticated', 'test.user.all@test.invalid', now(), now())
+  on conflict (id) do nothing;
+  insert into public.profiles (id, username, full_name, is_public, is_test, bio)
+  values (test_all, 'test.user.all', 'Test User All', true, true, 'Konto do symulowania danych: obserwujący, polubienia.')
+  on conflict (id) do nothing;
+  insert into public.recipes (id, user_id, title, servings, total_minutes, ingredients, steps, tags, parse_method, created_at, updated_at)
+  values (post_id, test_all, 'Testowy post z symulacją', 4, 30,
+          '[{"text":"1 składnik testowy"}]'::jsonb, '[{"text":"Jeden krok testowy"}]'::jsonb, '{test}', 'manual', now(), now())
+  on conflict (id) do nothing;
+
+  for i in 1..100 loop
+    filler := ('00000000-0000-4000-d000-' || lpad(i::text, 12, '0'))::uuid;
+    insert into auth.users (id, aud, role, email, created_at, updated_at)
+    values (filler, 'authenticated', 'authenticated', 'filler' || lpad(i::text, 3, '0') || '@test.invalid', now(), now())
+    on conflict (id) do nothing;
+    insert into public.profiles (id, username, is_public, is_test)
+    values (filler, 'filler_' || i, true, true)
+    on conflict (id) do nothing;
+    insert into public.recipe_likes (recipe_id, user_id) values (post_id, filler) on conflict do nothing;
+    insert into public.follows (follower_id, followee_id) values (filler, test_all) on conflict do nothing;
   end loop;
 end $$;

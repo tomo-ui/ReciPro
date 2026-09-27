@@ -130,7 +130,7 @@ describe('przepis z opisu filmu', () => {
     expect(d.steps).toHaveLength(2)
     expect(d.source_url).toBe(VIDEO)
     expect(d.parse_method).toBe('gemini')
-    expect(d.tags).toEqual(['placki', 'obiad', 'tanie'])
+    expect(d.tags).toEqual(['placki', 'obiad', 'tanie', 'kuchnia zosi'])
   })
 
   it('do Gemini trafia sam opis (z autorem), nie strona TikToka', async () => {
@@ -147,7 +147,7 @@ describe('przepis z opisu filmu', () => {
   it('ogólne tagi zwrócone przez model też są odrzucane', async () => {
     const fetchImpl = router({ oembed, gemini: () => geminiOk({ ...recipePayload, tags: ['fyp', 'Recipe', 'Obiad', 'fypシ'] }) })
     const { draft: d } = await parseTikTokCaption(VIDEO, { geminiApiKey: 'K', fetchImpl, geminiRetryDelayMs: 0 })
-    expect(d.tags).toEqual(['placki', 'obiad', 'tanie'])
+    expect(d.tags).toEqual(['placki', 'obiad', 'tanie', 'kuchnia zosi'])
   })
 
   it('opis bez przepisu („w komentarzu”) → no_recipe_in_caption', async () => {

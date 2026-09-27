@@ -23,11 +23,7 @@ export function PersonRow({ person, onOpen, onFollowChange }: Props) {
             <VerifiedBadge username={person.username} size={15} />
             {!person.is_public && <LockIcon width={13} height={13} className="ml-1.5 shrink-0 text-label-2" />}
           </p>
-          {person.full_name && <p className="truncate text-[14px] text-label-2">{person.full_name}</p>}
-          <p className="text-[12px] text-label-2">
-            {person.is_public || person.is_me ? `${person.recipe_count} przepisów · ` : ''}
-            {person.followers_count} obserwujących
-          </p>
+          <p className="text-[12px] text-label-2">{person.is_public || person.is_me ? `${person.recipe_count} przepisów` : 'Konto prywatne'}</p>
         </div>
         {!person.is_me && <FollowButton compact userId={person.id} following={person.is_following} onChange={onFollowChange} />}
       </motion.div>

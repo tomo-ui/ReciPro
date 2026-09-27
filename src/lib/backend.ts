@@ -39,6 +39,8 @@ export interface ProfilePatch {
   is_public?: boolean
   /** Adres nowego zdjęcia profilowego; null usuwa zdjęcie */
   avatar_url?: string | null
+  /** Link pod opisem profilu; null lub pusty tekst usuwa link */
+  website?: string | null
 }
 
 /** Ustawienia panelu admina; tylko dla administratora (konto twórcy) */
@@ -47,6 +49,14 @@ export interface AdminSettings {
   show_test_accounts: boolean
   /** Ile kont testowych jest w bazie, niezależnie od widoczności */
   test_accounts: number
+}
+
+/** Jeden kod zaproszenia do zamkniętej bety (panel admina, tylko konto twórcy) */
+export interface InviteCode {
+  code: string
+  created_at: string
+  /** Puste = jeszcze nieużyty */
+  used_at?: string
 }
 
 export interface Backend {
@@ -62,7 +72,8 @@ export interface Backend {
 
   /* — profile — */
   getMyProfile(): Promise<Profile | null>
-  createProfile(username: string, fullName?: string): Promise<Profile>
+  /** `inviteCode` jest wymagany: bez ważnego, jeszcze nieużytego kodu zaproszenia profil nie powstanie */
+  createProfile(username: string, fullName?: string, inviteCode?: string): Promise<Profile>
   updateProfile(patch: ProfilePatch): Promise<Profile>
   usernameAvailable(username: string): Promise<boolean>
   getProfile(username: string): Promise<ProfileSummary | null>
@@ -119,6 +130,10 @@ export interface Backend {
   getAdminSettings(): Promise<AdminSettings | null>
   /** Włącza/wyłącza widoczność kont testowych (tylko dla siebie jako admina) */
   setShowTestAccounts(show: boolean): Promise<void>
+  /** Wszystkie wygenerowane kody zaproszeń, od najnowszego (tylko admin, reszta dostaje pustą listę) */
+  listInviteCodes(): Promise<InviteCode[]>
+  /** Nowy jednorazowy kod zaproszenia do rejestracji (tylko admin) */
+  createInviteCode(): Promise<string>
 
   /* — zainteresowania (prywatne; kształtują feed Dla Ciebie) — */
   getInterests(): Promise<string[]>
@@ -129,8 +144,12 @@ export interface Backend {
   getRecipeStats(ids: string[]): Promise<Record<string, RecipeStats>>
   likeRecipe(recipeId: string): Promise<void>
   unlikeRecipe(recipeId: string): Promise<void>
+  /** Osoby, które polubiły przepis, od najnowszej (dotknięcie licznika polubień) */
+  listLikers(recipeId: string, offset: number, limit: number): Promise<ProfileSummary[]>
   listComments(recipeId: string, offset: number, limit: number): Promise<Comment[]>
   /** `author` to zalogowany użytkownik — potrzebny, żeby od razu pokazać nowy komentarz */
   addComment(recipeId: string, body: string, author: RecipeAuthor): Promise<Comment>
   deleteComment(comment: Comment): Promise<void>
+  likeComment(commentId: string): Promise<void>
+  unlikeComment(commentId: string): Promise<void>
 }

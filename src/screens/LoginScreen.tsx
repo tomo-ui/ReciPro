@@ -66,6 +66,7 @@ export function LoginScreen() {
 
   const [username, setUsername] = useState('')
   const [fullName, setFullName] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
 
   useEffect(() => markAppReady(), [])
 
@@ -75,7 +76,9 @@ export function LoginScreen() {
   const usernameStatus = useUsernameCheck(signup ? username : '')
   const canSubmit =
     email.includes('@') &&
-    (signup ? password.length >= MIN_PASSWORD && password2 === password && usernameStatus.state === 'ok' : password.length > 0)
+    (signup
+      ? password.length >= MIN_PASSWORD && password2 === password && usernameStatus.state === 'ok' && inviteCode.trim().length === 5
+      : password.length > 0)
 
   function switchMode(next: Mode) {
     setMode(next)
@@ -116,7 +119,11 @@ export function LoginScreen() {
           emailRedirectTo: window.location.origin,
           // Nazwa trafia do metadanych konta; profil powstaje przy pierwszym zalogowaniu (useMe),
           // bo przy włączonym potwierdzaniu maili nie ma jeszcze sesji, która pozwoliłaby go zapisać
-          data: { username: normalizeUsername(username), full_name: normalizeFullName(fullName) ?? '' },
+          data: {
+            username: normalizeUsername(username),
+            full_name: normalizeFullName(fullName) ?? '',
+            invite_code: inviteCode.trim().toUpperCase(),
+          },
         },
       })
       setBusy(false)
@@ -181,6 +188,18 @@ export function LoginScreen() {
                 className="overflow-hidden"
               >
                 <div className="space-y-3 pb-3">
+                  <div className="overflow-hidden rounded-[14px] bg-surface">
+                    <input
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value.toUpperCase().slice(0, 5))}
+                      placeholder="kod zaproszenia"
+                      maxLength={5}
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      autoComplete="off"
+                      className="w-full bg-transparent px-4 py-3.5 text-center font-mono text-[17px] font-bold tracking-[0.3em] outline-none placeholder:font-sans placeholder:text-[16px] placeholder:font-normal placeholder:tracking-normal placeholder:text-label-3"
+                    />
+                  </div>
                   <div className="overflow-hidden rounded-[14px] bg-surface">
                     <UsernameInput value={username} onChange={setUsername} status={usernameStatus} />
                   </div>

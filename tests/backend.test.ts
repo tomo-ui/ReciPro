@@ -142,6 +142,7 @@ describe('komentarze', () => {
     expect(c).toEqual({
       id: 'c1', recipe_id: 'r', user_id: 'u', body: 'Super', created_at: '2026-09-19T10:00:00Z',
       author: { username: 'anna', full_name: undefined, avatar_url: 'https://x/a.jpg' },
+      like_count: 0, liked: false,
     })
     expect(f.rpcCalls[0]).toEqual({ name: 'list_comments', args: { p_recipe: 'r', p_limit: 20, p_offset: 0 } })
   })
@@ -160,7 +161,7 @@ describe('komentarze', () => {
 
   it('deleteComment usuwa po id', async () => {
     const f = fake()
-    await f.backend.deleteComment({ id: 'c1', recipe_id: 'r', user_id: 'u', body: 'x', created_at: '', author: { username: 'a' } })
+    await f.backend.deleteComment({ id: 'c1', recipe_id: 'r', user_id: 'u', body: 'x', created_at: '', author: { username: 'a' }, like_count: 0, liked: false })
     expect(f.calls[0].ops).toContainEqual(['eq', ['id', 'c1']])
   })
 })

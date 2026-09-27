@@ -10,10 +10,12 @@ interface Props {
   stats?: RecipeStats
   onChange: (next: RecipeStats) => void
   large?: boolean
+  /** Dotknięcie liczby otwiera listę osób, które polubiły (pominięte tam, gdzie nie ma to sensu) */
+  onOpenLikers?: () => void
 }
 
-/** Serce z licznikiem: zmienia się od razu, a przy błędzie wraca do poprzedniego stanu */
-export function LikeButton({ recipeId, stats, onChange, large }: Props) {
+/** Serce z licznikiem: zmienia się od razu, a przy błędzie wraca do poprzedniego stanu. Liczba osobno otwiera listę polubień. */
+export function LikeButton({ recipeId, stats, onChange, large, onOpenLikers }: Props) {
   const [busy, setBusy] = useState(false)
   const liked = stats?.liked ?? false
 
@@ -35,21 +37,36 @@ export function LikeButton({ recipeId, stats, onChange, large }: Props) {
   }
 
   const size = large ? 26 : 22
+  const colorClass = liked ? 'text-red-500' : 'text-label-2'
   return (
-    <motion.button
-      whileTap={{ scale: 0.85 }}
-      onClick={toggle}
-      disabled={!stats}
-      aria-pressed={liked}
-      aria-label={liked ? 'Cofnij polubienie' : 'Polub przepis'}
-      className={`flex items-center gap-1.5 transition-colors disabled:opacity-40 ${liked ? 'text-red-500' : 'text-label-2'} ${
-        large ? 'text-[16px] font-semibold' : 'text-[14px]'
-      }`}
-    >
-      <motion.span key={String(liked)} initial={{ scale: liked ? 0.6 : 1 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 18 }}>
-        <HeartIcon width={size} height={size} filled={liked} />
-      </motion.span>
-      <span className="tabular-nums">{stats?.like_count ?? '–'}</span>
-    </motion.button>
+    <span className={`flex items-center gap-1.5 ${large ? 'text-[16px] font-semibold' : 'text-[14px]'}`}>
+      <motion.button
+        whileTap={{ scale: 0.85 }}
+        onClick={toggle}
+        disabled={!stats}
+        aria-pressed={liked}
+        aria-label={liked ? 'Cofnij polubienie' : 'Polub przepis'}
+        className={`flex items-center gap-1.5 transition-colors disabled:opacity-40 ${colorClass}`}
+      >
+        <motion.span key={String(liked)} initial={{ scale: liked ? 0.6 : 1 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 18 }}>
+          <HeartIcon width={size} height={size} filled={liked} />
+        </motion.span>
+        {!onOpenLikers && <span className="tabular-nums">{stats?.like_count ?? '–'}</span>}
+      </motion.button>
+      {onOpenLikers && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (stats && stats.like_count > 0) onOpenLikers()
+          }}
+          disabled={!stats || stats.like_count === 0}
+          aria-label="Zobacz, kto polubił"
+          className={`tabular-nums transition-colors disabled:opacity-40 ${colorClass}`}
+        >
+          {stats?.like_count ?? '–'}
+        </button>
+      )}
+    </span>
   )
 }

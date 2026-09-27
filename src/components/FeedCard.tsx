@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { Comment, Recipe, RecipeStats } from '@/types/recipe'
+import type { Recipe, RecipeStats } from '@/types/recipe'
 import { backend } from '@/lib/data'
-import { on } from '@/lib/events'
 import { formatMinutes, timeAgo, totalTime } from '@/lib/ui'
 import { kcalPerServing } from '@/lib/nutrition'
 import { useRecipeNutrition } from '@/hooks/useFoodDb'
@@ -10,12 +9,14 @@ import { useOnVisible } from '@/hooks/useOnVisible'
 import { Avatar } from './Avatar'
 import { VerifiedBadge } from './VerifiedBadge'
 import { FollowButton } from './FollowButton'
-import { BookmarkIcon, ClockIcon, CommentIcon, FlameIcon, SpinnerIcon, UsersIcon } from './Icons'
+import { BookmarkIcon, ClockIcon, CommentIcon, FlameIcon, HeartIcon, SpinnerIcon, UsersIcon } from './Icons'
 import { LikeButton } from './LikeButton'
 import { Cover } from './RecipeCard'
 
-/** Tyle komentarzy rozwija się na karcie po „Zobacz więcej komentarzy” */
-const EXPANDED_COMMENTS = 5
+/** Okno podwójnego dotknięcia (jak w Instagramie): drugi tap w tym czasie = polub, nie otwieraj przepisu */
+const DOUBLE_TAP_MS = 280
+/** Jak długo serce zostaje na środku zdjęcia, zanim zniknie */
+const HEART_VISIBLE_MS = 700
 
 interface Props {
   recipe: Recipe
@@ -29,8 +30,10 @@ interface Props {
   onStatsChange: (next: RecipeStats) => void
   onOpen: () => void
   onOpenAuthor: (username: string) => void
-  /** Otwiera same komentarze; `focus` = od razu z kursorem w polu nowego komentarza */
+  /** Otwiera panel komentarzy; `focus` = od razu z kursorem w polu nowego komentarza */
   onOpenComments: (focus: boolean) => void
+  /** Otwiera listę osób, które polubiły przepis */
+  onOpenLikers: () => void
   /** Zapisane w mojej książce kucharskiej (zakładka Przepisy) */
   saved: boolean
   onToggleSave: () => Promise<void>
@@ -38,14 +41,12 @@ interface Props {
   onView?: () => void
 }
 
-/** Duża karta do feedu: autor (z przyciskiem obserwowania), zdjęcie 4:3, tytuł, czas, porcje, tagi i komentarze */
-export function FeedCard({ recipe, stats, showFollow, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments, saved, onToggleSave, onView }: Props) {
+/** Duża karta do feedu: autor (z przyciskiem obserwowania), zdjęcie 4:3 (podwójny tap = polub), tytuł, czas, porcje, tagi */
+export function FeedCard({ recipe, stats, showFollow, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments, onOpenLikers, saved, onToggleSave, onView }: Props) {
   const [saving, setSaving] = useState(false)
   const visibleRef = useOnVisible<HTMLElement>(() => onView?.())
   const author = recipe.author
   const time = formatMinutes(totalTime(recipe))
-  const last = stats?.last_comment
-  const count = stats?.comment_count ?? 0
   const nutrition = useRecipeNutrition(recipe.ingredients, recipe.servings)
   const kcal = nutrition ? kcalPerServing(nutrition) : null
 
@@ -54,25 +55,52 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
   const DESC_CLAMP_CHARS = 100
   const descNeedsClamp = (recipe.description?.length ?? 0) > DESC_CLAMP_CHARS
 
-  const [expanded, setExpanded] = useState(false)
-  const [comments, setComments] = useState<Comment[] | null>(null)
-  const loadComments = useCallback(
-    () =>
-      backend
-        .listComments(recipe.id, 0, EXPANDED_COMMENTS)
-        .then(setComments)
-        .catch(() => setComments((c) => c ?? [])),
-    [recipe.id],
+  /* — podwójny tap na zdjęciu: polub + serce na środku, jak w Instagramie; pojedynczy — otwiera przepis — */
+  const lastTapAt = useRef(0)
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const heartTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [heartKey, setHeartKey] = useState(0)
+  const [heartVisible, setHeartVisible] = useState(false)
+  useEffect(
+    () => () => {
+      if (openTimer.current) clearTimeout(openTimer.current)
+      if (heartTimer.current) clearTimeout(heartTimer.current)
+    },
+    [],
   )
-  // Rozwinięta lista odświeża się po dodaniu lub usunięciu komentarza (np. w arkuszu komentarzy)
-  useEffect(() => (expanded ? on('comments-changed', () => void loadComments()) : undefined), [expanded, loadComments])
 
-  // Pozostałe komentarze pod podglądem: najnowszy już jest w podglądzie, więc go pomijamy
-  const others = (comments ?? []).filter((c) => c.id !== last?.id)
+  async function likeFromDoubleTap() {
+    setHeartKey((k) => k + 1)
+    setHeartVisible(true)
+    if (heartTimer.current) clearTimeout(heartTimer.current)
+    heartTimer.current = setTimeout(() => setHeartVisible(false), HEART_VISIBLE_MS)
 
-  function expand() {
-    setExpanded(true)
-    void loadComments()
+    if (!stats || stats.liked) return // już polubione — samo serce wystarczy, bez drugiego wywołania
+    const before = stats
+    onStatsChange({ ...before, liked: true, like_count: before.like_count + 1 })
+    try {
+      await backend.likeRecipe(recipe.id)
+    } catch {
+      onStatsChange(before) // cichy rollback — to lekki gest, bez przerywania alertem
+    }
+  }
+
+  function handleCoverTap() {
+    const now = Date.now()
+    if (now - lastTapAt.current < DOUBLE_TAP_MS) {
+      if (openTimer.current) {
+        clearTimeout(openTimer.current)
+        openTimer.current = null
+      }
+      lastTapAt.current = 0
+      void likeFromDoubleTap()
+    } else {
+      lastTapAt.current = now
+      openTimer.current = setTimeout(() => {
+        openTimer.current = null
+        onOpen()
+      }, DOUBLE_TAP_MS)
+    }
   }
 
   return (
@@ -102,8 +130,27 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
         </div>
       )}
 
-      <motion.button whileTap={{ scale: 0.985 }} onClick={onOpen} className="block w-full text-left">
-        <Cover recipe={recipe} className="aspect-[4/3] w-full" />
+      <div className="relative">
+        <motion.button whileTap={{ scale: 0.985 }} onClick={handleCoverTap} aria-label={recipe.title} className="block w-full text-left">
+          <Cover recipe={recipe} className="aspect-[4/3] w-full" />
+        </motion.button>
+        <AnimatePresence>
+          {heartVisible && (
+            <motion.div
+              key={heartKey}
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1.15 }}
+              exit={{ opacity: 0, scale: 1.3 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            >
+              <HeartIcon width={96} height={96} filled className="text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <button onClick={onOpen} className="block w-full text-left">
         <div className="space-y-2 px-3.5 pt-3 pb-2.5">
           <h3 className="text-[18px] leading-snug font-semibold">{recipe.title}</h3>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-label-2">
@@ -131,7 +178,7 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
             </p>
           )}
         </div>
-      </motion.button>
+      </button>
 
       {recipe.description && (
         <div className="px-3.5 pb-2.5" data-selectable>
@@ -144,8 +191,8 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
         </div>
       )}
 
-      <div className={`flex items-center gap-5 px-3.5 ${last ? 'pb-2.5' : 'pb-3.5'}`}>
-        <LikeButton recipeId={recipe.id} stats={stats} onChange={onStatsChange} />
+      <div className="flex items-center gap-5 px-3.5 pb-3.5">
+        <LikeButton recipeId={recipe.id} stats={stats} onChange={onStatsChange} onOpenLikers={onOpenLikers} />
         {/* Ikona komentarza: od razu pole do napisania komentarza */}
         <button onClick={() => onOpenComments(true)} aria-label="Dodaj komentarz" className="flex items-center gap-1.5 text-[14px] text-label-2">
           <CommentIcon width={22} height={22} />
@@ -170,73 +217,6 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
           {saving ? <SpinnerIcon width={22} height={22} /> : <BookmarkIcon width={23} height={23} filled={saved} />}
         </motion.button>
       </div>
-
-      {last && (
-        <div className="px-3.5 pb-3.5">
-          {/* Ostatni komentarz i dolny rząd z linkami zostają na karcie cały czas; rozwinięcie dokłada pozostałe komentarze
-              między nimi, każdy wjeżdża płynnie — nic nie znika i nie miga, a wysokość karty rośnie stopniowo */}
-          <CommentRow comment={last} lines={2} onOpen={() => onOpenComments(false)} />
-
-          <AnimatePresence initial={false}>
-            {expanded &&
-              others.map((c) => (
-                <motion.div
-                  key={c.id}
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 38 }}
-                  className="overflow-hidden"
-                >
-                  <div className="pt-2">
-                    <CommentRow comment={c} lines={3} onOpen={() => onOpenComments(false)} />
-                  </div>
-                </motion.div>
-              ))}
-          </AnimatePresence>
-
-          {count > 1 && (
-            <div className="mt-1.5 flex items-center justify-between px-1 text-[13px] text-label-2">
-              {!expanded ? (
-                <button onClick={expand} className="active:opacity-60">
-                  Zobacz więcej komentarzy
-                </button>
-              ) : count > (comments?.length ?? 0) && comments !== null ? (
-                <button onClick={() => onOpenComments(false)} className="active:opacity-60">
-                  Zobacz wszystkie komentarze ({count})
-                </button>
-              ) : (
-                <span>{comments === null ? 'Wczytuję…' : ''}</span>
-              )}
-              {expanded && (
-                <button onClick={() => setExpanded(false)} className="active:opacity-60">
-                  Zwiń
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
     </motion.article>
-  )
-}
-
-/** Jeden komentarz na karcie: dotknięcie otwiera komentarze */
-function CommentRow({ comment, lines, onOpen }: { comment: { author: Comment['author']; body: string; created_at: string }; lines: 2 | 3; onOpen: () => void }) {
-  return (
-    <button onClick={onOpen} aria-label="Zobacz komentarze" className="block w-full text-left">
-      <span className="flex items-start gap-2.5 rounded-[14px] bg-surface-2 px-3 py-2.5">
-        <Avatar name={comment.author.username} src={comment.author.avatar_url} size={26} />
-        <span className="min-w-0 flex-1 leading-snug">
-          {/* Nazwa, znaczek i czas w jednym rzędzie, wyśrodkowane w pionie (jak w liście komentarzy) */}
-          <span className="flex items-center text-[13px] text-label-2">
-            <span className="truncate font-semibold text-label">{comment.author.username}</span>
-            <VerifiedBadge username={comment.author.username} size={12} className="align-baseline" />
-            <span className="ml-1.5 shrink-0">· {timeAgo(comment.created_at)}</span>
-          </span>
-          <span className={`${lines === 2 ? 'line-clamp-2' : 'line-clamp-3'} block text-[14px] break-words whitespace-pre-line`}>{comment.body}</span>
-        </span>
-      </span>
-    </button>
   )
 }

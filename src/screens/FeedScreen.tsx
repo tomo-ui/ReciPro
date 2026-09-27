@@ -4,6 +4,7 @@ import type { Recipe } from '@/types/recipe'
 import type { FeedMode, TopCreator } from '@/lib/backend'
 import { backend } from '@/lib/data'
 import { on } from '@/lib/events'
+import { FEATURES } from '@/lib/features'
 import { spreadAuthors } from '@/lib/feedOrder'
 import { usePaged } from '@/hooks/usePaged'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
@@ -21,6 +22,8 @@ interface Props {
   onOpenCreator: (creator: TopCreator) => void
   /** Otwiera komentarze pod przepisem; `focus` = z kursorem w polu nowego komentarza */
   onOpenComments: (recipe: Recipe, focus: boolean) => void
+  /** Otwiera listę osób, które polubiły przepis */
+  onOpenLikers: (recipe: Recipe) => void
   /** Id przepisów z feedu zapisanych już w mojej książce kucharskiej */
   savedIds: ReadonlySet<string>
   /** Zapisuje przepis w książce (albo usuwa zapis) */
@@ -41,7 +44,7 @@ const newSeed = () => crypto.randomUUID()
  * w obrębie jednego odświeżenia (ziarno), więc doładowywanie nie powtarza pozycji.
  * „Najnowsze” pokazuje chronologicznie tylko obserwowanych.
  */
-export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenComments, savedIds, onToggleSave, onGoSearch, onOpenActivity, unread, topRef }: Props) {
+export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenComments, onOpenLikers, savedIds, onToggleSave, onGoSearch, onOpenActivity, unread, topRef }: Props) {
   const [mode, setMode] = useState<FeedMode>('foryou')
   const [seed, setSeed] = useState(newSeed)
   // Przepisy tego samego autora nie idą jeden po drugim (także na granicy stron; wyświetlone karty się nie przestawiają)
@@ -100,7 +103,7 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenC
         </div>
       }
     >
-      <TopCreatorsList onOpen={onOpenCreator} />
+      {FEATURES.topCreators && <TopCreatorsList onOpen={onOpenCreator} />}
       {empty ? (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-2 pt-14 text-center">
           <p className="text-[20px] font-semibold">{mode === 'foryou' ? 'Na razie nic tu nie ma' : 'Nie obserwujesz nikogo'}</p>
@@ -128,6 +131,7 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenC
               onView={() => void backend.recordView(r.id)}
               onOpenAuthor={onOpenProfile}
               onOpenComments={(focus) => onOpenComments(r, focus)}
+              onOpenLikers={() => onOpenLikers(r)}
               saved={savedIds.has(r.id)}
               onToggleSave={() => onToggleSave(r)}
             />

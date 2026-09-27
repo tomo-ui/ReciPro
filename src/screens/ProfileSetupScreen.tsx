@@ -9,17 +9,19 @@ import { SpinnerIcon } from '@/components/Icons'
 import { UsernameInput } from '@/components/UsernameInput'
 
 interface Props {
-  prefill?: { username?: string; full_name?: string }
+  prefill?: { username?: string; full_name?: string; invite_code?: string }
+  /** Auto-zakładanie profilu tuż po rejestracji już się nie powiodło (np. zły kod zaproszenia) — pokazujemy od razu */
+  initialError?: string
   onDone: (me: Profile) => void
   onSignOut?: () => void
 }
 
 /** Wybór nazwy użytkownika — dla kont bez profilu (np. założonych, zanim pojawiły się profile) */
-export function ProfileSetupScreen({ prefill, onDone, onSignOut }: Props) {
+export function ProfileSetupScreen({ prefill, initialError, onDone, onSignOut }: Props) {
   const [username, setUsername] = useState(prefill?.username ?? '')
   const [fullName, setFullName] = useState(prefill?.full_name ?? '')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialError ?? null)
   const status = useUsernameCheck(username)
 
   async function submit(e: FormEvent) {
@@ -28,7 +30,7 @@ export function ProfileSetupScreen({ prefill, onDone, onSignOut }: Props) {
     setBusy(true)
     setError(null)
     try {
-      onDone(await backend.createProfile(username, normalizeFullName(fullName)))
+      onDone(await backend.createProfile(username, normalizeFullName(fullName), prefill?.invite_code))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nie udało się zapisać profilu.')
       setBusy(false)

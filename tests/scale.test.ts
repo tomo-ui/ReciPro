@@ -42,6 +42,18 @@ describe('scaleIngredient: wagi i objętości', () => {
     expect(s('400 do 600 g mięsa', 2)).toBe('0,8 do 1,2 kg mięsa')
     expect(s('300-400 g mąki', 4)).toBe('1,2-1,6 kg mąki')
   })
+
+  it('zakresy: liczby w odwrotnej kolejności (literówka) i tak się przeliczają, uporządkowane', () => {
+    expect(s('3-2 jajka', 2)).toBe('4-6 jajek')
+  })
+
+  it('zakresy: liczba dziesiętna po przecinku na początku zakresu', () => {
+    expect(s('0,5-1 kg mięsa', 2)).toBe('1-2 kg mięsa')
+  })
+
+  it('notacja wielopak „N x jednostka”: przelicza tylko mnożnik, rozmiar opakowania zostaje', () => {
+    expect(s('2 x 400 g pomidorów', 1.5)).toBe('3 x 400 g pomidorów')
+  })
 })
 
 describe('scaleIngredient: odmiana po polsku', () => {

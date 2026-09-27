@@ -1,12 +1,12 @@
 import type { Diet, MealTemplate } from '@/types/diet'
 import { newMeals, itemFromRecipe, sanitizeDiet, sanitizeMealTemplate, withPortions } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
-import type { Backend, FeedMode, ProfilePatch, RecipeSort, TopCreator } from './backend'
+import type { Backend, FeedMode, InviteCode, ProfilePatch, RecipeSort, TopCreator } from './backend'
 import { emit, on } from './events'
 import { normalizeInterests } from './interests'
 import { seedRecipes } from './seed'
 import { fold } from './text'
-import { normalizeBio, normalizeFullName, normalizeUsername, validateUsername } from './username'
+import { normalizeBio, normalizeFullName, normalizeUsername, normalizeWebsite, validateUsername } from './username'
 
 /**
  * Tryb lokalny: dane w przeglądarce (localStorage), bez kont i sieci, plus kilku przykładowych
@@ -24,11 +24,13 @@ const KEYS = {
   likes: 'przepisy:v2:likes',
   views: 'przepisy:v2:views',
   comments: 'przepisy:v2:comments',
+  commentLikes: 'przepisy:v2:commentLikes',
   notifications: 'przepisy:v2:notifications',
   diets: 'przepisy:v2:diets',
   mealTemplates: 'przepisy:v2:mealTemplates',
   interests: 'przepisy:v2:interests',
   hideTestAccounts: 'przepisy:v2:hide-test-accounts',
+  inviteCodes: 'przepisy:v2:inviteCodes',
 }
 
 /* — magazyn: localStorage, a gdy go brak (testy, tryb prywatny) — pamięć — */
@@ -120,6 +122,11 @@ function buildDemo(): DemoUser[] {
     ]),
     user('sekret', 'sekret', 'Prywatny Kucharz', false, 3, [
       make('sekret', 1, 'Tajny przepis babci', ['obiad', 'sekret'], ['ziemniaki', 'śmietana'], ['Ugotuj.'], 4, 60, 9),
+    ]),
+    // Stałe konto do symulacji danych (100 obserwujących, 100 polubień — jak test.user.all w Supabase);
+    // w trybie demo lista polubień pokaże tylko garstkę dostępnych profili, nie pełne 100 — to bez znaczenia offline
+    user('test.user.all', 'test.user.all', 'Test User All', true, 100, [
+      make('test.user.all', 1, 'Testowy post z symulacją', ['test'], ['1 składnik testowy'], ['Jeden krok testowy.'], 4, 30, 0),
     ]),
   ]
 }
@@ -235,6 +242,17 @@ const demo = buildDemo()
 const demoById = new Map(demo.map((d) => [d.profile.id, d]))
 /** Tryb demo: dla admina („tk”) przykładowi użytkownicy udają konta testowe i można je wyłączyć w panelu admina */
 const isAdmin = () => loadMe().username === 'tk'
+
+/** Kod zaproszenia: 5 różnych znaków (wielkie litery i cyfry) — jak generate_invite_code() w SQL */
+function randomInviteCode(): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let result = ''
+  while (result.length < 5) {
+    const pick = alphabet[Math.floor(Math.random() * alphabet.length)]
+    if (!result.includes(pick)) result += pick
+  }
+  return result
+}
 const visibleDemo = () => (isAdmin() && read<boolean>(KEYS.hideTestAccounts, () => false) ? [] : demo)
 const publicDemoRecipes = () => visibleDemo().filter((d) => d.profile.is_public).flatMap((d) => d.recipes.map((r) => withAuthor(r, d.profile)))
 
@@ -283,15 +301,22 @@ const page = <T,>(list: T[], offset: number, limit: number) => list.slice(offset
 
 const loadInterests = () => normalizeInterests(read<string[]>(KEYS.interests, () => []))
 const loadLikes = () => new Set(read<string[]>(KEYS.likes, () => []))
+/** Komentarze, które lokalnie polubiłem (klucz: id komentarza) */
+const loadCommentLikes = () => new Set(read<string[]>(KEYS.commentLikes, () => []))
+/** Polubienia pod przykładowymi komentarzami są stałe (z hasha id), własne polubienie dolicza się do nich */
+const baseCommentLikes = (commentId: string) => (commentId.startsWith('demo-comment-') ? hash(`${commentId}cl`) % 8 : 0)
+
+/** Kształt trzymany w localStorage — like_count/liked liczą się dopiero przy odczycie (listComments) */
+type StoredComment = Omit<Comment, 'like_count' | 'liked'>
 
 /** Kilka komentarzy pod przykładowymi przepisami, żeby sekcja komentarzy nie była pusta */
-function seedComments(): Comment[] {
+function seedComments(): StoredComment[] {
   const at = (hoursAgo: number) => new Date(Date.now() - hoursAgo * 3_600_000).toISOString()
   const by = (username: string) => {
     const d = demo.find((x) => x.profile.username === username)!.profile
     return { user_id: d.id, author: { username: d.username, full_name: d.full_name } }
   }
-  const c = (n: number, recipe: string, who: string, body: string, hoursAgo: number): Comment => ({
+  const c = (n: number, recipe: string, who: string, body: string, hoursAgo: number): StoredComment => ({
     id: `demo-comment-${n}`,
     recipe_id: recipe,
     body,
@@ -304,18 +329,22 @@ function seedComments(): Comment[] {
     c(3, 'demo-anna-1', 'kuchnia.zosi', 'Idealny na zimowy dzień.', 52),
   ]
 }
-function loadComments(): Comment[] {
-  const stored = read<Comment[] | null>(KEYS.comments, () => null)
+function loadComments(): StoredComment[] {
+  const stored = read<StoredComment[] | null>(KEYS.comments, () => null)
   if (stored) return stored
   const seeded = seedComments() // zapisujemy od razu, żeby czasy i usunięcia przykładowych komentarzy były stałe
   write(KEYS.comments, seeded)
   return seeded
 }
-const newestComment = (comments: Comment[], recipeId: string): RecipeStats['last_comment'] => {
+const newestComment = (comments: StoredComment[], recipeId: string): RecipeStats['last_comment'] => {
   const c = comments.filter((x) => x.recipe_id === recipeId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
   return c && { id: c.id, body: c.body, created_at: c.created_at, author: c.author }
 }
-const saveComments = (list: Comment[]) => write(KEYS.comments, list)
+const saveComments = (list: StoredComment[]) => write(KEYS.comments, list)
+/** Komentarz gotowy do zwrócenia z API: dolicza polubienia (bazowe + moje) */
+function withCommentLikes(c: StoredComment, likedIds: Set<string>): Comment {
+  return { ...c, like_count: baseCommentLikes(c.id) + (likedIds.has(c.id) ? 1 : 0), liked: likedIds.has(c.id) }
+}
 
 /** Liczby polubień pod przykładowymi przepisami są stałe (z hasha id), własne polubienie dolicza się do nich */
 const baseLikes = (recipeId: string) => (recipeId.startsWith('demo-') ? hash(recipeId) % 23 : 0)
@@ -325,7 +354,7 @@ const baseSaves = (recipeId: string) => (recipeId.startsWith('demo-') ? hash(`${
 const loadViews = () => new Set(read<string[]>(KEYS.views, () => []))
 
 /** Viralowość jednego przepisu: wyświetlenia + polubienia×3 + komentarze×4 + zapisania×5 (jak recipe_engagement_score w SQL) */
-function engagementScore(r: Recipe, ctx: { views: Set<string>; liked: Set<string>; comments: Comment[]; savedCopies: Recipe[] }): number {
+function engagementScore(r: Recipe, ctx: { views: Set<string>; liked: Set<string>; comments: StoredComment[]; savedCopies: Recipe[] }): number {
   const viewCount = baseViews(r.id) + (ctx.views.has(r.id) ? 1 : 0)
   const likeCount = baseLikes(r.id) + (ctx.liked.has(r.id) ? 1 : 0)
   const commentCount = ctx.comments.filter((c) => c.recipe_id === r.id).length
@@ -403,6 +432,7 @@ export const localBackend: Backend = {
     if (patch.allow_avatar_zoom !== undefined) next.allow_avatar_zoom = patch.allow_avatar_zoom
     if (patch.is_public !== undefined) next.is_public = patch.is_public
     if (patch.avatar_url !== undefined) next.avatar_url = patch.avatar_url ?? undefined
+    if (patch.website !== undefined) next.website = normalizeWebsite(patch.website ?? '')
     write(KEYS.profile, next)
     return next
   },
@@ -570,6 +600,20 @@ export const localBackend: Backend = {
     if (isAdmin()) write(KEYS.hideTestAccounts, !show)
   },
 
+  async listInviteCodes() {
+    if (!isAdmin()) return []
+    return read<InviteCode[]>(KEYS.inviteCodes, () => [])
+  },
+
+  async createInviteCode() {
+    if (!isAdmin()) throw new Error('Brak uprawnień.')
+    const list = read<InviteCode[]>(KEYS.inviteCodes, () => [])
+    let code = randomInviteCode()
+    while (list.some((c) => c.code === code)) code = randomInviteCode()
+    write(KEYS.inviteCodes, [{ code, created_at: new Date().toISOString() }, ...list])
+    return code
+  },
+
   async getInterests() {
     return loadInterests()
   },
@@ -719,14 +763,15 @@ export const localBackend: Backend = {
 
   async listComments(recipeId, offset, limit) {
     const list = loadComments().filter((c) => c.recipe_id === recipeId).sort((a, b) => b.created_at.localeCompare(a.created_at))
-    return page(list, offset, limit)
+    const likedIds = loadCommentLikes()
+    return page(list, offset, limit).map((c) => withCommentLikes(c, likedIds))
   },
 
   async addComment(recipeId, body, author) {
     const text = body.trim()
     if (!text) throw new Error('Napisz komentarz.')
     if (text.length > 500) throw new Error('Komentarz może mieć najwyżej 500 znaków.')
-    const comment: Comment = {
+    const comment: StoredComment = {
       id: crypto.randomUUID(),
       recipe_id: recipeId,
       user_id: LOCAL_USER_ID,
@@ -735,12 +780,38 @@ export const localBackend: Backend = {
       author,
     }
     saveComments([comment, ...loadComments()])
-    return comment
+    return { ...comment, like_count: 0, liked: false }
   },
 
   async deleteComment(comment) {
     const ownsRecipe = loadOwn().some((r) => r.id === comment.recipe_id)
     if (comment.user_id !== LOCAL_USER_ID && !ownsRecipe) throw new Error('Brak uprawnień do usunięcia tego komentarza.')
     saveComments(loadComments().filter((c) => c.id !== comment.id))
+  },
+
+  async likeComment(commentId) {
+    const l = loadCommentLikes()
+    l.add(commentId)
+    write(KEYS.commentLikes, [...l])
+  },
+
+  async unlikeComment(commentId) {
+    const l = loadCommentLikes()
+    l.delete(commentId)
+    write(KEYS.commentLikes, [...l])
+  },
+
+  async listLikers(recipeId, offset, limit) {
+    const me = loadMe()
+    const iLiked = loadLikes().has(recipeId)
+    const pool = demo.map((d) => d.profile)
+    const need = baseLikes(recipeId)
+    const picked: Profile[] = []
+    for (let i = 0; picked.length < need && i < pool.length; i++) {
+      const candidate = pool[hash(`${recipeId}liker${i}`) % pool.length]
+      if (!picked.some((p) => p.id === candidate.id)) picked.push(candidate)
+    }
+    const all = [...(iLiked ? [me] : []), ...picked]
+    return page(all, offset, limit).map(summary)
   },
 }

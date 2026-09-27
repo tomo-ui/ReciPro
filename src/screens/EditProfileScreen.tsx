@@ -5,11 +5,11 @@ import type { AdminSettings } from '@/lib/backend'
 import { backend } from '@/lib/data'
 import { emit } from '@/lib/events'
 import { deleteRecipeImage, fileToAvatarBlob, uploadAvatarImage } from '@/lib/images'
-import { BIO_MAX_LENGTH, BIO_MAX_LINES, normalizeBio, normalizeFullName, normalizeUsername } from '@/lib/username'
+import { BIO_MAX_LENGTH, BIO_MAX_LINES, WEBSITE_MAX_LENGTH, normalizeBio, normalizeFullName, normalizeUsername, normalizeWebsite } from '@/lib/username'
 import { useUsernameCheck } from '@/hooks/useUsernameCheck'
 import { Avatar } from '@/components/Avatar'
 import { Field, Group, Toggle } from '@/components/formParts'
-import { SpinnerIcon } from '@/components/Icons'
+import { PaperclipIcon, SpinnerIcon } from '@/components/Icons'
 import { UsernameInput } from '@/components/UsernameInput'
 
 interface Props {
@@ -28,6 +28,7 @@ export function EditProfileScreen({ me, onClose, onSaved }: Props) {
   const [username, setUsername] = useState(me.username)
   const [fullName, setFullName] = useState(me.full_name ?? '')
   const [bio, setBio] = useState(me.bio ?? '')
+  const [website, setWebsite] = useState(me.website ?? '')
   const [isPublic, setIsPublic] = useState(me.is_public)
   const [allowZoom, setAllowZoom] = useState(me.allow_avatar_zoom !== false)
   // Panel admina (tylko konto twórcy): przełącznik widoczności kont testowych działa od razu, bez „Zapisz”
@@ -112,6 +113,7 @@ export function EditProfileScreen({ me, onClose, onSaved }: Props) {
       if (normalizeUsername(username) !== me.username) patch.username = username
       // opis wysyłamy tylko po zmianie, żeby zapis profilu działał też przed aktualizacją bazy o kolumnę bio
       if ((normalizeBio(bio) ?? '') !== (me.bio ?? '')) patch.bio = normalizeBio(bio) ?? null
+      if ((normalizeWebsite(website) ?? '') !== (me.website ?? '')) patch.website = normalizeWebsite(website) ?? null
       // jak przy opisie: tylko po zmianie, żeby zapis działał też przed aktualizacją bazy
       if (allowZoom !== (me.allow_avatar_zoom !== false)) patch.allow_avatar_zoom = allowZoom
       if (pending) {
@@ -227,6 +229,26 @@ export function EditProfileScreen({ me, onClose, onSaved }: Props) {
           <p className="mt-1.5 px-4 text-right text-[13px] text-label-2 tabular-nums">
             {bio.length}/{BIO_MAX_LENGTH}
           </p>
+        </div>
+
+        <div>
+          <p className="mb-1.5 px-4 text-[13px] text-label-2 uppercase">Link</p>
+          <Group>
+            <div className="flex items-center gap-2 px-4 py-3.5">
+              <PaperclipIcon width={17} height={17} className="shrink-0 text-accent" />
+              <input
+                type="url"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="twojastrona.pl"
+                maxLength={WEBSITE_MAX_LENGTH}
+                className="min-w-0 flex-1 bg-transparent text-accent outline-none placeholder:text-label-3"
+              />
+            </div>
+          </Group>
         </div>
 
         <div>

@@ -95,6 +95,8 @@ export interface Profile {
   /** Czy inni mogą powiększyć zdjęcie profilowe dotknięciem; brak wartości = tak */
   allow_avatar_zoom?: boolean
   is_public: boolean
+  /** Jeden link pod opisem profilu (jak w Instagramie) */
+  website?: string
 }
 
 /** Profil z licznikami i relacją do zalogowanego użytkownika */
@@ -135,6 +137,8 @@ export interface Comment {
   body: string
   created_at: string
   author: RecipeAuthor
+  like_count: number
+  liked: boolean
 }
 
 /** Liczniki profilu, które backend potrafi wysyłać na żywo */
@@ -143,7 +147,7 @@ export interface ProfileCounts {
   following_count: number
 }
 
-export type NotificationType = 'like' | 'comment' | 'follow'
+export type NotificationType = 'like' | 'comment' | 'follow' | 'mention'
 
 /** Pozycja aktywności: ktoś polubił / skomentował mój przepis albo zaczął mnie obserwować */
 export interface AppNotification {

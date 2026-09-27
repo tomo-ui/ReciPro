@@ -53,6 +53,27 @@ export const LinkIcon = (p: P) => (
     <path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" />
   </svg>
 )
+export const PaperclipIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  </svg>
+)
+/** Siatka (2×2) — widok przepisów na profilu */
+export const GridIcon = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="3" y="3" width="8" height="8" rx="1.5" />
+    <rect x="13" y="3" width="8" height="8" rx="1.5" />
+    <rect x="3" y="13" width="8" height="8" rx="1.5" />
+    <rect x="13" y="13" width="8" height="8" rx="1.5" />
+  </svg>
+)
+/** Ułożone karty — widok przepisów jak w feedzie */
+export const RowsIcon = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="3" y="4" width="18" height="6" rx="1.5" />
+    <rect x="3" y="14" width="18" height="6" rx="1.5" />
+  </svg>
+)
 /** Zakładka „zapisz”; `filled` = przepis już zapisany */
 export const BookmarkIcon = ({ filled, ...p }: P & { filled?: boolean }) => (
   <svg {...base(p)} fill={filled ? 'currentColor' : 'none'}>

@@ -28,10 +28,12 @@ import { AddRecipeScreen } from '@/screens/AddRecipeScreen'
 import { CaloriesScreen } from '@/screens/CaloriesScreen'
 import { EditProfileScreen } from '@/screens/EditProfileScreen'
 import { InterestsScreen } from '@/screens/InterestsScreen'
+import { InviteCodesScreen } from '@/screens/InviteCodesScreen'
 import { CommentsSheet } from '@/components/CommentsSheet'
 import { CreatorRecipesSheet } from '@/components/CreatorRecipesSheet'
 import { EditRecipeScreen } from '@/screens/EditRecipeScreen'
 import { FeedScreen } from '@/screens/FeedScreen'
+import { LikersScreen } from '@/screens/LikersScreen'
 import { LoginScreen } from '@/screens/LoginScreen'
 import { DietScreen } from '@/screens/DietScreen'
 import { PeopleListScreen, type ListKind } from '@/screens/PeopleListScreen'
@@ -65,7 +67,7 @@ function AppRoutes() {
 
 /** Przepuszcza dalej dopiero, gdy użytkownik ma profil (nazwę użytkownika) */
 function Gate({ session }: { session: Session | null }) {
-  const { status, me, error, reload, setMe } = useMe(session)
+  const { status, me, error, setupError, reload, setMe } = useMe(session)
   const signOut = usesSupabase ? () => void supabase?.auth.signOut() : undefined
   const loading = status === 'loading'
   useEffect(() => {
@@ -92,8 +94,8 @@ function Gate({ session }: { session: Session | null }) {
   }
 
   if (!me) {
-    const meta = session?.user.user_metadata as { username?: string; full_name?: string } | undefined
-    return <ProfileSetupScreen prefill={meta} onDone={setMe} onSignOut={signOut} />
+    const meta = session?.user.user_metadata as { username?: string; full_name?: string; invite_code?: string } | undefined
+    return <ProfileSetupScreen prefill={meta} initialError={setupError} onDone={setMe} onSignOut={signOut} />
   }
 
   return <Shell me={me} onMeChange={setMe} onSignOut={signOut} />
@@ -106,6 +108,7 @@ type Entry =
   | { kind: 'people'; username: string; list: ListKind }
   | { kind: 'activity' }
   | { kind: 'diet'; id: string }
+  | { kind: 'likers'; recipe: Recipe }
 
 type SheetState =
   | { kind: 'add' }
@@ -114,6 +117,7 @@ type SheetState =
   | { kind: 'edit-profile' }
   | { kind: 'interests' }
   | { kind: 'calories' }
+  | { kind: 'invites' }
   | { kind: 'comments'; recipe: Recipe; focus: boolean }
   | { kind: 'creator-recipes'; creator: TopCreator }
   | null
@@ -156,6 +160,13 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
     setStack((s) => [...s, { kind: 'profile', username }])
   }
   const openList = (username: string, list: ListKind) => setStack((s) => [...s, { kind: 'people', username, list }])
+  // Przełączenie obserwujący ↔ obserwowani z tego samego ekranu: podmieniamy wpis na szczycie stosu, nie pushujemy nowego
+  const switchListKind = (list: ListKind) =>
+    setStack((s) => {
+      const top = s[s.length - 1]
+      return top && top.kind === 'people' ? [...s.slice(0, -1), { ...top, list }] : s
+    })
+  const openLikers = (recipe: Recipe) => setStack((s) => [...s, { kind: 'likers', recipe }])
   const pop = () => setStack((s) => s.slice(0, -1))
   const openActivity = () => {
     setSheet(null)
@@ -239,6 +250,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onGoSearch={() => changeTab('search')}
             onOpenActivity={openActivity}
             onOpenComments={(recipe, focus) => setSheet({ kind: 'comments', recipe, focus })}
+            onOpenLikers={openLikers}
             onOpenCreator={(creator) => setSheet({ kind: 'creator-recipes', creator })}
             savedIds={savedIds}
             onToggleSave={toggleSave}
@@ -300,7 +312,6 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             <RecipeDetailScreen
               key={`recipe-${entry.recipe.id}-${i}`}
               recipe={entry.recipe}
-              me={me}
               isOwner={entry.recipe.user_id === me.id}
               onBack={pop}
               onEdit={() => setSheet({ kind: 'edit', recipe: entry.recipe })}
@@ -314,6 +325,8 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
                 }
               }}
               onOpenAuthor={openProfile}
+              onOpenComments={() => setSheet({ kind: 'comments', recipe: entry.recipe, focus: false })}
+              onOpenLikers={() => openLikers(entry.recipe)}
               saved={savedIds.has(entry.recipe.id)}
               onToggleSave={() => toggleSave(entry.recipe)}
               onSaveCopy={async (draft) => {
@@ -348,13 +361,17 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             <PushedScreen key={`activity-${i}`} title="Aktywność" onBack={pop}>
               <ActivityScreen arrivals={notes.arrivals} onSeen={onSeen} onOpenProfile={openProfile} onOpenRecipe={openRecipeById} />
             </PushedScreen>
+          ) : entry.kind === 'likers' ? (
+            <PushedScreen key={`likers-${entry.recipe.id}-${i}`} title="Polubienia" onBack={pop}>
+              <LikersScreen recipeId={entry.recipe.id} onOpenProfile={openProfile} />
+            </PushedScreen>
           ) : (
             <PushedScreen
-              key={`people-${entry.username}-${entry.list}-${i}`}
+              key={`people-${entry.username}-${i}`}
               title={entry.list === 'followers' ? 'Obserwujący' : 'Obserwowani'}
               onBack={pop}
             >
-              <PeopleListScreen username={entry.username} kind={entry.list} onOpenProfile={openProfile} />
+              <PeopleListScreen username={entry.username} kind={entry.list} onOpenProfile={openProfile} onSwitchKind={switchListKind} />
             </PushedScreen>
           ),
         )}
@@ -370,6 +387,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onEditProfile={() => setSheet({ kind: 'edit-profile' })}
             onInterests={() => setSheet({ kind: 'interests' })}
             onCalories={isCreator(me.username) ? () => setSheet({ kind: 'calories' }) : undefined}
+            onInvites={isCreator(me.username) ? () => setSheet({ kind: 'invites' }) : undefined}
             onSignOut={onSignOut}
           />
         )}
@@ -421,8 +439,13 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             />
           </Sheet>
         )}
+        {sheet?.kind === 'invites' && isCreator(me.username) && (
+          <Sheet key="invites" onClose={() => setSheet(null)}>
+            <InviteCodesScreen onClose={() => setSheet(null)} />
+          </Sheet>
+        )}
         {sheet?.kind === 'comments' && (
-          <Sheet key={`comments-${sheet.recipe.id}`} onClose={() => setSheet(null)}>
+          <Sheet key={`comments-${sheet.recipe.id}`} size="large" onClose={() => setSheet(null)}>
             <CommentsSheet
               recipeId={sheet.recipe.id}
               recipeTitle={sheet.recipe.title}

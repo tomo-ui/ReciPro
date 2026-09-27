@@ -57,7 +57,8 @@ Rules:
 - If the text lists ingredients but gives no method (for example it says the method is shown in the video), return "steps" as an empty array. NEVER write steps from your own cooking knowledge and never restate the ingredient list as a step. The same applies to ingredients: never add ingredients the text does not mention.
 - Ingredients and steps are often written as flowing prose instead of lists. Split such prose into separate list entries, using only what the text says. Always fill both lists when the recipe describes them.
 - Remove emojis, bullet symbols and hashtags from list entries.
-- Read servings and times when the text states them, also in labeled form (for example "PORCJE: 6", "CZAS: 40 MIN", "serves 4"). Times in whole minutes, servings as an integer. Omit fields the text does not state.`
+- Read servings and times when the text states them, also in labeled form (for example "PORCJE: 6", "CZAS: 40 MIN", "serves 4"). Times in whole minutes, servings as an integer. Omit fields the text does not state.
+- tags: besides any topical keywords, always include (when you can tell from the text) one tag for the dish's cuisine or regional origin (e.g. "włoskie", "meksykańskie"), one for its category (e.g. "deser", "zupa", "śniadanie"), and one for its single most defining ingredient (e.g. "kurczak", "czekolada"). Keep each tag short (1-2 words), in the same language as the recipe, lowercase, and never repeat the same idea as two different tags.`
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
