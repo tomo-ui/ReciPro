@@ -217,16 +217,17 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
                 <p className="text-[15px] leading-snug break-words whitespace-pre-wrap" data-selectable>
                   {renderBody(c.body)}
                 </p>
-                <button
-                  onClick={() => toggleLike(c)}
-                  aria-label={c.liked ? 'Cofnij polubienie komentarza' : 'Polub komentarz'}
-                  aria-pressed={c.liked}
-                  className={`mt-1 flex items-center gap-1 text-[12px] transition-colors ${c.liked ? 'text-red-500' : 'text-label-2'}`}
-                >
-                  <HeartIcon width={14} height={14} filled={c.liked} />
-                  {c.like_count > 0 && <span className="tabular-nums">{c.like_count}</span>}
-                </button>
               </div>
+              {/* Serce z licznikiem po prawej, w linii z awatarem — jak w Instagramie */}
+              <button
+                onClick={() => toggleLike(c)}
+                aria-label={c.liked ? 'Cofnij polubienie komentarza' : 'Polub komentarz'}
+                aria-pressed={c.liked}
+                className={`flex shrink-0 flex-col items-center gap-0.5 self-start pt-0.5 transition-colors ${c.liked ? 'text-red-500' : 'text-label-2'}`}
+              >
+                <HeartIcon width={14} height={14} filled={c.liked} />
+                {c.like_count > 0 && <span className="text-[11px] tabular-nums">{c.like_count}</span>}
+              </button>
               {(c.user_id === me.id || isRecipeOwner) && (
                 <button onClick={() => remove(c)} aria-label="Usuń komentarz" className="shrink-0 self-start p-1 text-label-3 active:text-red-500">
                   <TrashIcon width={16} height={16} />

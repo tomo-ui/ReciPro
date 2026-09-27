@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { motion, useDragControls } from 'framer-motion'
 import { spring } from '@/lib/ui'
 
@@ -9,9 +9,34 @@ interface Props {
   children: ReactNode
 }
 
+/**
+ * Ile px u dołu układu strony zasłania teraz klawiatura ekranowa (różnica między pełnym
+ * viewportem a visualViewport). Bez tego elementy `position: fixed` przypięte do dołu
+ * (pole komentarza, przyciski) chowają się pod klawiaturą zamiast zostać nad nią.
+ */
+function useKeyboardInset(): number {
+  const [inset, setInset] = useState(0)
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+    update()
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
+  return inset
+}
+
 /** Modalny sheet w stylu iOS: sprężynowy wjazd, przeciągnięcie za uchwyt zamyka */
 export function Sheet({ onClose, size = 'full', children }: Props) {
   const controls = useDragControls()
+  // Klawiatura otwarta: panel „large” rośnie w górę i zostaje tuż nad nią, jak w Instagramie
+  const keyboardInset = useKeyboardInset()
+  const top = size === 'large' ? (keyboardInset > 0 ? '10vh' : '25vh') : 'calc(env(safe-area-inset-top, 0px) + 10px)'
 
   return (
     <>
@@ -26,8 +51,8 @@ export function Sheet({ onClose, size = 'full', children }: Props) {
       <motion.div
         role="dialog"
         aria-modal="true"
-        className="fixed inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-[28px] bg-bg shadow-2xl"
-        style={{ top: size === 'large' ? '25vh' : 'calc(env(safe-area-inset-top, 0px) + 10px)' }}
+        className="fixed inset-x-0 z-50 flex flex-col overflow-hidden rounded-t-[28px] bg-bg shadow-2xl"
+        style={{ top, bottom: keyboardInset, transition: 'top 0.25s ease, bottom 0.25s ease' }}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
