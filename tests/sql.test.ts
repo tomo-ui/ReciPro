@@ -632,6 +632,18 @@ describe('kody zaproszeń do zamkniętej bety', () => {
   it('create_profile_with_invite niedostępny dla anon', async () => {
     expect(await asOk(null, `select * from public.create_profile_with_invite('x', 'x', 'AAAAA')`)).toMatch(/permission denied/i)
   })
+
+  it('admin_delete_invite_code: usuwa kod (użyty albo nie), tylko admin', async () => {
+    const created = await as<{ admin_create_invite_code: string }>(TK, 'select public.admin_create_invite_code()')
+    const code = created[0].admin_create_invite_code
+
+    expect(await asOk(ANNA, `select public.admin_delete_invite_code('${code}')`)).toMatch(/permission denied/i)
+    expect(await asOk(null, `select public.admin_delete_invite_code('${code}')`)).toMatch(/permission denied/i)
+
+    await as(TK, `select public.admin_delete_invite_code('${code}')`)
+    const remaining = await as<{ code: string }>(TK, 'select * from public.admin_list_invite_codes()')
+    expect(remaining.some((c) => c.code === code)).toBe(false)
+  })
 })
 
 describe('polubienia komentarzy, oznaczenia @ i lista polubień przepisu', () => {

@@ -136,6 +136,8 @@ export interface Backend {
   listInviteCodes(): Promise<InviteCode[]>
   /** Nowy jednorazowy kod zaproszenia do rejestracji (tylko admin) */
   createInviteCode(): Promise<string>
+  /** Usuwa kod zaproszenia (użyty albo nie) — tylko admin */
+  deleteInviteCode(code: string): Promise<void>
   /** Czy zalogowany jest adminem (tabela app_admins) — gate widoczności panelu admina */
   isAdmin(): Promise<boolean>
   /** Przyznaje/odbiera znaczek weryfikacji danemu użytkownikowi (tylko admin) */

@@ -626,6 +626,12 @@ export const localBackend: Backend = {
     return code
   },
 
+  async deleteInviteCode(code) {
+    if (!isAdmin()) throw new Error('Brak uprawnień.')
+    const list = read<InviteCode[]>(KEYS.inviteCodes, () => [])
+    write(KEYS.inviteCodes, list.filter((c) => c.code !== code))
+  },
+
   async isAdmin() {
     return isAdmin()
   },

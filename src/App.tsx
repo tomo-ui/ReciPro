@@ -11,6 +11,7 @@ import { isCreator } from '@/lib/verified'
 import { deleteRecipeImage } from '@/lib/images'
 import { markAppReady } from '@/lib/splash'
 import { spring } from '@/lib/ui'
+import { useIsAdmin } from '@/hooks/useIsAdmin'
 import { useMe } from '@/hooks/useMe'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useRecipes } from '@/hooks/useRecipes'
@@ -26,6 +27,8 @@ import { Sheet } from '@/components/Sheet'
 import { TabBar, type Tab } from '@/components/TabBar'
 import { ActivityScreen } from '@/screens/ActivityScreen'
 import { AddRecipeScreen } from '@/screens/AddRecipeScreen'
+import { AdminPanelScreen } from '@/screens/AdminPanelScreen'
+import { BadgeAssignmentScreen } from '@/screens/BadgeAssignmentScreen'
 import { CaloriesScreen } from '@/screens/CaloriesScreen'
 import { EditProfileScreen } from '@/screens/EditProfileScreen'
 import { InterestsScreen } from '@/screens/InterestsScreen'
@@ -117,8 +120,10 @@ type SheetState =
   | { kind: 'edit'; recipe: Recipe }
   | { kind: 'edit-profile' }
   | { kind: 'interests' }
+  | { kind: 'admin-panel' }
   | { kind: 'calories' }
   | { kind: 'invites' }
+  | { kind: 'badges' }
   | { kind: 'comments'; recipe: Recipe; focus: boolean }
   | { kind: 'creator-recipes'; creator: TopCreator }
   | null
@@ -126,6 +131,7 @@ type SheetState =
 function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Profile) => void; onSignOut?: () => void }) {
   const mine = useRecipes()
   const notes = useNotifications(me.id)
+  const isAdmin = useIsAdmin()
   const [tab, setTab] = useState<Tab>('feed')
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(['feed']))
   const [stack, setStack] = useState<Entry[]>([])
@@ -390,8 +396,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onActivity={openActivity}
             onEditProfile={() => setSheet({ kind: 'edit-profile' })}
             onInterests={() => setSheet({ kind: 'interests' })}
-            onCalories={isCreator(me.username) ? () => setSheet({ kind: 'calories' }) : undefined}
-            onInvites={isCreator(me.username) ? () => setSheet({ kind: 'invites' }) : undefined}
+            onAdminPanel={isAdmin ? () => setSheet({ kind: 'admin-panel' }) : undefined}
             onSignOut={onSignOut}
           />
         )}
@@ -426,6 +431,21 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         {sheet?.kind === 'interests' && (
           <Sheet key="interests" onClose={() => setSheet(null)}>
             <InterestsScreen onClose={() => setSheet(null)} />
+          </Sheet>
+        )}
+        {sheet?.kind === 'admin-panel' && isAdmin && (
+          <Sheet key="admin-panel" onClose={() => setSheet(null)}>
+            <AdminPanelScreen
+              onClose={() => setSheet(null)}
+              onOpenCalories={() => setSheet({ kind: 'calories' })}
+              onOpenInvites={() => setSheet({ kind: 'invites' })}
+              onOpenBadges={() => setSheet({ kind: 'badges' })}
+            />
+          </Sheet>
+        )}
+        {sheet?.kind === 'badges' && isAdmin && (
+          <Sheet key="badges" onClose={() => setSheet(null)}>
+            <BadgeAssignmentScreen onClose={() => setSheet(null)} />
           </Sheet>
         )}
         {sheet?.kind === 'calories' && isCreator(me.username) && (

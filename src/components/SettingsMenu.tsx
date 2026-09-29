@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { spring } from '@/lib/ui'
-import { FlameIcon, HeartIcon, LockIcon, PencilIcon, SlidersIcon } from './Icons'
+import { HeartIcon, PencilIcon, ShieldIcon, SlidersIcon } from './Icons'
 
 interface Props {
   unread: number
@@ -9,15 +9,13 @@ interface Props {
   onActivity: () => void
   onEditProfile: () => void
   onInterests: () => void
-  /** Licznik kalorii: tylko dla konta twórcy aplikacji, i tylko stąd da się go otworzyć */
-  onCalories?: () => void
-  /** Panel kodów zaproszeń do zamkniętej bety: tylko dla konta twórcy aplikacji, i tylko stąd da się go otworzyć */
-  onInvites?: () => void
+  /** Panel admina: tylko dla admina (tabela app_admins), i tylko stąd da się go otworzyć */
+  onAdminPanel?: () => void
   onSignOut?: () => void
 }
 
 /** Menu z burgera na profilu: aktywność i ustawienia konta (dolny arkusz, jak w Instagramie) */
-export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onCalories, onInvites, onSignOut }: Props) {
+export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onAdminPanel, onSignOut }: Props) {
   return (
     <>
       <motion.div
@@ -51,8 +49,7 @@ export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInt
           <Item icon={<HeartIcon width={22} height={22} />} label="Aktywność" badge={unread} onClick={onActivity} />
           <Item icon={<PencilIcon width={22} height={22} />} label="Edytuj profil" onClick={onEditProfile} />
           <Item icon={<SlidersIcon width={22} height={22} />} label="Zainteresowania" onClick={onInterests} />
-          {onCalories && <Item icon={<FlameIcon width={22} height={22} />} label="Licznik kalorii" onClick={onCalories} />}
-          {onInvites && <Item icon={<LockIcon width={22} height={22} />} label="Kody zaproszeń" onClick={onInvites} />}
+          {onAdminPanel && <Item icon={<ShieldIcon width={22} height={22} />} label="Panel admina" onClick={onAdminPanel} />}
         </ul>
 
         {onSignOut && (

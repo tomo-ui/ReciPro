@@ -94,3 +94,16 @@ end;
 $$;
 revoke all on function public.create_profile_with_invite(text, text, text) from public, anon;
 grant execute on function public.create_profile_with_invite(text, text, text) to authenticated;
+
+-- Usunięcie kodu (użytego albo nie) — tylko admin. Kasuje tylko wpis w historii, nie cofa już założonych kont.
+create or replace function public.admin_delete_invite_code(p_code text) returns void
+language plpgsql volatile security definer set search_path = public as $$
+begin
+  if not exists (select 1 from public.app_admins a where a.user_id = auth.uid()) then
+    raise exception 'permission denied';
+  end if;
+  delete from public.invite_codes where code = upper(trim(coalesce(p_code, '')));
+end;
+$$;
+revoke all on function public.admin_delete_invite_code(text) from public, anon;
+grant execute on function public.admin_delete_invite_code(text) to authenticated;

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import type { InviteCode } from '@/lib/backend'
 import { backend } from '@/lib/data'
-import { CheckIcon, SpinnerIcon } from '@/components/Icons'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { CheckIcon, SpinnerIcon, TrashIcon } from '@/components/Icons'
 
 interface Props {
   onClose: () => void
@@ -17,6 +18,8 @@ export function InviteCodesScreen({ onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = () =>
     backend
@@ -48,6 +51,19 @@ export function InviteCodesScreen({ onClose }: Props) {
       setTimeout(() => setCopied((c) => (c === code ? null : c)), 1500)
     } catch {
       /* schowek niedostępny — nic się nie dzieje, kod i tak jest widoczny na ekranie */
+    }
+  }
+
+  async function remove(code: string) {
+    setDeleting(true)
+    try {
+      await backend.deleteInviteCode(code)
+      setCodes((list) => list?.filter((c) => c.code !== code) ?? null)
+      setPendingDelete(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Nie udało się usunąć kodu.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -92,15 +108,19 @@ export function InviteCodesScreen({ onClose }: Props) {
                 <h3 className="mb-2 text-[13px] font-semibold text-label-2">Do wykorzystania ({unused.length})</h3>
                 <div className="grid grid-cols-2 gap-2">
                   {unused.map((c) => (
-                    <motion.button
-                      key={c.code}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => copy(c.code)}
-                      className="flex items-center justify-center gap-1.5 rounded-[14px] bg-surface py-3 font-mono text-[18px] font-bold tracking-[0.2em]"
-                    >
-                      {copied === c.code && <CheckIcon width={16} height={16} className="text-green-500" />}
-                      {c.code}
-                    </motion.button>
+                    <div key={c.code} className="flex items-center gap-1 rounded-[14px] bg-surface pr-1 pl-3">
+                      <motion.button
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => copy(c.code)}
+                        className="flex flex-1 items-center justify-center gap-1.5 py-3 font-mono text-[18px] font-bold tracking-[0.2em]"
+                      >
+                        {copied === c.code && <CheckIcon width={16} height={16} className="text-green-500" />}
+                        {c.code}
+                      </motion.button>
+                      <button onClick={() => setPendingDelete(c.code)} aria-label="Usuń kod" className="p-2 text-label-3 active:text-red-500">
+                        <TrashIcon width={16} height={16} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -110,12 +130,12 @@ export function InviteCodesScreen({ onClose }: Props) {
                 <h3 className="mb-2 text-[13px] font-semibold text-label-2">Wykorzystane ({used.length})</h3>
                 <div className="grid grid-cols-2 gap-2">
                   {used.map((c) => (
-                    <span
-                      key={c.code}
-                      className="rounded-[14px] bg-surface py-3 text-center font-mono text-[15px] tracking-[0.2em] text-label-3 line-through"
-                    >
-                      {c.code}
-                    </span>
+                    <div key={c.code} className="flex items-center gap-1 rounded-[14px] bg-surface pr-1 pl-3">
+                      <span className="flex-1 py-3 text-center font-mono text-[15px] tracking-[0.2em] text-label-3 line-through">{c.code}</span>
+                      <button onClick={() => setPendingDelete(c.code)} aria-label="Usuń kod" className="p-2 text-label-3 active:text-red-500">
+                        <TrashIcon width={16} height={16} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -123,6 +143,17 @@ export function InviteCodesScreen({ onClose }: Props) {
           </>
         )}
       </div>
+      <AnimatePresence>
+        {pendingDelete && (
+          <ConfirmDialog
+            key="confirm-delete-invite"
+            title="Usunąć ten kod?"
+            message={deleting ? undefined : 'Tej operacji nie da się cofnąć.'}
+            onCancel={() => setPendingDelete(null)}
+            onConfirm={() => void remove(pendingDelete)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

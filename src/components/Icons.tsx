@@ -183,3 +183,9 @@ export const SlidersIcon = (p: P) => (
     <circle cx="8" cy="17" r="2" />
   </svg>
 )
+export const ShieldIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 3.5 5 6.2v5.3c0 4.6 3 8.2 7 9 4-.8 7-4.4 7-9V6.2z" />
+    <path d="m9 12 2 2 4-4.5" />
+  </svg>
+)

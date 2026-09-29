@@ -535,6 +535,11 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       return data as string
     },
 
+    async deleteInviteCode(code) {
+      const { error } = await client().rpc('admin_delete_invite_code', { p_code: code })
+      if (error) fail(error)
+    },
+
     async isAdmin() {
       const { data, error } = await client().rpc('is_app_admin')
       if (error) return false
