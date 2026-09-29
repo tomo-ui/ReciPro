@@ -41,6 +41,7 @@ import { EditRecipeScreen } from '@/screens/EditRecipeScreen'
 import { FeedScreen } from '@/screens/FeedScreen'
 import { LikersScreen } from '@/screens/LikersScreen'
 import { LoginScreen } from '@/screens/LoginScreen'
+import { MyActivityScreen } from '@/screens/MyActivityScreen'
 import { DietScreen } from '@/screens/DietScreen'
 import { PeopleListScreen, type ListKind } from '@/screens/PeopleListScreen'
 import { ProfileSetupScreen } from '@/screens/ProfileSetupScreen'
@@ -129,11 +130,12 @@ type SheetState =
   | { kind: 'edit-profile' }
   | { kind: 'interests' }
   | { kind: 'change-password' }
+  | { kind: 'my-activity' }
   | { kind: 'admin-panel' }
   | { kind: 'calories' }
   | { kind: 'invites' }
   | { kind: 'badges' }
-  | { kind: 'comments'; recipe: Recipe; focus: boolean }
+  | { kind: 'comments'; recipe: Recipe; focus: boolean; expanded: boolean }
   | { kind: 'creator-recipes'; creator: TopCreator }
   | null
 
@@ -267,7 +269,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onOpenProfile={openProfile}
             onGoSearch={() => changeTab('search')}
             onOpenActivity={openActivity}
-            onOpenComments={(recipe, focus) => setSheet({ kind: 'comments', recipe, focus })}
+            onOpenComments={(recipe, focus) => setSheet({ kind: 'comments', recipe, focus, expanded: false })}
             onOpenLikers={openLikers}
             onOpenCreator={(creator) => setSheet({ kind: 'creator-recipes', creator })}
             savedIds={savedIds}
@@ -343,7 +345,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
                 }
               }}
               onOpenAuthor={openProfile}
-              onOpenComments={() => setSheet({ kind: 'comments', recipe: entry.recipe, focus: false })}
+              onOpenComments={() => setSheet({ kind: 'comments', recipe: entry.recipe, focus: false, expanded: false })}
               onOpenLikers={() => openLikers(entry.recipe)}
               saved={savedIds.has(entry.recipe.id)}
               onToggleSave={() => toggleSave(entry.recipe)}
@@ -405,6 +407,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onActivity={openActivity}
             onEditProfile={() => setSheet({ kind: 'edit-profile' })}
             onInterests={() => setSheet({ kind: 'interests' })}
+            onMyActivity={() => setSheet({ kind: 'my-activity' })}
             onChangePassword={usesSupabase ? () => setSheet({ kind: 'change-password' }) : undefined}
             onAdminPanel={isAdmin ? () => setSheet({ kind: 'admin-panel' }) : undefined}
             onSignOut={onSignOut}
@@ -441,6 +444,17 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         {sheet?.kind === 'interests' && (
           <Sheet key="interests" onClose={() => setSheet(null)}>
             <InterestsScreen onClose={() => setSheet(null)} />
+          </Sheet>
+        )}
+        {sheet?.kind === 'my-activity' && (
+          <Sheet key="my-activity" onClose={() => setSheet(null)}>
+            <MyActivityScreen
+              onClose={() => setSheet(null)}
+              onOpenRecipe={(id) => {
+                setSheet(null)
+                openRecipeById(id)
+              }}
+            />
           </Sheet>
         )}
         {sheet?.kind === 'change-password' && (
@@ -484,13 +498,18 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
           </Sheet>
         )}
         {sheet?.kind === 'comments' && (
-          <Sheet key={`comments-${sheet.recipe.id}`} size="large" onClose={() => setSheet(null)}>
+          <Sheet key={`comments-${sheet.recipe.id}`} size={sheet.expanded ? 'full' : 'large'} onClose={() => setSheet(null)}>
             <CommentsSheet
               recipeId={sheet.recipe.id}
               recipeTitle={sheet.recipe.title}
               isRecipeOwner={sheet.recipe.user_id === me.id}
               me={me}
               autoFocus={sheet.focus}
+              onComposerFocusChange={(focused) => {
+                // Bez zwężania przy odjęciu fokusu (np. dotknięcie przycisku wysyłania) — panel wraca do
+                // rozmiaru „large” dopiero gdy się w ogóle zamknie (naturalny reset stanu sheetu)
+                if (focused) setSheet((s) => (s?.kind === 'comments' ? { ...s, expanded: true } : s))
+              }}
               onClose={() => setSheet(null)}
               onOpenAuthor={(username) => {
                 setSheet(null) // arkusz jest ponad ekranami stosu, więc zamykamy go przed wejściem w profil

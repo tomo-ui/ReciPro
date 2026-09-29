@@ -187,6 +187,21 @@
   }
 }
 
+/* Pull-to-refresh (RefreshLogo): delikatna pulsacja w trakcie odświeżania, gdy logo jest już w pełni narysowane */
+.refresh-spin {
+  animation: refresh-pulse 900ms ease-in-out infinite;
+  transform-origin: 50% 50%;
+}
+@keyframes refresh-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.75; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .refresh-spin {
+    animation: none;
+  }
+}
+
 /*
  * „Liquid glass” z iOS 26 zrobione w CSS (Safari nie obsługuje SVG-owych filtrów refrakcji w backdrop-filter):
  * rozmycie i nasycenie tła, delikatny szklany gradient, jasna krawędź (::before), połysk od góry (::after)

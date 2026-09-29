@@ -3,6 +3,7 @@ import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 import type {
   AppNotification,
   Comment,
+  MyActivityItem,
   Profile,
   ProfileCounts,
   ProfileSummary,
@@ -96,6 +97,8 @@ export interface Backend {
   markNotificationsRead(): Promise<void>
   /** Wywołuje `onNew` na żywo, gdy pojawi się nowe powiadomienie. Zwraca funkcję kończącą nasłuchiwanie. */
   subscribeNotifications(userId: string, onNew: () => void): () => void
+  /** Moja własna aktywność: polubienia i komentarze, które SAM dodałem (nie mylić z powiadomieniami) */
+  listMyActivity(offset: number, limit: number): Promise<MyActivityItem[]>
   /** Przepis po id (widoczny dla zalogowanego) albo null */
   getRecipe(id: string): Promise<Recipe | null>
 

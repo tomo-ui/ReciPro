@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
 import { motion, useMotionValue, useScroll, useTransform } from 'framer-motion'
 import { TAB_BAR_PADDING } from './TabBar'
-import { SpinnerIcon } from './Icons'
+import { RefreshLogo } from './RefreshLogo'
 
 interface Props {
   title?: string
@@ -172,9 +172,9 @@ export const LargeTitleScreen = forwardRef<LargeTitleScreenHandle, Props>(functi
         {onRefresh && (pull > 0 || refreshing) && (
           <div
             className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex justify-center pt-[calc(env(safe-area-inset-top,0px)+50px)]"
-            style={{ opacity: Math.min(1, pull / REFRESH_THRESHOLD) }}
+            style={{ opacity: Math.min(1, pull / (REFRESH_THRESHOLD * 0.3)) }}
           >
-            <SpinnerIcon width={20} height={20} className="text-label-2" />
+            <RefreshLogo progress={pull / REFRESH_THRESHOLD} spinning={refreshing} size={22} className="text-label-2" />
           </div>
         )}
         <div

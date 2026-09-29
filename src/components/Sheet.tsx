@@ -30,7 +30,7 @@ export function Sheet({ onClose, size = 'full', children }: Props) {
       <motion.div
         role="dialog"
         aria-modal="true"
-        className="fixed inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-[28px] bg-bg shadow-2xl"
+        className="fixed inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-[28px] bg-bg shadow-2xl transition-[top] duration-300 ease-out"
         style={{ top }}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}

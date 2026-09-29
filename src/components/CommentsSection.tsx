@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Comment, Profile, ProfileSummary } from '@/types/recipe'
 import { backend } from '@/lib/data'
@@ -26,6 +26,8 @@ interface Props {
   onCountChange: (delta: number) => void
   /** Kursor od razu w polu nowego komentarza (klawiatura się wysuwa) */
   autoFocus?: boolean
+  /** Dotknięcie pola tekstowego — rodzic może na tej podstawie rozszerzyć panel (patrz Sheet.tsx) */
+  onComposerFocusChange?: (focused: boolean) => void
 }
 
 /** Treść komentarza z „@nazwa” podświetlonymi na pomarańczowo (kolor akcentu) */
@@ -37,7 +39,7 @@ function renderBody(body: string) {
   )))
 }
 
-export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onCountChange, autoFocus }: Props) {
+export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onCountChange, autoFocus, onComposerFocusChange }: Props) {
   const list = usePaged((o, l) => backend.listComments(recipeId, o, l), [recipeId], 15)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -92,8 +94,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
     })
   }
 
-  async function send(e: FormEvent) {
-    e.preventDefault()
+  async function send() {
     const body = text.trim()
     if (!body || sending) return
     setSending(true)
@@ -126,6 +127,13 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
       emit('comments-changed')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Nie udało się usunąć komentarza.')
+    }
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      void send()
     }
   }
 
@@ -200,7 +208,8 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
 
       {/* Pole komentarza — zawsze u dołu panelu; gdy panel rośnie nad klawiaturę (Sheet.tsx), jedzie razem z nim */}
       <div className="shrink-0 pt-3">
-        <form onSubmit={send} className="relative flex items-center gap-2.5">
+        {/* `div`, nie `form`: formularz z polem tekstowym wywołuje natywny pasek nawigacji iOS nad klawiaturą */}
+        <div className="relative flex items-center gap-2.5">
           {mentionQuery !== null && suggestions.length > 0 && (
             <div className="absolute bottom-full left-0 z-10 mb-2 max-h-56 w-full overflow-y-auto rounded-[14px] bg-surface shadow-lg">
               {suggestions.map((p) => (
@@ -230,13 +239,16 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
               autoFocus={autoFocus}
               value={text}
               onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onFocus={() => onComposerFocusChange?.(true)}
               placeholder="Dodaj komentarz…"
               rows={1}
               aria-label="Komentarz"
               className="max-h-32 min-h-[28px] min-w-0 flex-1 resize-none bg-transparent py-1 leading-snug outline-none [field-sizing:content] placeholder:text-label-3"
             />
             <motion.button
-              type="submit"
+              type="button"
+              onClick={() => void send()}
               whileTap={{ scale: 0.9 }}
               disabled={!text.trim() || sending}
               aria-label="Wyślij komentarz"
@@ -245,7 +257,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
               {sending ? <SpinnerIcon width={16} height={16} /> : <SendIcon width={15} height={15} strokeWidth={2.6} />}
             </motion.button>
           </div>
-        </form>
+        </div>
         {text.length > MAX - 60 && <p className="mt-1 pr-2 text-right text-[12px] text-label-2">{text.length}/{MAX}</p>}
         {error && <p className="mt-2 px-1 text-[13px] text-red-500">{error}</p>}
       </div>

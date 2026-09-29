@@ -9,12 +9,14 @@ interface Props {
   me: Profile
   /** Ustawia kursor w polu nowego komentarza od razu po otwarciu (dotknięcie ikony komentarza) */
   autoFocus: boolean
+  /** Dotknięcie pola tekstowego — rodzic rozszerza panel do góry ekranu (jak w Instagramie), patrz App.tsx/Sheet.tsx */
+  onComposerFocusChange?: (focused: boolean) => void
   onClose: () => void
   onOpenAuthor: (username: string) => void
 }
 
 /** Same komentarze pod przepisem (bez wchodzenia w przepis), w arkuszu wysuwanym od dołu */
-export function CommentsSheet({ recipeId, recipeTitle, isRecipeOwner, me, autoFocus, onClose, onOpenAuthor }: Props) {
+export function CommentsSheet({ recipeId, recipeTitle, isRecipeOwner, me, autoFocus, onComposerFocusChange, onClose, onOpenAuthor }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-11 shrink-0 items-center justify-between px-4">
@@ -31,6 +33,7 @@ export function CommentsSheet({ recipeId, recipeTitle, isRecipeOwner, me, autoFo
           me={me}
           isRecipeOwner={isRecipeOwner}
           autoFocus={autoFocus}
+          onComposerFocusChange={onComposerFocusChange}
           onOpenAuthor={onOpenAuthor}
           onCountChange={() => {}}
         />

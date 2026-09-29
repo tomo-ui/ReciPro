@@ -193,8 +193,8 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
 
       <div className="flex items-center gap-5 px-3.5 pb-3.5">
         <LikeButton recipeId={recipe.id} stats={stats} onChange={onStatsChange} onOpenLikers={onOpenLikers} />
-        {/* Ikona komentarza: od razu pole do napisania komentarza */}
-        <button onClick={() => onOpenComments(true)} aria-label="Dodaj komentarz" className="flex items-center gap-1.5 text-[14px] text-label-2">
+        {/* Ikona komentarza: otwiera panel bez fokusu na polu (klawiatura się nie wysuwa) */}
+        <button onClick={() => onOpenComments(false)} aria-label="Komentarze" className="flex items-center gap-1.5 text-[14px] text-label-2">
           <CommentIcon width={22} height={22} />
           <span className="tabular-nums">{stats?.comment_count ?? '–'}</span>
         </button>

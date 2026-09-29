@@ -152,6 +152,16 @@ export interface ProfileCounts {
   following_count: number
 }
 
+/** Pozycja własnej aktywności: polubiłem albo skomentowałem czyjś przepis (Ustawienia → Moja aktywność) */
+export interface MyActivityItem {
+  kind: 'like' | 'comment'
+  recipe_id: string
+  recipe_title: string
+  comment_id: string | null
+  comment_body: string | null
+  created_at: string
+}
+
 export type NotificationType = 'like' | 'comment' | 'follow' | 'mention'
 
 /** Pozycja aktywności: ktoś polubił / skomentował mój przepis albo zaczął mnie obserwować */

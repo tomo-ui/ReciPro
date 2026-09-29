@@ -1,6 +1,6 @@
 import type { Diet, MealTemplate } from '@/types/diet'
 import { newMeals, itemFromRecipe, sanitizeDiet, sanitizeMealTemplate, withPortions } from './diet'
-import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
+import type { AppNotification, Comment, MyActivityItem, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
 import type { Backend, FeedMode, InviteCode, ProfilePatch, RecipeSort, TopCreator } from './backend'
 import type { VerifiedBadgeTier } from './badgeTiers'
 import { emit, on } from './events'
@@ -33,6 +33,7 @@ const KEYS = {
   hideTestAccounts: 'przepisy:v2:hide-test-accounts',
   inviteCodes: 'przepisy:v2:inviteCodes',
   verifiedBadges: 'przepisy:v2:verifiedBadges',
+  myActivity: 'przepisy:v2:myActivity',
 }
 
 /* — magazyn: localStorage, a gdy go brak (testy, tryb prywatny) — pamięć — */
@@ -312,6 +313,12 @@ const page = <T,>(list: T[], offset: number, limit: number) => list.slice(offset
 
 const loadInterests = () => normalizeInterests(read<string[]>(KEYS.interests, () => []))
 const loadLikes = () => new Set(read<string[]>(KEYS.likes, () => []))
+/** Moja własna aktywność (Ustawienia → Moja aktywność): dopisywana przy każdym własnym polubieniu/komentarzu */
+const loadMyActivity = () => read<MyActivityItem[]>(KEYS.myActivity, () => [])
+const saveMyActivity = (list: MyActivityItem[]) => write(KEYS.myActivity, list)
+function recipeTitleFor(recipeId: string): string {
+  return loadOwn().find((r) => r.id === recipeId)?.title ?? publicDemoRecipes().find((r) => r.id === recipeId)?.title ?? ''
+}
 /** Komentarze, które lokalnie polubiłem (klucz: id komentarza) */
 const loadCommentLikes = () => new Set(read<string[]>(KEYS.commentLikes, () => []))
 /** Polubienia pod przykładowymi komentarzami są stałe (z hasha id), własne polubienie dolicza się do nich */
@@ -687,6 +694,11 @@ export const localBackend: Backend = {
     return page(visibleNotifications(), offset, limit)
   },
 
+  async listMyActivity(offset, limit) {
+    const sorted = [...loadMyActivity()].sort((a, b) => b.created_at.localeCompare(a.created_at))
+    return page(sorted, offset, limit)
+  },
+
   async countUnreadNotifications() {
     return visibleNotifications().filter((n) => !n.read).length
   },
@@ -783,12 +795,17 @@ export const localBackend: Backend = {
     const l = loadLikes()
     l.add(recipeId)
     write(KEYS.likes, [...l])
+    saveMyActivity([
+      { kind: 'like', recipe_id: recipeId, recipe_title: recipeTitleFor(recipeId), comment_id: null, comment_body: null, created_at: new Date().toISOString() },
+      ...loadMyActivity().filter((a) => !(a.kind === 'like' && a.recipe_id === recipeId)),
+    ])
   },
 
   async unlikeRecipe(recipeId) {
     const l = loadLikes()
     l.delete(recipeId)
     write(KEYS.likes, [...l])
+    saveMyActivity(loadMyActivity().filter((a) => !(a.kind === 'like' && a.recipe_id === recipeId)))
   },
 
   async listComments(recipeId, offset, limit) {
@@ -810,6 +827,10 @@ export const localBackend: Backend = {
       author,
     }
     saveComments([comment, ...loadComments()])
+    saveMyActivity([
+      { kind: 'comment', recipe_id: recipeId, recipe_title: recipeTitleFor(recipeId), comment_id: comment.id, comment_body: text, created_at: comment.created_at },
+      ...loadMyActivity(),
+    ])
     return { ...comment, like_count: 0, liked: false }
   },
 
@@ -817,6 +838,7 @@ export const localBackend: Backend = {
     const ownsRecipe = loadOwn().some((r) => r.id === comment.recipe_id)
     if (comment.user_id !== LOCAL_USER_ID && !ownsRecipe) throw new Error('Brak uprawnień do usunięcia tego komentarza.')
     saveComments(loadComments().filter((c) => c.id !== comment.id))
+    saveMyActivity(loadMyActivity().filter((a) => a.comment_id !== comment.id))
   },
 
   async likeComment(commentId) {

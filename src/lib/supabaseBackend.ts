@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Diet, DietDraft, MealTemplate, MealTemplateDraft } from '@/types/diet'
 import { sanitizeDiet, sanitizeMealTemplate } from './diet'
-import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeStats } from '@/types/recipe'
+import type { AppNotification, Comment, MyActivityItem, Profile, ProfileSummary, Recipe, RecipeStats } from '@/types/recipe'
 import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 import type { Backend, InviteCode } from './backend'
 import { deleteRecipeImage } from './images'
@@ -370,6 +370,12 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       const { data, error } = await client().rpc('list_notifications', { p_limit: limit, p_offset: offset })
       if (error) fail(error)
       return (data as NotificationRow[]).map(toNotification)
+    },
+
+    async listMyActivity(offset, limit) {
+      const { data, error } = await client().rpc('list_my_activity', { p_limit: limit, p_offset: offset })
+      if (error) fail(error)
+      return data as MyActivityItem[]
     },
 
     async countUnreadNotifications() {
