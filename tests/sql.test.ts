@@ -239,16 +239,6 @@ describe('search_profiles i get_profile', () => {
   })
 })
 
-describe('email_for_username (logowanie loginem)', () => {
-  it('zwraca e-mail dla istniejącej nazwy (dowolna wielkość liter), null dla nieznanej — dostępne dla anon', async () => {
-    const found = await as<{ email_for_username: string }>(null, `select public.email_for_username('ANNA_gotuje')`)
-    expect(found[0].email_for_username).toBe(`${ANNA}@x.pl`)
-
-    const missing = await as<{ email_for_username: string | null }>(null, `select public.email_for_username('nie.ma.takiego')`)
-    expect(missing[0].email_for_username).toBeNull()
-  })
-})
-
 describe('obserwowanie i feed', () => {
   const feed = (uid: string, mode: string, seed: string, limit = 50, offset = 0) =>
     as<{ title: string; author_username: string }>(uid, 'select * from public.feed($1, $2, $3, $4)', [mode, seed, limit, offset])

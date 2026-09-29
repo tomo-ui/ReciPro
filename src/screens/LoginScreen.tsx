@@ -97,13 +97,16 @@ export function LoginScreen() {
 
   async function submitForgot(e: FormEvent) {
     e.preventDefault()
-    if (!supabase || !forgotUsername.trim() || forgotBusy) return
+    if (!forgotUsername.trim() || forgotBusy) return
     setForgotBusy(true)
     try {
-      const { data: resolvedEmail } = await supabase.rpc('email_for_username', { p_username: normalizeUsername(forgotUsername) })
-      if (resolvedEmail) {
-        await supabase.auth.resetPasswordForEmail(resolvedEmail as string, { redirectTo: window.location.origin })
-      }
+      // Tłumaczenie nazwy na e-mail i wysyłkę linku robi serwer (api/forgot-password.ts) —
+      // e-mail nigdy nie trafia do przeglądarki. Odpowiedź jest zawsze taka sama.
+      await fetch('/api/forgot-password', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: forgotUsername }),
+      })
     } catch {
       /* nic — komunikat niżej jest celowo neutralny, żeby nie zdradzać istnienia konta */
     } finally {
@@ -163,21 +166,29 @@ export function LoginScreen() {
       return
     }
 
-    // Logujemy się nazwą użytkownika: serwer tłumaczy ją na e-mail, zanim wywołamy Supabase Auth
-    // (który zna tylko e-mail). Nieznana nazwa dostaje ten sam komunikat co złe hasło — bez ujawniania,
-    // czy konto istnieje.
-    const { data: resolvedEmail } = await supabase.rpc('email_for_username', { p_username: normalizeUsername(loginUsername) })
-    if (!resolvedEmail) {
+    // Logowanie nazwą użytkownika: tłumaczenie na e-mail i samo logowanie robi serwer
+    // (api/login.ts, klucz service_role) — e-mail nigdy nie trafia do przeglądarki.
+    let loginRes: Response
+    try {
+      loginRes = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: loginUsername, password }),
+      })
+    } catch {
       setBusy(false)
-      return setError('Nieprawidłowa nazwa użytkownika lub hasło.')
+      return setError('Nie udało się połączyć z serwerem. Spróbuj ponownie.')
+    }
+    const body = (await loginRes.json().catch(() => null)) as { access_token?: string; refresh_token?: string; error?: string; code?: string } | null
+    if (!loginRes.ok || !body?.access_token || !body.refresh_token) {
+      setBusy(false)
+      setUnconfirmed(body?.code === 'email_not_confirmed')
+      return setError(body?.code === 'email_not_confirmed' ? friendlyError(body.error ?? '') : (body?.error ?? 'Nieprawidłowa nazwa użytkownika lub hasło.'))
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email: resolvedEmail as string, password })
+    const { error } = await supabase.auth.setSession({ access_token: body.access_token, refresh_token: body.refresh_token })
     setBusy(false)
-    if (error) {
-      setError(friendlyError(error.message, error.status, error.code))
-      setUnconfirmed(error.code === 'email_not_confirmed' || /email not confirmed/i.test(error.message))
-    }
+    if (error) setError(error.message)
   }
 
   return (
