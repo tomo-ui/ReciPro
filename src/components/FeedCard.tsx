@@ -217,6 +217,23 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
           {saving ? <SpinnerIcon width={22} height={22} /> : <BookmarkIcon width={23} height={23} filled={saved} />}
         </motion.button>
       </div>
+
+      {/* Podgląd ostatniego komentarza, jak w Instagramie — całość otwiera panel komentarzy */}
+      {!!stats?.comment_count && (
+        <div className="space-y-0.5 px-3.5 pb-3.5">
+          {stats.comment_count > 1 && (
+            <button onClick={() => onOpenComments(false)} className="block text-[13px] text-label-2 active:opacity-60">
+              Wyświetl wszystkie {stats.comment_count} {stats.comment_count < 5 ? 'komentarze' : 'komentarzy'}
+            </button>
+          )}
+          {stats.last_comment && (
+            <button onClick={() => onOpenComments(false)} className="flex w-full items-start gap-1.5 text-left text-[13px]">
+              <span className="shrink-0 font-semibold">{stats.last_comment.author.username}</span>
+              <span className="min-w-0 flex-1 truncate text-label-2">{stats.last_comment.body}</span>
+            </button>
+          )}
+        </div>
+      )}
     </motion.article>
   )
 }
