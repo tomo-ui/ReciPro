@@ -42,6 +42,9 @@ export async function createDb(): Promise<PGlite> {
   await db.exec(readFileSync('supabase/schema.sql', 'utf8'))
   await db.exec(readFileSync('supabase/social.sql', 'utf8'))
   await db.exec(readFileSync('supabase/social.sql', 'utf8')) // idempotentność
+  const authLookup = readFileSync('supabase/auth_lookup.sql', 'utf8')
+  await db.exec(authLookup)
+  await db.exec(authLookup) // idempotentność
   const engagement = readFileSync('supabase/engagement.sql', 'utf8')
   await db.exec(engagement)
   await db.exec(engagement) // idempotentność

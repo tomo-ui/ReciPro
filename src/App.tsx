@@ -6,6 +6,7 @@ import type { TopCreator } from '@/lib/backend'
 import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
+import { isPasswordRecovery } from '@/lib/authRecovery'
 import { draftForSaving } from '@/lib/cookbook'
 import { isCreator } from '@/lib/verified'
 import { deleteRecipeImage } from '@/lib/images'
@@ -30,6 +31,7 @@ import { AddRecipeScreen } from '@/screens/AddRecipeScreen'
 import { AdminPanelScreen } from '@/screens/AdminPanelScreen'
 import { BadgeAssignmentScreen } from '@/screens/BadgeAssignmentScreen'
 import { CaloriesScreen } from '@/screens/CaloriesScreen'
+import { ChangePasswordScreen } from '@/screens/ChangePasswordScreen'
 import { EditProfileScreen } from '@/screens/EditProfileScreen'
 import { InterestsScreen } from '@/screens/InterestsScreen'
 import { InviteCodesScreen } from '@/screens/InviteCodesScreen'
@@ -46,6 +48,7 @@ import { ProfileView } from '@/screens/ProfileView'
 import { RecipeDetailScreen } from '@/screens/RecipeDetailScreen'
 import { RecipeListScreen } from '@/screens/RecipeListScreen'
 import { SearchScreen } from '@/screens/SearchScreen'
+import { SetNewPasswordScreen } from '@/screens/SetNewPasswordScreen'
 
 export default function App() {
   return (
@@ -59,6 +62,11 @@ export default function App() {
 
 function AppRoutes() {
   const session = useSession()
+  // Link „Nie pamiętam hasła” z maila: dopóki użytkownik nie ustawi nowego hasła, pomijamy zwykłe
+  // rozstrzyganie zalogowany/niezalogowany (patrz lib/authRecovery.ts)
+  const [recovering, setRecovering] = useState(isPasswordRecovery)
+
+  if (recovering) return <SetNewPasswordScreen onDone={() => setRecovering(false)} />
 
   if (usesSupabase) {
     if (session === undefined) return <div className="fixed inset-0 bg-bg" /> // sprawdzamy zapisaną sesję
@@ -120,6 +128,7 @@ type SheetState =
   | { kind: 'edit'; recipe: Recipe }
   | { kind: 'edit-profile' }
   | { kind: 'interests' }
+  | { kind: 'change-password' }
   | { kind: 'admin-panel' }
   | { kind: 'calories' }
   | { kind: 'invites' }
@@ -396,6 +405,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onActivity={openActivity}
             onEditProfile={() => setSheet({ kind: 'edit-profile' })}
             onInterests={() => setSheet({ kind: 'interests' })}
+            onChangePassword={usesSupabase ? () => setSheet({ kind: 'change-password' }) : undefined}
             onAdminPanel={isAdmin ? () => setSheet({ kind: 'admin-panel' }) : undefined}
             onSignOut={onSignOut}
           />
@@ -431,6 +441,11 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         {sheet?.kind === 'interests' && (
           <Sheet key="interests" onClose={() => setSheet(null)}>
             <InterestsScreen onClose={() => setSheet(null)} />
+          </Sheet>
+        )}
+        {sheet?.kind === 'change-password' && (
+          <Sheet key="change-password" size="large" onClose={() => setSheet(null)}>
+            <ChangePasswordScreen onClose={() => setSheet(null)} />
           </Sheet>
         )}
         {sheet?.kind === 'admin-panel' && isAdmin && (

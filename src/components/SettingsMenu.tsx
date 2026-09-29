@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { spring } from '@/lib/ui'
-import { HeartIcon, PencilIcon, ShieldIcon, SlidersIcon } from './Icons'
+import { HeartIcon, LockIcon, PencilIcon, ShieldIcon, SlidersIcon } from './Icons'
 
 interface Props {
   unread: number
@@ -9,13 +9,15 @@ interface Props {
   onActivity: () => void
   onEditProfile: () => void
   onInterests: () => void
+  /** Zmiana hasła: tylko przy koncie w Supabase (w trybie lokalnym nie ma prawdziwego uwierzytelniania) */
+  onChangePassword?: () => void
   /** Panel admina: tylko dla admina (tabela app_admins), i tylko stąd da się go otworzyć */
   onAdminPanel?: () => void
   onSignOut?: () => void
 }
 
 /** Menu z burgera na profilu: aktywność i ustawienia konta (dolny arkusz, jak w Instagramie) */
-export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onAdminPanel, onSignOut }: Props) {
+export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onChangePassword, onAdminPanel, onSignOut }: Props) {
   return (
     <>
       <motion.div
@@ -49,6 +51,7 @@ export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInt
           <Item icon={<HeartIcon width={22} height={22} />} label="Aktywność" badge={unread} onClick={onActivity} />
           <Item icon={<PencilIcon width={22} height={22} />} label="Edytuj profil" onClick={onEditProfile} />
           <Item icon={<SlidersIcon width={22} height={22} />} label="Zainteresowania" onClick={onInterests} />
+          {onChangePassword && <Item icon={<LockIcon width={22} height={22} />} label="Zmień hasło" onClick={onChangePassword} />}
           {onAdminPanel && <Item icon={<ShieldIcon width={22} height={22} />} label="Panel admina" onClick={onAdminPanel} />}
         </ul>
 

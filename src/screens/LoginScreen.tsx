@@ -38,6 +38,7 @@ function friendlyError(message: string, status?: number, code?: string): string 
 const redirectResult = ((): { error?: string; notice?: string } => {
   if (typeof window === 'undefined') return {}
   const h = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  if (h.get('type') === 'recovery') return {} // link resetu hasła — obsługuje go osobno lib/authRecovery.ts
   if (!h.has('error') && !h.has('access_token')) return {}
   history.replaceState(null, '', window.location.pathname + window.location.search)
   if (h.get('error_code') === 'otp_expired') {
@@ -68,17 +69,23 @@ export function LoginScreen() {
   const [fullName, setFullName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
 
+  // Logowanie odbywa się nazwą użytkownika (nie e-mailem) — osobne pole/stan od `username` rejestracji,
+  // bo to pole nie jest sprawdzane pod kątem reguł/dostępności jak przy zakładaniu konta
+  const [loginUsername, setLoginUsername] = useState('')
+  const [forgot, setForgot] = useState(false)
+  const [forgotUsername, setForgotUsername] = useState('')
+  const [forgotBusy, setForgotBusy] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
+
   useEffect(() => markAppReady(), [])
 
   const signup = mode === 'signup'
   const mismatch = signup && password2.length > 0 && password2 !== password
   // Nazwa użytkownika jest sprawdzana (reguły + dostępność) tylko w trybie rejestracji
   const usernameStatus = useUsernameCheck(signup ? username : '')
-  const canSubmit =
-    email.includes('@') &&
-    (signup
-      ? password.length >= MIN_PASSWORD && password2 === password && usernameStatus.state === 'ok' && inviteCode.trim().length === 5
-      : password.length > 0)
+  const canSubmit = signup
+    ? email.includes('@') && password.length >= MIN_PASSWORD && password2 === password && usernameStatus.state === 'ok' && inviteCode.trim().length === 5
+    : loginUsername.trim().length > 0 && password.length > 0
 
   function switchMode(next: Mode) {
     setMode(next)
@@ -86,6 +93,23 @@ export function LoginScreen() {
     setError(null)
     setNotice(null)
     setUnconfirmed(false)
+  }
+
+  async function submitForgot(e: FormEvent) {
+    e.preventDefault()
+    if (!supabase || !forgotUsername.trim() || forgotBusy) return
+    setForgotBusy(true)
+    try {
+      const { data: resolvedEmail } = await supabase.rpc('email_for_username', { p_username: normalizeUsername(forgotUsername) })
+      if (resolvedEmail) {
+        await supabase.auth.resetPasswordForEmail(resolvedEmail as string, { redirectTo: window.location.origin })
+      }
+    } catch {
+      /* nic — komunikat niżej jest celowo neutralny, żeby nie zdradzać istnienia konta */
+    } finally {
+      setForgotBusy(false)
+      setForgotSent(true)
+    }
   }
 
   async function resendConfirmation() {
@@ -110,10 +134,10 @@ export function LoginScreen() {
     setError(null)
     setNotice(null)
 
-    const creds = { email: email.trim(), password }
     if (signup) {
       const { data, error } = await supabase.auth.signUp({
-        ...creds,
+        email: email.trim(),
+        password,
         options: {
           // Adres musi być na liście Redirect URLs w Supabase (Authentication → URL Configuration)
           emailRedirectTo: window.location.origin,
@@ -139,7 +163,16 @@ export function LoginScreen() {
       return
     }
 
-    const { error } = await supabase.auth.signInWithPassword(creds)
+    // Logujemy się nazwą użytkownika: serwer tłumaczy ją na e-mail, zanim wywołamy Supabase Auth
+    // (który zna tylko e-mail). Nieznana nazwa dostaje ten sam komunikat co złe hasło — bez ujawniania,
+    // czy konto istnieje.
+    const { data: resolvedEmail } = await supabase.rpc('email_for_username', { p_username: normalizeUsername(loginUsername) })
+    if (!resolvedEmail) {
+      setBusy(false)
+      return setError('Nieprawidłowa nazwa użytkownika lub hasło.')
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email: resolvedEmail as string, password })
     setBusy(false)
     if (error) {
       setError(friendlyError(error.message, error.status, error.code))
@@ -159,9 +192,56 @@ export function LoginScreen() {
         </div>
         <h1 className="text-center text-[28px] font-bold tracking-tight">Przepisy</h1>
         <p className="mt-1 mb-6 text-center text-[15px] text-label-2">
-          {signup ? 'Załóż konto, żeby zapisywać przepisy w chmurze.' : 'Zaloguj się, żeby synchronizować przepisy.'}
+          {forgot ? 'Ustaw nowe hasło.' : signup ? 'Załóż konto, żeby zapisywać przepisy w chmurze.' : 'Zaloguj się, żeby synchronizować przepisy.'}
         </p>
 
+        {forgot ? (
+          <div>
+            {forgotSent ? (
+              <p className="text-center text-[14px] text-label-2">
+                Jeśli konto o tej nazwie istnieje, wysłaliśmy link na powiązany adres e-mail. Otwórz go, ustaw nowe hasło, a potem wróć tu i zaloguj się.
+              </p>
+            ) : (
+              <form onSubmit={submitForgot}>
+                <p className="mb-3 text-center text-[13px] text-label-2">
+                  Podaj nazwę użytkownika — jeśli konto istnieje, wyślemy link do ustawienia nowego hasła.
+                </p>
+                <div className="overflow-hidden rounded-[14px] bg-surface">
+                  <input
+                    value={forgotUsername}
+                    onChange={(e) => setForgotUsername(e.target.value)}
+                    placeholder="nazwa użytkownika"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    autoComplete="username"
+                    className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
+                  />
+                </div>
+                <motion.button
+                  type="submit"
+                  whileTap={{ scale: 0.97 }}
+                  disabled={forgotBusy || !forgotUsername.trim()}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] bg-accent py-3.5 text-[16px] font-semibold text-white transition-opacity disabled:opacity-40"
+                >
+                  {forgotBusy && <SpinnerIcon />}
+                  Wyślij link
+                </motion.button>
+              </form>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setForgot(false)
+                setForgotSent(false)
+                setForgotUsername('')
+              }}
+              className="mt-4 block w-full text-center text-[15px] font-semibold text-accent"
+            >
+              Wróć do logowania
+            </button>
+          </div>
+        ) : (
+          <>
         <div className="mb-4">
           <SegmentedControl<Mode>
             value={mode}
@@ -218,17 +298,30 @@ export function LoginScreen() {
             )}
           </AnimatePresence>
           <div className="overflow-hidden rounded-[14px] bg-surface">
-            <input
-              type="email"
-              inputMode="email"
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              placeholder="adres e-mail"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
-            />
+            {signup ? (
+              <input
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                placeholder="adres e-mail"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
+              />
+            ) : (
+              <input
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                placeholder="nazwa użytkownika"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"
+              />
+            )}
             <input
               type="password"
               autoComplete={signup ? 'new-password' : 'current-password'}
@@ -276,6 +369,12 @@ export function LoginScreen() {
             )}
           </AnimatePresence>
 
+          {!signup && (
+            <button type="button" onClick={() => setForgot(true)} className="mt-2 block w-full text-right text-[13px] font-medium text-accent">
+              Nie pamiętam hasła
+            </button>
+          )}
+
           <motion.button
             type="submit"
             whileTap={{ scale: 0.97 }}
@@ -310,6 +409,8 @@ export function LoginScreen() {
           >
             Wyślij link ponownie
           </button>
+        )}
+          </>
         )}
       </motion.div>
       </div>
