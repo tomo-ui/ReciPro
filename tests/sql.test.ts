@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { PGlite } from '@electric-sql/pglite'
 import { actors, createDb } from './helpers/pg'
@@ -692,5 +693,42 @@ describe('polubienia komentarzy, oznaczenia @ i lista polubień przepisu', () =>
     expect(await asOk(null, `select * from public.list_likers('${RECIPE}', 30, 0)`)).toMatch(/permission denied/i)
 
     await db.exec(`delete from public.recipe_likes where recipe_id = '${RECIPE}'`)
+  })
+})
+
+describe('znaczki weryfikacji', () => {
+  const ADMIN = '30000000-0000-0000-0000-000000000001'
+
+  beforeAll(async () => {
+    await db.query('insert into auth.users (id, email) values ($1, $2)', [ADMIN, `${ADMIN}@x.pl`])
+    await db.exec(`insert into public.profiles (id, username, full_name) values ('${ADMIN}', 'admin2', 'Druga Admin')`)
+    await db.exec(`insert into public.app_admins (user_id) values ('${ADMIN}')`)
+  })
+
+  it('is_app_admin: true tylko dla admina', async () => {
+    expect((await as<{ is_app_admin: boolean }>(ADMIN, 'select public.is_app_admin()'))[0].is_app_admin).toBe(true)
+    expect((await as<{ is_app_admin: boolean }>(ANNA, 'select public.is_app_admin()'))[0].is_app_admin).toBe(false)
+  })
+
+  it('admin_set_verified_badge: zmienia znaczek, tylko admin, tylko poprawny wariant', async () => {
+    await as(ADMIN, `select public.admin_set_verified_badge('anna_gotuje', 'blue')`)
+    const [{ verified_badge }] = await as<{ verified_badge: string | null }>(ANNA, `select verified_badge from public.get_profile('anna_gotuje')`)
+    expect(verified_badge).toBe('blue')
+
+    await as(ADMIN, `select public.admin_set_verified_badge('anna_gotuje', null)`)
+    const [{ verified_badge: cleared }] = await as<{ verified_badge: string | null }>(ANNA, `select verified_badge from public.get_profile('anna_gotuje')`)
+    expect(cleared).toBeNull()
+
+    expect(await asOk(ANNA, `select public.admin_set_verified_badge('jan.kucharz', 'gold')`)).toMatch(/permission denied/i)
+    expect(await asOk(ADMIN, `select public.admin_set_verified_badge('anna_gotuje', 'nieistniejący')`)).toMatch(/invalid badge/i)
+    expect(await asOk(ADMIN, `select public.admin_set_verified_badge('nikt.taki', 'gold')`)).toMatch(/user not found/i)
+  })
+
+  it('migracja: tk dostaje domyślnie złoty znaczek (nawet jeśli profil powstał już po pierwszym uruchomieniu badges.sql)', async () => {
+    // „tk” istnieje od bloku „kody zaproszeń” (uruchomionego już po pierwszym wykonaniu badges.sql w createDb) —
+    // ponowne uruchomienie pliku (jak przy migracji na produkcji) musi go wtedy dogonić
+    await db.exec(readFileSync('supabase/badges.sql', 'utf8'))
+    const rows = await db.query<{ verified_badge: string | null }>(`select verified_badge from public.profiles where username = 'tk'`).then((r) => r.rows)
+    expect(rows[0]?.verified_badge).toBe('gold')
   })
 })

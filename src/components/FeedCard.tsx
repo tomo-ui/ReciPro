@@ -118,7 +118,7 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
             <span className="min-w-0 flex-1">
               <span className="flex items-center text-[15px] leading-tight font-semibold">
                 <span className="truncate">{author.username}</span>
-                <VerifiedBadge username={author.username} size={14} />
+                <VerifiedBadge badge={author.verified_badge} size={14} />
               </span>
               <span className="block truncate text-[12px] text-label-2">
                 {author.full_name ? `${author.full_name} · ` : ''}

@@ -1,4 +1,5 @@
 import type { Diet, DietDraft, MealTemplate, MealTemplateDraft } from '@/types/diet'
+import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 import type {
   AppNotification,
   Comment,
@@ -26,6 +27,7 @@ export interface TopCreator {
   full_name?: string
   avatar_url?: string
   score: number
+  verified_badge?: VerifiedBadgeTier | null
 }
 export type RecipeSort = 'relevance' | 'newest'
 
@@ -134,6 +136,10 @@ export interface Backend {
   listInviteCodes(): Promise<InviteCode[]>
   /** Nowy jednorazowy kod zaproszenia do rejestracji (tylko admin) */
   createInviteCode(): Promise<string>
+  /** Czy zalogowany jest adminem (tabela app_admins) — gate widoczności panelu admina */
+  isAdmin(): Promise<boolean>
+  /** Przyznaje/odbiera znaczek weryfikacji danemu użytkownikowi (tylko admin) */
+  setVerifiedBadge(username: string, badge: VerifiedBadgeTier | null): Promise<void>
 
   /* — zainteresowania (prywatne; kształtują feed Dla Ciebie) — */
   getInterests(): Promise<string[]>

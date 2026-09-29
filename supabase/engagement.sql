@@ -214,7 +214,9 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Lista obserwujących profilu. Lista profilu prywatnego jest widoczna tylko dla jego właściciela.
-create or replace function public.list_followers(p_username text, p_limit int default 30, p_offset int default 0)
+-- (drop: kolumny rozszerza badges.sql, więc bez tego „create or replace” tam się wywali przy ponownym uruchomieniu w innej kolejności)
+drop function if exists public.list_followers(text, int, int);
+create function public.list_followers(p_username text, p_limit int default 30, p_offset int default 0)
 returns table (
   id uuid, username text, full_name text, avatar_url text, is_public boolean,
   recipe_count int, followers_count int, following_count int, is_following boolean, is_me boolean
@@ -236,7 +238,9 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Lista osób, które profil obserwuje (te same zasady prywatności)
-create or replace function public.list_following(p_username text, p_limit int default 30, p_offset int default 0)
+-- (drop: kolumny rozszerza badges.sql, więc bez tego „create or replace” tam się wywali przy ponownym uruchomieniu w innej kolejności)
+drop function if exists public.list_following(text, int, int);
+create function public.list_following(p_username text, p_limit int default 30, p_offset int default 0)
 returns table (
   id uuid, username text, full_name text, avatar_url text, is_public boolean,
   recipe_count int, followers_count int, following_count int, is_following boolean, is_me boolean

@@ -1,8 +1,8 @@
 import { useId } from 'react'
-import { isCreator } from '@/lib/verified'
+import { BADGE_TIERS, type VerifiedBadgeTier } from '@/lib/badgeTiers'
 
 interface Props {
-  username?: string | null
+  badge?: VerifiedBadgeTier | null
   /** Średnica w px */
   size?: number
   className?: string
@@ -15,26 +15,27 @@ const LOBES = Array.from({ length: 8 }, (_, i) => {
 })
 
 /**
- * Niebieski znaczek weryfikacji przy nazwie twórcy aplikacji; dla innych kont nie renderuje nic.
- * Znaczek jest wyśrodkowany względem linii tekstu i ma stały odstęp od nazwy (margines po lewej),
- * więc w rzędach typu flex wystarczy `gap-0`, a w tekście ciągłym zachowuje się jak litera.
+ * Znaczek weryfikacji: kolor i etykieta zależą od przyznanego tieru (patrz `badgeTiers.ts`).
+ * Bez znaczka (`badge` puste) nie renderuje nic. Znaczek jest wyśrodkowany względem linii tekstu
+ * i ma stały odstęp od nazwy (margines po lewej), więc w rzędach flex wystarczy `gap-0`.
  */
-export function VerifiedBadge({ username, size = 15, className = '' }: Props) {
+export function VerifiedBadge({ badge, size = 15, className = '' }: Props) {
   const id = useId()
-  if (!isCreator(username)) return null
+  if (!badge) return null
+  const tier = BADGE_TIERS[badge]
   return (
     <span
       role="img"
-      aria-label="Zweryfikowany: twórca aplikacji"
-      title="Twórca aplikacji"
+      aria-label={`Zweryfikowany: ${tier.label}`}
+      title={tier.label}
       className={`ml-1 inline-flex shrink-0 items-center justify-center align-[-0.2em] ${className}`}
       style={{ width: size, height: size }}
     >
       <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
         <defs>
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#3ba7ff" />
-            <stop offset="1" stopColor="#1b83f2" />
+            <stop offset="0" stopColor={tier.color} stopOpacity="0.85" />
+            <stop offset="1" stopColor={tier.color} />
           </linearGradient>
         </defs>
         <g fill={`url(#${id})`}>

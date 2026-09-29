@@ -103,6 +103,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
         username: me.username,
         full_name: me.full_name,
         avatar_url: me.avatar_url,
+        verified_badge: me.verified_badge,
       })
       list.setItems((items) => [created, ...items])
       onCountChange(1)
@@ -164,7 +165,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
                     <button onClick={() => onOpenAuthor(c.author.username)} className="font-semibold text-label">
                       {c.author.username}
                     </button>
-                    <VerifiedBadge username={c.author.username} size={12} className="align-baseline" />
+                    <VerifiedBadge badge={c.author.verified_badge} size={12} className="align-baseline" />
                     <span className="ml-1.5">· {timeAgo(c.created_at)}</span>
                   </p>
                   <p className="text-[15px] leading-snug break-words whitespace-pre-wrap" data-selectable>
@@ -213,7 +214,7 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center text-[14px] font-semibold">
                       <span className="truncate">{p.username}</span>
-                      <VerifiedBadge username={p.username} size={12} />
+                      <VerifiedBadge badge={p.verified_badge} size={12} />
                     </span>
                     {p.full_name && <span className="block truncate text-[12px] text-label-2">{p.full_name}</span>}
                   </span>

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Diet, DietDraft, MealTemplate, MealTemplateDraft } from '@/types/diet'
 import { sanitizeDiet, sanitizeMealTemplate } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeStats } from '@/types/recipe'
+import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 import type { Backend, InviteCode } from './backend'
 import { deleteRecipeImage } from './images'
 import { supabase } from './supabase'
@@ -24,6 +25,7 @@ interface ProfileRow {
   allow_avatar_zoom?: boolean | null
   is_public: boolean
   website?: string | null
+  verified_badge?: string | null
 }
 interface ProfileSummaryRow extends ProfileRow {
   recipe_count: number
@@ -41,6 +43,7 @@ interface CommentRow {
   author_username: string
   author_full_name: string | null
   author_avatar_url: string | null
+  author_verified_badge?: string | null
   like_count?: number
   liked?: boolean
 }
@@ -54,6 +57,7 @@ const toProfile = (r: ProfileRow): Profile => ({
   allow_avatar_zoom: r.allow_avatar_zoom ?? true,
   is_public: r.is_public,
   website: r.website ?? undefined,
+  verified_badge: (r.verified_badge ?? undefined) as VerifiedBadgeTier | undefined,
 })
 const toSummary = (r: ProfileSummaryRow): ProfileSummary => ({
   ...toProfile(r),
@@ -69,6 +73,7 @@ interface TopCreatorRow {
   full_name: string | null
   avatar_url: string | null
   score: number
+  verified_badge?: string | null
 }
 interface StatsRow {
   recipe_id: string
@@ -90,6 +95,7 @@ interface NotificationRow {
   actor_username: string
   actor_full_name: string | null
   actor_avatar_url: string | null
+  actor_verified_badge?: string | null
   recipe_id: string | null
   recipe_title: string | null
   recipe_image_url: string | null
@@ -100,7 +106,12 @@ const toNotification = (r: NotificationRow): AppNotification => ({
   type: r.type,
   created_at: r.created_at,
   read: r.is_read,
-  actor: { username: r.actor_username, full_name: r.actor_full_name ?? undefined, avatar_url: r.actor_avatar_url ?? undefined },
+  actor: {
+    username: r.actor_username,
+    full_name: r.actor_full_name ?? undefined,
+    avatar_url: r.actor_avatar_url ?? undefined,
+    verified_badge: (r.actor_verified_badge ?? undefined) as VerifiedBadgeTier | undefined,
+  },
   recipe: r.recipe_id ? { id: r.recipe_id, title: r.recipe_title ?? '', image_url: r.recipe_image_url ?? undefined } : undefined,
   comment_body: r.comment_body ?? undefined,
 })
@@ -162,6 +173,7 @@ const toComment = (r: CommentRow): Comment => ({
     username: r.author_username,
     full_name: r.author_full_name ?? undefined,
     avatar_url: r.author_avatar_url ?? undefined,
+    verified_badge: (r.author_verified_badge ?? undefined) as VerifiedBadgeTier | undefined,
   },
   like_count: r.like_count ?? 0,
   liked: r.liked ?? false,
@@ -297,7 +309,7 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       let { data, error } = await query(true)
       if (error && /is_post/.test(error.message)) ({ data, error } = await query(false))
       if (error) fail(error)
-      const author = { username: profile.username, full_name: profile.full_name, avatar_url: profile.avatar_url }
+      const author = { username: profile.username, full_name: profile.full_name, avatar_url: profile.avatar_url, verified_badge: profile.verified_badge }
       return (data as RecipeRow[]).map((r): Recipe => ({ ...rowToRecipe(r), author }))
     },
 
@@ -487,6 +499,7 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
         full_name: r.full_name ?? undefined,
         avatar_url: r.avatar_url ?? undefined,
         score: r.score,
+        verified_badge: (r.verified_badge ?? undefined) as VerifiedBadgeTier | undefined,
       }))
     },
 
@@ -520,6 +533,17 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
       const { data, error } = await client().rpc('admin_create_invite_code')
       if (error) fail(error)
       return data as string
+    },
+
+    async isAdmin() {
+      const { data, error } = await client().rpc('is_app_admin')
+      if (error) return false
+      return data === true
+    },
+
+    async setVerifiedBadge(username, badge) {
+      const { error } = await client().rpc('admin_set_verified_badge', { p_username: username, p_badge: badge })
+      if (error) fail(error)
     },
 
     async getInterests() {

@@ -1,4 +1,5 @@
 import type { IngredientLine, ParseMethod, Recipe, RecipeDraft, SavedFrom, StepLine } from '@/types/recipe'
+import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 
 /** Wiersz tabeli `recipes` (patrz supabase/schema.sql) */
 export interface RecipeRow {
@@ -30,6 +31,7 @@ export interface RecipeWithAuthorRow extends RecipeRow {
   author_username: string
   author_full_name: string | null
   author_avatar_url: string | null
+  author_verified_badge?: string | null
   /** Tylko z funkcji feed */
   author_followed?: boolean | null
 }
@@ -72,6 +74,7 @@ export function rowWithAuthorToRecipe(r: RecipeWithAuthorRow): Recipe {
       full_name: orUndef(r.author_full_name),
       avatar_url: orUndef(r.author_avatar_url),
       followed: r.author_followed ?? undefined,
+      verified_badge: (r.author_verified_badge ?? undefined) as VerifiedBadgeTier | undefined,
     },
   }
 }

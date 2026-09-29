@@ -91,7 +91,7 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
               <span>
                 <span className="flex items-center text-[15px] leading-tight font-semibold">
                   {recipe.author.username}
-                  <VerifiedBadge username={recipe.author.username} size={14} />
+                  <VerifiedBadge badge={recipe.author.verified_badge} size={14} />
                 </span>
                 {recipe.author.full_name && <span className="block text-[12px] text-label-2">{recipe.author.full_name}</span>}
               </span>

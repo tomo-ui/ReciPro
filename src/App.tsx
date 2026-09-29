@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { Session } from '@supabase/supabase-js'
 import type { Profile, Recipe, RecipeDraft } from '@/types/recipe'
 import type { TopCreator } from '@/lib/backend'
+import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { draftForSaving } from '@/lib/cookbook'
@@ -129,6 +130,8 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(['feed']))
   const [stack, setStack] = useState<Entry[]>([])
   const [sheet, setSheet] = useState<SheetState>(null)
+  /** Znaczek weryfikacji cudzych profili na stosie — do paska tytułu, wypełniany po wczytaniu profilu */
+  const [profileBadges, setProfileBadges] = useState<Record<string, VerifiedBadgeTier | null>>({})
   /** Zmiana wymusza ponowne pobranie własnego profilu (liczniki, siatka) po dodaniu/edycji/usunięciu */
   const [profileVersion, setProfileVersion] = useState(0)
   const bump = () => setProfileVersion((v) => v + 1)
@@ -274,7 +277,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
           <LargeTitleScreen
             ref={topRefs.profile}
             title={me.username}
-            titleBadge={<VerifiedBadge username={me.username} size={19} className="ml-1.5" />}
+            titleBadge={<VerifiedBadge badge={me.verified_badge} size={19} className="ml-1.5" />}
             variant="inline"
             right={
               <motion.button
@@ -335,7 +338,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               }}
             />
           ) : entry.kind === 'profile' ? (
-            <PushedScreen key={`profile-${entry.username}-${i}`} title={entry.username} titleStart titleBadge={<VerifiedBadge username={entry.username} size={17} className="ml-1.5" />} onBack={pop}>
+            <PushedScreen key={`profile-${entry.username}-${i}`} title={entry.username} titleStart titleBadge={<VerifiedBadge badge={profileBadges[entry.username]} size={17} className="ml-1.5" />} onBack={pop}>
               <div className="px-[max(16px,env(safe-area-inset-left))]">
                 <ProfileView
                   username={entry.username}
@@ -343,6 +346,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
                   onOpenList={(kind) => openList(entry.username, kind)}
                   onOpenDiet={openDiet}
                   dietVersion={dietVersion}
+                  onBadgeChange={(b) => setProfileBadges((m) => ({ ...m, [entry.username]: b ?? null }))}
                 />
               </div>
             </PushedScreen>

@@ -20,7 +20,7 @@ export function PersonRow({ person, onOpen, onFollowChange }: Props) {
         <div className="min-w-0 flex-1">
           <p className="flex items-center text-[16px] font-semibold">
             <span className="truncate">{person.username}</span>
-            <VerifiedBadge username={person.username} size={15} />
+            <VerifiedBadge badge={person.verified_badge} size={15} />
             {!person.is_public && <LockIcon width={13} height={13} className="ml-1.5 shrink-0 text-label-2" />}
           </p>
           <p className="text-[12px] text-label-2">{person.is_public || person.is_me ? `${person.recipe_count} przepisów` : 'Konto prywatne'}</p>

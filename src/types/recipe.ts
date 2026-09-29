@@ -4,6 +4,8 @@
  * Wszystko, co wchodzi do bazy, MUSI przejść przez ten kształt.
  */
 
+import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
+
 export type ParseMethod = 'manual' | 'json-ld' | 'heuristic' | 'gemini'
 
 /** Skąd pochodzi zaimportowany przepis (tylko informacja dla UI, nie trafia do bazy) */
@@ -81,6 +83,7 @@ export interface RecipeAuthor {
   avatar_url?: string
   /** Tylko w feedzie: czy zalogowany użytkownik już obserwuje autora */
   followed?: boolean
+  verified_badge?: VerifiedBadgeTier | null
 }
 
 /** Profil użytkownika (tabela `profiles`) */
@@ -97,6 +100,8 @@ export interface Profile {
   is_public: boolean
   /** Jeden link pod opisem profilu (jak w Instagramie) */
   website?: string
+  /** Znaczek weryfikacji przyznany z panelu admina; brak = żaden */
+  verified_badge?: VerifiedBadgeTier | null
 }
 
 /** Profil z licznikami i relacją do zalogowanego użytkownika */

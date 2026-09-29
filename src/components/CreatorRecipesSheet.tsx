@@ -43,7 +43,7 @@ export function CreatorRecipesSheet({ creator, onClose, onOpenRecipe, onOpenProf
           <span className="min-w-0 flex-1">
             <span className="flex items-center text-[17px] font-semibold">
               <span className="truncate">{creator.username}</span>
-              <VerifiedBadge username={creator.username} size={15} />
+              <VerifiedBadge badge={creator.verified_badge} size={15} />
             </span>
             {creator.full_name && <span className="block truncate text-[13px] text-label-2">{creator.full_name}</span>}
           </span>

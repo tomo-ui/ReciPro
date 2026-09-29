@@ -46,7 +46,7 @@ export function TopCreatorsList({ onOpen }: Props) {
               </span>
               <span className="flex w-full min-w-0 items-center justify-center">
                 <span className="min-w-0 truncate text-[11px] text-label-2">{c.username}</span>
-                <VerifiedBadge username={c.username} size={10} />
+                <VerifiedBadge badge={c.verified_badge} size={10} />
               </span>
             </motion.button>
           ))}

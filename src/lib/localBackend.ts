@@ -2,6 +2,7 @@ import type { Diet, MealTemplate } from '@/types/diet'
 import { newMeals, itemFromRecipe, sanitizeDiet, sanitizeMealTemplate, withPortions } from './diet'
 import type { AppNotification, Comment, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
 import type { Backend, FeedMode, InviteCode, ProfilePatch, RecipeSort, TopCreator } from './backend'
+import type { VerifiedBadgeTier } from './badgeTiers'
 import { emit, on } from './events'
 import { normalizeInterests } from './interests'
 import { seedRecipes } from './seed'
@@ -31,6 +32,7 @@ const KEYS = {
   interests: 'przepisy:v2:interests',
   hideTestAccounts: 'przepisy:v2:hide-test-accounts',
   inviteCodes: 'przepisy:v2:inviteCodes',
+  verifiedBadges: 'przepisy:v2:verifiedBadges',
 }
 
 /* — magazyn: localStorage, a gdy go brak (testy, tryb prywatny) — pamięć — */
@@ -189,7 +191,7 @@ function visibleNotifications(): AppNotification[] {
           type: n.type,
           created_at: n.created_at,
           read: n.read,
-          actor: { username: actor.username, full_name: actor.full_name, avatar_url: actor.avatar_url },
+          actor: { username: actor.username, full_name: actor.full_name, avatar_url: actor.avatar_url, verified_badge: badgeFor(actor.username) },
           recipe: recipe && { id: recipe.id, title: recipe.title, image_url: recipe.image_url },
           comment_body: n.comment_body,
         },
@@ -243,6 +245,14 @@ const demoById = new Map(demo.map((d) => [d.profile.id, d]))
 /** Tryb demo: dla admina („tk”) przykładowi użytkownicy udają konta testowe i można je wyłączyć w panelu admina */
 const isAdmin = () => loadMe().username === 'tk'
 
+/** Znaczki weryfikacji przyznane w trybie demo (klucz: nazwa użytkownika); „tk” ma domyślnie złoty, jak w produkcji */
+const loadVerifiedBadges = () => read<Record<string, VerifiedBadgeTier | null>>(KEYS.verifiedBadges, () => ({}))
+function badgeFor(username: string): VerifiedBadgeTier | undefined {
+  const overrides = loadVerifiedBadges()
+  if (username in overrides) return overrides[username] ?? undefined
+  return username === 'tk' ? 'gold' : undefined
+}
+
 /** Kod zaproszenia: 5 różnych znaków (wielkie litery i cyfry) — jak generate_invite_code() w SQL */
 function randomInviteCode(): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -258,7 +268,7 @@ const publicDemoRecipes = () => visibleDemo().filter((d) => d.profile.is_public)
 
 const withAuthor = (r: Recipe, p: Profile): Recipe => ({
   ...r,
-  author: { username: p.username, full_name: p.full_name, avatar_url: p.avatar_url },
+  author: { username: p.username, full_name: p.full_name, avatar_url: p.avatar_url, verified_badge: badgeFor(p.username) },
 })
 
 const defaultProfile = (): Profile => ({ id: LOCAL_USER_ID, username: 'ty', full_name: 'Ty', is_public: true })
@@ -294,6 +304,7 @@ function summary(p: Profile): ProfileSummary {
     following_count: isMe ? follows.size : 5,
     is_following: follows.has(p.id),
     is_me: isMe,
+    verified_badge: badgeFor(p.username),
   }
 }
 
@@ -314,7 +325,7 @@ function seedComments(): StoredComment[] {
   const at = (hoursAgo: number) => new Date(Date.now() - hoursAgo * 3_600_000).toISOString()
   const by = (username: string) => {
     const d = demo.find((x) => x.profile.username === username)!.profile
-    return { user_id: d.id, author: { username: d.username, full_name: d.full_name } }
+    return { user_id: d.id, author: { username: d.username, full_name: d.full_name, verified_badge: badgeFor(d.username) } }
   }
   const c = (n: number, recipe: string, who: string, body: string, hoursAgo: number): StoredComment => ({
     id: `demo-comment-${n}`,
@@ -406,7 +417,8 @@ export const localBackend: Backend = {
   },
 
   async getMyProfile() {
-    return loadMe()
+    const me = loadMe()
+    return { ...me, verified_badge: badgeFor(me.username) }
   },
 
   async createProfile(username, fullName) {
@@ -415,7 +427,7 @@ export const localBackend: Backend = {
     if (!(await this.usernameAvailable(username))) throw new Error('Ta nazwa użytkownika jest już zajęta.')
     const profile: Profile = { ...loadMe(), username: normalizeUsername(username), full_name: normalizeFullName(fullName ?? '') }
     write(KEYS.profile, profile)
-    return profile
+    return { ...profile, verified_badge: badgeFor(profile.username) }
   },
 
   async updateProfile(patch: ProfilePatch) {
@@ -434,7 +446,7 @@ export const localBackend: Backend = {
     if (patch.avatar_url !== undefined) next.avatar_url = patch.avatar_url ?? undefined
     if (patch.website !== undefined) next.website = normalizeWebsite(patch.website ?? '')
     write(KEYS.profile, next)
-    return next
+    return { ...next, verified_badge: badgeFor(next.username) }
   },
 
   async usernameAvailable(username) {
@@ -571,7 +583,7 @@ export const localBackend: Backend = {
       const score = engagementScore(r, ctx)
       const existing = byUser.get(r.user_id)
       if (existing) existing.score += score
-      else byUser.set(r.user_id, { user_id: r.user_id, username: r.author.username, full_name: r.author.full_name, avatar_url: r.author.avatar_url, score })
+      else byUser.set(r.user_id, { user_id: r.user_id, username: r.author.username, full_name: r.author.full_name, avatar_url: r.author.avatar_url, verified_badge: r.author.verified_badge, score })
     }
     return [...byUser.values()]
       .filter((c) => c.score > 0)
@@ -612,6 +624,18 @@ export const localBackend: Backend = {
     while (list.some((c) => c.code === code)) code = randomInviteCode()
     write(KEYS.inviteCodes, [{ code, created_at: new Date().toISOString() }, ...list])
     return code
+  },
+
+  async isAdmin() {
+    return isAdmin()
+  },
+
+  async setVerifiedBadge(username, badge) {
+    if (!isAdmin()) throw new Error('Brak uprawnień.')
+    const u = normalizeUsername(username)
+    if (!allProfiles().some((p) => p.username === u)) throw new Error('Nie znaleziono użytkownika.')
+    const overrides = loadVerifiedBadges()
+    write(KEYS.verifiedBadges, { ...overrides, [u]: badge })
   },
 
   async getInterests() {

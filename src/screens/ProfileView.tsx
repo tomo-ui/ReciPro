@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
+import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 import { FEATURES } from '@/lib/features'
 import { backend } from '@/lib/data'
 import { on } from '@/lib/events'
@@ -38,6 +39,8 @@ interface Props {
   onOpenDiet?: (id: string) => void
   /** Zmiana wymusza odświeżenie listy diet */
   dietVersion?: number
+  /** Wywoływane po wczytaniu profilu — do znaczka weryfikacji w pasku tytułu, który renderuje rodzic */
+  onBadgeChange?: (badge: VerifiedBadgeTier | null | undefined) => void
 }
 
 type Tab = 'recipes' | 'goals' | 'diet'
@@ -45,7 +48,7 @@ type ViewMode = 'grid' | 'feed'
 const VIEW_MODE_KEY = 'przepisy:v2:profileViewMode'
 
 /** Profil w stylu Instagrama: awatar, liczniki, przycisk obserwowania i siatka przepisów */
-export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpenList, reloadKey, myRecipes, onSaveRecipe, onOpenDiet, dietVersion }: Props) {
+export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpenList, reloadKey, myRecipes, onSaveRecipe, onOpenDiet, dietVersion, onBadgeChange }: Props) {
   const [tab, setTab] = useState<Tab>('recipes')
   const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem(VIEW_MODE_KEY) === 'feed' ? 'feed' : 'grid'))
   const [profile, setProfile] = useState<ProfileSummary | null | undefined>(undefined) // undefined = ładowanie
@@ -67,7 +70,11 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
     setError(null)
     backend
       .getProfile(username)
-      .then((p) => alive && setProfile(p))
+      .then((p) => {
+        if (!alive) return
+        setProfile(p)
+        onBadgeChange?.(p?.verified_badge)
+      })
       .catch((e: unknown) => {
         if (!alive) return
         setProfile(null)
@@ -76,6 +83,7 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
     return () => {
       alive = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, reloadKey])
 
   // Odświeżenie liczników od razu po (od)obserwowaniu kogoś z tego profilu (np. z listy obserwowanych),
