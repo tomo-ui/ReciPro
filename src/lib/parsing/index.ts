@@ -1,8 +1,9 @@
 import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '@/types/recipe'
+import { fileToScanImage, type ScanImage } from '@/lib/images'
 import { getAccessToken } from '@/lib/supabase'
 
 /**
- * Klient parsowania. Cała robota (pobranie strony, JSON-LD → heurystyki → Gemini)
+ * Klient parsowania. Cała robota (pobranie strony, JSON-LD → heurystyki → Gemini, odczyt tekstu i zdjęć)
  * dzieje się w /api/parse-recipe — przeglądarka nie może pobrać cudzej strony (CORS),
  * a klucz Gemini musi zostać na serwerze.
  */
@@ -24,7 +25,11 @@ export interface ParseResult {
   thumbnail: ThumbnailInfo
 }
 
-export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
+/** Ile zdjęć naraz (np. kolejne części długiego przepisu) i jak krótki tekst jest jeszcze sensowny — jak na serwerze */
+export const MAX_SCAN_IMAGES = 4
+export const MIN_PASTED_CHARS = 30
+
+async function postParse(payload: Record<string, unknown>): Promise<ParseResult> {
   // Endpoint wymaga sesji Supabase (chroni limit Gemini); bez Supabase token jest pusty
   const token = await getAccessToken()
 
@@ -36,7 +41,7 @@ export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ url: normalizeUrl(rawUrl) }),
+      body: JSON.stringify(payload),
     })
   } catch {
     throw new Error('Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.')
@@ -51,7 +56,8 @@ export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
     error?: string
   } | null
   if (!res.ok || !body?.draft) {
-    throw new Error(body?.error ?? 'Nie udało się pobrać przepisu.')
+    if (res.status === 413) throw new Error('Zdjęcia są zbyt duże. Dodaj mniej zdjęć albo mniejsze.')
+    throw new Error(body?.error ?? 'Nie udało się odczytać przepisu.')
   }
   return {
     draft: body.draft,
@@ -60,4 +66,16 @@ export async function parseRecipeFromUrl(rawUrl: string): Promise<ParseResult> {
     servingsBasis: body.servingsBasis,
     thumbnail: body.thumbnail ?? { status: 'none' },
   }
+}
+
+export const parseRecipeFromUrl = (rawUrl: string) => postParse({ url: normalizeUrl(rawUrl) })
+
+/** Cały skopiowany przepis (składniki i przygotowanie w jednym tekście) */
+export const parseRecipeFromText = (text: string) => postParse({ text })
+
+/** Zrzuty ekranu / zdjęcia przepisu: zmniejszamy je w przeglądarce i wysyłamy tylko do odczytu (nie są zapisywane) */
+export async function parseRecipeFromImages(files: File[]): Promise<ParseResult> {
+  const images: ScanImage[] = []
+  for (const file of files.slice(0, MAX_SCAN_IMAGES)) images.push(await fileToScanImage(file))
+  return postParse({ images })
 }

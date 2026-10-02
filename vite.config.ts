@@ -57,7 +57,7 @@ function apiDevServer(): Plugin {
 export default defineConfig(({ mode }) => {
   // Zmienne bez prefiksu VITE_ (np. GEMINI_API_KEY) tylko dla lokalnego API — nie trafiają do bundla
   const env = loadEnv(mode, process.cwd(), '')
-  for (const key of ['GEMINI_API_KEY', 'GEMINI_MODEL', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']) {
+  for (const key of ['GEMINI_API_KEY', 'GEMINI_MODEL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']) {
     if (env[key]) process.env[key] = env[key]
   }
 

@@ -74,6 +74,53 @@ export async function fileToAvatarBlob(file: File): Promise<Blob> {
   }
 }
 
+/** Zdjęcie do odczytu przepisu przez AI: base64 bez prefiksu `data:` (format jak w api/_lib/gemini.ts) */
+export interface ScanImage {
+  mimeType: 'image/jpeg'
+  data: string
+}
+
+/** Limit jednego zdjęcia po zakodowaniu (znaki base64) — serwer odrzuca większe (api/_lib/inputs.ts) */
+const SCAN_MAX_BASE64_CHARS = 1_400_000
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Nie udało się przetworzyć zdjęcia.'))
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * Zrzut ekranu lub zdjęcie przepisu zmniejszone do czytelnego JPEG (dłuższy bok do 2000 px), żeby zmieściło się
+ * w żądaniu. Tekst na zrzucie musi pozostać czytelny, więc zmniejszamy dopiero, gdy pierwsza próba jest za duża.
+ */
+export async function fileToScanImage(file: File): Promise<ScanImage> {
+  if (!file.type.startsWith('image/')) throw new Error('Wybierz plik ze zdjęciem.')
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  try {
+    for (const [maxSide, quality] of [[2000, 0.85], [1500, 0.75], [1100, 0.7]] as const) {
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(bitmap.width * scale)
+      canvas.height = Math.round(bitmap.height * scale)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('Przeglądarka nie obsługuje przetwarzania obrazów.')
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      const blob = await new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Nie udało się przetworzyć zdjęcia.'))), 'image/jpeg', quality),
+      )
+      const data = await blobToBase64(blob)
+      if (data.length <= SCAN_MAX_BASE64_CHARS) return { mimeType: 'image/jpeg', data }
+    }
+    throw new Error('Zdjęcie jest zbyt duże. Spróbuj z mniejszym zrzutem ekranu.')
+  } finally {
+    bitmap.close()
+  }
+}
+
 /** Zapisuje zdjęcie profilowe (folder użytkownika, plik „avatar-…”) */
 export const uploadAvatarImage = (blob: Blob) => uploadRecipeImage(blob, 'avatar-')
 

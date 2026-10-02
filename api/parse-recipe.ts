@@ -2,10 +2,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { bearerToken, verifyAccessToken } from './_lib/auth.js'
 import { FetchError } from './_lib/fetchHtml.js'
 import type { StorageConfig } from './_lib/image.js'
-import { ParseError, parseRecipeUrl } from './_lib/pipeline.js'
+import { cleanImages, cleanPastedText, MAX_IMAGES, MIN_PASTED_CHARS } from './_lib/inputs.js'
+import { ParseError, parseRecipeImages, parseRecipeText, parseRecipeUrl } from './_lib/pipeline.js'
 
 /**
- * POST /api/parse-recipe  { url }  →  { draft, origin: 'page' | 'tiktok-caption' | 'instagram-caption' | 'youtube-caption' | 'post-link', servingsEstimated, thumbnail }
+ * POST /api/parse-recipe  { url } | { text } | { images: [{ mimeType, data(base64) }] }
+ *   →  { draft, origin: 'page' | 'tiktok-caption' | 'instagram-caption' | 'youtube-caption' | 'post-link' | 'text' | 'image', servingsEstimated, thumbnail }
+ * Tekst i zdjęcia (zrzuty ekranu przepisu): czyta je Gemini; zdjęcia nigdzie nie są zapisywane.
  * Strona WWW: pobranie po stronie serwera (omija CORS) i 3-warstwowy pipeline.
  * Link do TikToka: odczyt opisu filmu i wyciągnięcie z niego przepisu (Gemini).
  * GEMINI_API_KEY żyje tylko tutaj. Wymaga nagłówka Authorization: Bearer <token sesji Supabase>.
@@ -49,18 +52,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Serwer nie jest poprawnie skonfigurowany.', code: 'misconfigured' })
   }
 
-  const url = typeof req.body?.url === 'string' ? req.body.url.trim() : ''
-  if (!url || url.length > 2048) {
-    return res.status(400).json({ error: 'Podaj adres strony z przepisem.', code: 'invalid_url' })
+  // Trzy rodzaje wejścia: zdjęcia (`images`), wklejony tekst (`text`) albo adres (`url`)
+  const aiOptions = { geminiApiKey: process.env.GEMINI_API_KEY, geminiModel: process.env.GEMINI_MODEL }
+  let run: () => Promise<Awaited<ReturnType<typeof parseRecipeUrl>>>
+  if (req.body?.images !== undefined) {
+    const images = cleanImages(req.body.images)
+    if (!images) {
+      return res.status(400).json({ error: `Dodaj od 1 do ${MAX_IMAGES} zdjęć (JPEG, PNG lub WebP) o rozsądnym rozmiarze.`, code: 'invalid_images' })
+    }
+    run = () => parseRecipeImages(images, aiOptions)
+  } else if (req.body?.text !== undefined) {
+    const text = cleanPastedText(req.body.text)
+    if (!text) {
+      return res.status(400).json({ error: `Wklej cały przepis — tekst jest za krótki (min. ${MIN_PASTED_CHARS} znaków).`, code: 'invalid_text' })
+    }
+    run = () => parseRecipeText(text, aiOptions)
+  } else {
+    const url = typeof req.body?.url === 'string' ? req.body.url.trim() : ''
+    if (!url || url.length > 2048) {
+      return res.status(400).json({ error: 'Podaj adres strony z przepisem.', code: 'invalid_url' })
+    }
+    run = () => parseRecipeUrl(url, { ...aiOptions, youtubeApiKey: process.env.YOUTUBE_API_KEY, storage })
   }
 
   try {
-    const { draft, origin, servingsEstimated, servingsBasis, thumbnail } = await parseRecipeUrl(url, {
-      geminiApiKey: process.env.GEMINI_API_KEY,
-      geminiModel: process.env.GEMINI_MODEL,
-      youtubeApiKey: process.env.YOUTUBE_API_KEY,
-      storage,
-    })
+    const { draft, origin, servingsEstimated, servingsBasis, thumbnail } = await run()
     return res.status(200).json({ draft, origin, servingsEstimated, servingsBasis, thumbnail })
   } catch (e) {
     if (e instanceof FetchError) {

@@ -108,7 +108,8 @@ const asStr = (v: unknown) => (typeof v === 'string' && v.trim() ? v : undefined
 const asNum = (v: unknown) => (typeof v === 'number' && v > 0 ? Math.round(v) : undefined)
 
 export interface ExtractContext {
-  pageUrl: string
+  /** Brak przy tekście wklejonym ręcznie i przy zdjęciach — wtedy przepis nie ma adresu źródła */
+  pageUrl?: string
   imageUrl?: string
   /** Tytuł awaryjny, gdy model go nie zwróci */
   fallbackTitle?: string
@@ -116,10 +117,17 @@ export interface ExtractContext {
   tags?: string[]
 }
 
+/** Obraz do odczytu przez model: base64 bez prefiksu `data:` */
+export interface GeminiImage {
+  mimeType: string
+  data: string
+}
+
 interface JsonRequest {
   system: string
   user: string
   schema: object
+  images?: GeminiImage[]
 }
 
 /**
@@ -128,7 +136,7 @@ interface JsonRequest {
  * (zwykły Flash). Błędy klienta (403 itp.) nie są ponawiane.
  */
 async function generateJson(
-  { system, user, schema }: JsonRequest,
+  { system, user, schema, images = [] }: JsonRequest,
   {
     apiKey,
     model = DEFAULT_MODEL,
@@ -140,7 +148,9 @@ async function generateJson(
 ): Promise<Record<string, unknown>> {
   const requestBody = JSON.stringify({
     systemInstruction: { parts: [{ text: system }] },
-    contents: [{ role: 'user', parts: [{ text: user }] }],
+    contents: [
+      { role: 'user', parts: [{ text: user }, ...images.map((i) => ({ inlineData: { mimeType: i.mimeType, data: i.data } }))] },
+    ],
     generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: schema },
   })
 
@@ -191,6 +201,10 @@ async function generateJson(
   }
 }
 
+/** Dodatek do promptu, gdy źródłem są zdjęcia/zrzuty ekranu zamiast tekstu */
+const IMAGE_PROMPT_NOTE = `
+- The source here is one or more IMAGES (screenshots or photos of a recipe). Several images may be consecutive parts of one recipe, in order. Read the text visible in them exactly as written and apply all the rules above to it. Ignore app interface elements, ads, comments, usernames, watermarks and page chrome. If the images contain no recipe text (for example only a photo of a finished dish), return is_recipe false.`
+
 /** Zwraca przepis albo null, gdy model uzna, że w tekście nie ma przepisu */
 export async function extractRecipeFromText(
   text: string,
@@ -200,11 +214,34 @@ export async function extractRecipeFromText(
   const out = await generateJson(
     {
       system: SYSTEM_PROMPT,
-      user: `Source URL: ${ctx.pageUrl}\n\n--- TEXT ---\n${text}`,
+      user: `${ctx.pageUrl ? `Source URL: ${ctx.pageUrl}\n\n` : ''}--- TEXT ---\n${text}`,
       schema: RESPONSE_SCHEMA,
     },
     options,
   )
+  return draftFromModelOutput(out, ctx)
+}
+
+/** Zwraca przepis odczytany ze zdjęć/zrzutów ekranu albo null, gdy model nie widzi na nich przepisu */
+export async function extractRecipeFromImages(
+  images: GeminiImage[],
+  ctx: ExtractContext,
+  options: GeminiOptions,
+): Promise<RecipeDraft | null> {
+  const out = await generateJson(
+    {
+      system: SYSTEM_PROMPT + IMAGE_PROMPT_NOTE,
+      user: 'The attached images show a recipe. Extract it.',
+      schema: RESPONSE_SCHEMA,
+      images,
+    },
+    // Odczyt obrazu trwa dłużej niż tekstu
+    { ...options, timeoutMs: options.timeoutMs ?? 25_000 },
+  )
+  return draftFromModelOutput(out, ctx)
+}
+
+function draftFromModelOutput(out: Record<string, unknown>, ctx: ExtractContext): RecipeDraft | null {
   if (out.is_recipe !== true) return null
 
   const lines = (v: unknown) =>

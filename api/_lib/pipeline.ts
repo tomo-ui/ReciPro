@@ -1,6 +1,13 @@
 import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '../../src/types/recipe.js'
 import { fetchHtml, type FetchHtmlOptions } from './fetchHtml.js'
-import { estimateDish, extractRecipeFromText, GeminiError, parseWithGemini } from './gemini.js'
+import {
+  estimateDish,
+  extractRecipeFromImages,
+  extractRecipeFromText,
+  GeminiError,
+  parseWithGemini,
+  type GeminiImage,
+} from './gemini.js'
 import { chooseServings, kindFromTitle, totalWeight, type DishKind } from './servings.js'
 import { parseHeuristic } from './heuristic.js'
 import { parseJsonLd } from './jsonld.js'
@@ -313,6 +320,73 @@ async function withEstimatedServings(
 // w trakcie, zanim zdążyła odesłać czytelny błąd, a przeglądarka widziała to jako zerwane połączenie.
 /** Czas na całą operację — z zapasem względem `maxDuration` funkcji na Vercelu (60 s) */
 const TOTAL_BUDGET_MS = 42_000
+
+/**
+ * Wklejony tekst (składniki i przygotowanie w jednym kawałku) albo zdjęcia/zrzuty ekranu: zawsze Gemini,
+ * bo nie ma tu struktury JSON-LD ani HTML-a. Zdjęcia nigdzie nie są zapisywane — służą tylko do odczytu.
+ * Przepis niekompletny (np. same składniki) wraca jako wynik częściowy; użytkownik i tak go weryfikuje w formularzu.
+ */
+async function parseWithAiOnly(
+  kind: 'text' | 'image',
+  read: (opts: { apiKey: string; model?: string; retryDelayMs?: number; deadlineAt: number; fetchImpl?: typeof fetch }) => Promise<RecipeDraft | null>,
+  fullText: string | undefined,
+  opts: PipelineOptions,
+): Promise<ParseOutcome> {
+  const { geminiApiKey, geminiModel, geminiRetryDelayMs, fetchImpl } = opts
+  const deadlineAt = opts.deadlineAt ?? Date.now() + TOTAL_BUDGET_MS
+  if (!geminiApiKey) {
+    throw new ParseError('ai_unavailable', 'Odczyt tekstu i zdjęć wymaga skonfigurowanego klucza Gemini na serwerze.')
+  }
+
+  let draft: RecipeDraft | null
+  try {
+    draft = await read({ apiKey: geminiApiKey, model: geminiModel, retryDelayMs: geminiRetryDelayMs, deadlineAt, fetchImpl })
+  } catch (e) {
+    console.error(`[parse] Gemini (${kind}):`, e instanceof GeminiError ? e.message : e)
+    throw new ParseError('ai_failed', aiFailureMessage(e))
+  }
+  if (!draft || !hasAnyContent(draft)) {
+    throw new ParseError(
+      'no_recipe',
+      kind === 'text' ? 'Nie znalazłem przepisu w tym tekście.' : 'Nie znalazłem przepisu na tych zdjęciach. Zrób wyraźniejszy zrzut, na którym widać składniki i sposób przygotowania.',
+    )
+  }
+
+  // Siatka bezpieczeństwa: dane podane wprost w tekście („PORCJE: 6”, „CZAS: 40 MIN”) wygrywają z pominięciem przez model
+  const withText = fullText
+    ? {
+        ...draft,
+        servings: draft.servings ?? servingsFromText(fullText),
+        total_minutes: draft.total_minutes ?? (draft.prep_minutes || draft.cook_minutes ? undefined : totalMinutesFromText(fullText)),
+      }
+    : draft
+  const withServings = await withEstimatedServings(withText, { ...opts, deadlineAt })
+  return {
+    draft: withServings.draft,
+    origin: kind,
+    servingsEstimated: withServings.estimated,
+    servingsBasis: withServings.basis,
+    thumbnail: { status: 'none' },
+  }
+}
+
+export function parseRecipeText(text: string, opts: PipelineOptions = {}): Promise<ParseOutcome> {
+  return parseWithAiOnly(
+    'text',
+    (o) => extractRecipeFromText(text, { fallbackTitle: 'Przepis' }, o),
+    text,
+    opts,
+  )
+}
+
+export function parseRecipeImages(images: GeminiImage[], opts: PipelineOptions = {}): Promise<ParseOutcome> {
+  return parseWithAiOnly(
+    'image',
+    (o) => extractRecipeFromImages(images, { fallbackTitle: 'Przepis ze zdjęcia' }, o),
+    undefined,
+    opts,
+  )
+}
 
 export async function parseRecipeUrl(
   url: string,
