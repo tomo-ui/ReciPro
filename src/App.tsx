@@ -20,6 +20,7 @@ import { useRecipes } from '@/hooks/useRecipes'
 import { useSession } from '@/hooks/useSession'
 import { MenuIcon } from '@/components/Icons'
 import { LargeTitleScreen, type LargeTitleScreenHandle } from '@/components/LargeTitleScreen'
+import { BadgeInfoPanel } from '@/components/BadgeInfoPanel'
 import { ModerationLayer } from '@/components/ModerationLayer'
 import { NotificationToast } from '@/components/NotificationToast'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
@@ -155,6 +156,8 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
   const [sheet, setSheet] = useState<SheetState>(null)
   /** Znaczek weryfikacji cudzych profili na stosie — do paska tytułu, wypełniany po wczytaniu profilu */
   const [profileBadges, setProfileBadges] = useState<Record<string, VerifiedBadgeTier | null>>({})
+  /** Panel „co to za weryfikacja” po dotknięciu znaczka na profilu */
+  const [badgeInfo, setBadgeInfo] = useState<{ badge: VerifiedBadgeTier; username: string } | null>(null)
   /** Zmiana wymusza ponowne pobranie własnego profilu (liczniki, siatka) po dodaniu/edycji/usunięciu */
   const [profileVersion, setProfileVersion] = useState(0)
   const bump = () => setProfileVersion((v) => v + 1)
@@ -301,7 +304,14 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
           <LargeTitleScreen
             ref={topRefs.profile}
             title={me.username}
-            titleBadge={<VerifiedBadge badge={me.verified_badge} size={19} className="ml-1.5" />}
+            titleBadge={
+              <VerifiedBadge
+                badge={me.verified_badge}
+                size={19}
+                className="ml-1.5"
+                onPress={me.verified_badge ? () => setBadgeInfo({ badge: me.verified_badge!, username: me.username }) : undefined}
+              />
+            }
             variant="inline"
             right={
               <motion.button
@@ -372,7 +382,14 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               }}
             />
           ) : entry.kind === 'profile' ? (
-            <PushedScreen key={`profile-${entry.username}-${i}`} title={entry.username} titleStart titleBadge={<VerifiedBadge badge={profileBadges[entry.username]} size={17} className="ml-1.5" />} onBack={pop}>
+            <PushedScreen key={`profile-${entry.username}-${i}`} title={entry.username} titleStart titleBadge={
+                <VerifiedBadge
+                  badge={profileBadges[entry.username]}
+                  size={17}
+                  className="ml-1.5"
+                  onPress={profileBadges[entry.username] ? () => setBadgeInfo({ badge: profileBadges[entry.username]!, username: entry.username }) : undefined}
+                />
+              } onBack={pop}>
               <div className="px-[max(16px,env(safe-area-inset-left))]">
                 <ProfileView
                   username={entry.username}
@@ -576,6 +593,8 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
           </Sheet>
         )}
       </AnimatePresence>
+      {badgeInfo && <BadgeInfoPanel badge={badgeInfo.badge} username={badgeInfo.username} onClose={() => setBadgeInfo(null)} />}
+
       {/* Zgłaszanie i blokowanie z dowolnego miejsca (przycisk „…” na karcie, przepisie, komentarzu, profilu) */}
       <ModerationLayer
         onBlocked={(userId, username) => {
