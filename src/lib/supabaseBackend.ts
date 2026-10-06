@@ -3,9 +3,11 @@ import type { Diet, DietDraft, MealTemplate, MealTemplateDraft } from '@/types/d
 import { sanitizeDiet, sanitizeMealTemplate } from './diet'
 import type { AppNotification, Comment, MyActivityItem, Profile, ProfileSummary, Recipe, RecipeStats } from '@/types/recipe'
 import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
+import type { BlockedUser, ModerationReport } from '@/types/moderation'
 import type { Backend, InviteCode } from './backend'
+import { AI_CONSENT_VERSION } from './consent'
 import { deleteRecipeImage } from './images'
-import { supabase } from './supabase'
+import { getAccessToken, supabase } from './supabase'
 import {
   draftToInsert,
   rowToRecipe,
@@ -163,6 +165,63 @@ const toMealTemplate = (r: MealTemplateRow): MealTemplate =>
   sanitizeMealTemplate({ id: r.id, user_id: r.user_id, name: r.name, items: r.items, created_at: r.created_at })
 const mealTemplatePayload = (t: MealTemplateDraft) => ({ name: t.name.trim(), items: t.items })
 
+interface ReportRow {
+  id: string
+  target_type: ModerationReport['target_type']
+  target_id: string
+  target_user_id: string | null
+  target_username: string | null
+  excerpt: string | null
+  reason: ModerationReport['reason']
+  details: string | null
+  status: ModerationReport['status']
+  action: string | null
+  created_at: string
+  reporter_username: string | null
+  reports_count: number
+}
+const toReport = (r: ReportRow): ModerationReport => ({
+  id: r.id,
+  target_type: r.target_type,
+  target_id: r.target_id,
+  target_user_id: r.target_user_id ?? undefined,
+  target_username: r.target_username ?? undefined,
+  excerpt: r.excerpt ?? undefined,
+  reason: r.reason,
+  details: r.details ?? undefined,
+  status: r.status,
+  action: r.action ?? undefined,
+  created_at: r.created_at,
+  reporter_username: r.reporter_username ?? undefined,
+  reports_count: r.reports_count,
+})
+interface BlockedRow {
+  id: string
+  username: string
+  full_name: string | null
+  avatar_url: string | null
+  blocked_at: string
+}
+
+/** Operacje wymagające klucza service_role (usuwanie kont) idą przez serwer: /api/account */
+async function callAccountApi(payload: { confirm: string } | { userId: string }): Promise<void> {
+  const token = await getAccessToken()
+  let res: Response
+  try {
+    res = await fetch('/api/account', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    throw new Error('Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.')
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new Error(body?.error ?? 'Nie udało się wykonać operacji. Spróbuj ponownie.')
+  }
+}
+
 const toComment = (r: CommentRow): Comment => ({
   id: r.id,
   recipe_id: r.recipe_id,
@@ -179,15 +238,25 @@ const toComment = (r: CommentRow): Comment => ({
   liked: r.liked ?? false,
 })
 
+/** Komunikaty błędów z funkcji moderacji (RAISE EXCEPTION w supabase/moderation.sql) po polsku */
+const MODERATION_ERRORS: Record<string, string> = {
+  'cannot report own content': 'Nie możesz zgłosić własnej treści.',
+  'target not found': 'Ta treść nie jest już dostępna.',
+  'too many reports': 'Zbyt wiele zgłoszeń w krótkim czasie. Spróbuj ponownie za godzinę.',
+  'user not found': 'Nie znaleziono użytkownika.',
+  'invalid user': 'Nie możesz zablokować samego siebie.',
+}
+
 /** Zamienia błąd Postgrest na czytelny komunikat; rozpoznaje niewykonaną migrację */
 function fail(error: { code?: string; message: string }, context?: 'profile'): never {
   if (error.message === 'invite_code_invalid') throw new Error('Kod zaproszenia jest nieprawidłowy albo już wykorzystany.')
+  if (MODERATION_ERRORS[error.message]) throw new Error(MODERATION_ERRORS[error.message])
   const migrationMissing =
     error.code === 'PGRST202' || error.code === 'PGRST205' || error.code === 'PGRST204' || error.code === '42P01' || error.code === '42883' || error.code === '42703' ||
     /could not find the (function|table)/i.test(error.message)
   if (migrationMissing) {
     throw new Error(
-      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql, engagement.sql, notifications.sql, diets.sql, meal_templates.sql i trending.sql w SQL Editorze Supabase.',
+      'Baza nie jest jeszcze zaktualizowana. Uruchom pliki supabase/social.sql, engagement.sql, notifications.sql, diets.sql, meal_templates.sql, trending.sql, moderation.sql, badges.sql i consent_limits.sql w SQL Editorze Supabase.',
     )
   }
   if (context === 'profile' && error.code === '23505') throw new Error('Ta nazwa użytkownika jest już zajęta.')
@@ -555,6 +624,68 @@ export function createSupabaseBackend(getClient: () => SupabaseClient | null): B
     async setVerifiedBadge(username, badge) {
       const { error } = await client().rpc('admin_set_verified_badge', { p_username: username, p_badge: badge })
       if (error) fail(error)
+    },
+
+    async countOpenReports() {
+      const { data, error } = await client().rpc('admin_open_report_count')
+      if (error) return 0 // zwykły użytkownik albo baza jeszcze bez moderacji
+      return typeof data === 'number' ? data : 0
+    },
+
+    async listReports(status, offset, limit) {
+      const { data, error } = await client().rpc('admin_list_reports', { p_status: status, p_limit: limit, p_offset: offset })
+      if (error) fail(error)
+      return (data as ReportRow[]).map(toReport)
+    },
+
+    async resolveReport(reportId, action) {
+      const { error } = await client().rpc('admin_resolve_report', { p_report: reportId, p_action: action })
+      if (error) fail(error)
+    },
+
+    async removeUserAccount(userId) {
+      await callAccountApi({ userId })
+    },
+
+    async reportContent(target, reason, details) {
+      const { error } = await client().rpc('report_content', { p_type: target.type, p_id: target.id, p_reason: reason, p_details: details?.trim() || null })
+      if (error) fail(error)
+    },
+
+    async blockUser(userId) {
+      const { error } = await client().rpc('block_user', { p_user: userId })
+      if (error) fail(error)
+    },
+
+    async unblockUser(userId) {
+      const { error } = await client().rpc('unblock_user', { p_user: userId })
+      if (error) fail(error)
+    },
+
+    async listBlockedUsers(offset, limit) {
+      const { data, error } = await client().rpc('list_blocked_users', { p_limit: limit, p_offset: offset })
+      if (error) fail(error)
+      return (data as BlockedRow[]).map(
+        (r): BlockedUser => ({ id: r.id, username: r.username, full_name: r.full_name ?? undefined, avatar_url: r.avatar_url ?? undefined, blocked_at: r.blocked_at }),
+      )
+    },
+
+    async getAiConsent() {
+      const id = await currentUserId()
+      const { data, error } = await client().from('user_consents').select('ai_consent_at').eq('user_id', id).maybeSingle()
+      if (error) fail(error)
+      return Boolean((data as { ai_consent_at: string | null } | null)?.ai_consent_at)
+    },
+
+    async setAiConsent(granted) {
+      const { error } = await client().rpc('set_ai_consent', { p_granted: granted, p_version: AI_CONSENT_VERSION })
+      if (error) fail(error)
+    },
+
+    async deleteAccount(confirmUsername) {
+      await callAccountApi({ confirm: confirmUsername })
+      // Konto już nie istnieje; wylogowanie lokalne czyści zapisaną sesję (serwer mógł już unieważnić tokeny)
+      await client().auth.signOut({ scope: 'local' }).catch(() => undefined)
     },
 
     async getInterests() {

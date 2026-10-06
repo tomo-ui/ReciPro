@@ -3,11 +3,12 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { Comment, Profile, ProfileSummary } from '@/types/recipe'
 import { backend } from '@/lib/data'
 import { emit } from '@/lib/events'
+import { openModeration } from '@/lib/moderationUi'
 import { timeAgo } from '@/lib/ui'
 import { usePaged } from '@/hooks/usePaged'
 import { Avatar } from './Avatar'
 import { VerifiedBadge } from './VerifiedBadge'
-import { HeartIcon, SendIcon, SpinnerIcon, TrashIcon } from './Icons'
+import { HeartIcon, MoreIcon, SendIcon, SpinnerIcon, TrashIcon } from './Icons'
 import { LoadMore } from './LoadMore'
 
 const MAX = 500
@@ -190,6 +191,15 @@ export function CommentsSection({ recipeId, me, isRecipeOwner, onOpenAuthor, onC
                   <HeartIcon width={14} height={14} filled={c.liked} />
                   {c.like_count > 0 && <span className="text-[11px] tabular-nums">{c.like_count}</span>}
                 </button>
+                {c.user_id !== me.id && (
+                  <button
+                    onClick={() => openModeration({ target: { type: 'comment', id: c.id }, userId: c.user_id, username: c.author.username, label: `Komentarz @${c.author.username}: ${c.body.slice(0, 60)}` })}
+                    aria-label="Więcej: zgłoś lub zablokuj"
+                    className="shrink-0 self-start p-1 text-label-3 active:text-label"
+                  >
+                    <MoreIcon width={16} height={16} />
+                  </button>
+                )}
                 {(c.user_id === me.id || isRecipeOwner) && (
                   <button onClick={() => remove(c)} aria-label="Usuń komentarz" className="shrink-0 self-start p-1 text-label-3 active:text-red-500">
                     <TrashIcon width={16} height={16} />

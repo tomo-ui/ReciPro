@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '@/types/recipe'
+import type { ParseOrigin, RecipeDraft } from '@/types/recipe'
 import {
+  ImportError,
   MAX_SCAN_IMAGES,
   MIN_PASTED_CHARS,
   parseRecipeFromImages,
@@ -10,7 +11,9 @@ import {
   type ParseResult,
 } from '@/lib/parsing'
 import { draftToForm, emptyForm } from '@/lib/recipeForm'
+import { useAiConsent } from '@/hooks/useAiConsent'
 import { useRecipeForm } from '@/hooks/useRecipeForm'
+import { AiConsentDialog } from '@/components/AiConsentDialog'
 import { RecipeFields } from '@/components/RecipeFields'
 import { Group } from '@/components/formParts'
 import { SegmentedControl } from '@/components/SegmentedControl'
@@ -23,9 +26,6 @@ interface PickedImage {
   file: File
   url: string
 }
-
-/** Pozostałe źródła mają miniaturkę posta — tylko te dostają komunikat o jej braku/błędzie */
-const SOCIAL_ORIGINS: ParseOrigin[] = ['tiktok-caption', 'instagram-caption', 'youtube-caption']
 
 const IMPORT_NOTES: Record<RecipeDraft['parse_method'], string> = {
   manual: '',
@@ -52,7 +52,6 @@ interface ImportInfo {
   estimatedServings?: number
   /** Skąd wzięła się liczba porcji */
   servingsBasis?: string
-  thumbnail: ThumbnailInfo
 }
 
 interface Props {
@@ -73,6 +72,9 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
   const [info, setInfo] = useState<ImportInfo | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Zgoda na AI przed pierwszym importem; `pendingImport` to importowanie wstrzymane do czasu decyzji
+  const consent = useAiConsent()
+  const [pendingImport, setPendingImport] = useState<(() => void) | null>(null)
 
   const canSave = form.title.trim().length > 0 && !saving && !rf.imageBusy
 
@@ -101,21 +103,33 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
     setError(null)
     setFetching(true)
     try {
-      const { draft, origin, servingsEstimated, servingsBasis, thumbnail } = await read()
-      rf.load(draftToForm({ ...draft, source_url: draft.source_url ?? sourceUrl }))
+      const { draft, origin, servingsEstimated, servingsBasis } = await read()
+      // Import jest domyślnie prywatny (tylko Twoja książka): publikacja cudzego przepisu wymaga świadomej decyzji (RecipeFields)
+      rf.load({ ...draftToForm({ ...draft, source_url: draft.source_url ?? sourceUrl }), is_post: false })
       setInfo({
         origin,
         method: draft.parse_method,
         estimatedServings: servingsEstimated ? draft.servings : undefined,
         servingsBasis: servingsEstimated ? servingsBasis : undefined,
-        thumbnail,
       })
       setMode('manual') // użytkownik weryfikuje wynik parsowania przed zapisem
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nie udało się pobrać przepisu.')
+      if (e instanceof ImportError && e.code === 'consent_required') {
+        // Serwer nie ma zapisanej zgody (np. cofnięta na innym urządzeniu) — pytamy ponownie i ponawiamy import
+        consent.markMissing()
+        setPendingImport(() => () => void runImport(read, sourceUrl))
+      } else {
+        setError(e instanceof Error ? e.message : 'Nie udało się pobrać przepisu.')
+      }
     } finally {
       setFetching(false)
     }
+  }
+
+  /** Import wymaga zgody na AI: bez niej najpierw pokazujemy okno zgody, a import rusza po „Zgadzam się” */
+  function guardedImport(read: () => Promise<ParseResult>, sourceUrl?: string) {
+    if (consent.granted) void runImport(read, sourceUrl)
+    else setPendingImport(() => () => void runImport(read, sourceUrl))
   }
 
   async function save() {
@@ -140,19 +154,14 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
 
   const notes = info && (
     <div className="space-y-1.5 rounded-[12px] bg-surface px-4 py-3 text-[14px] text-label-2">
-      <p>
-        {ORIGIN_NOTES[info.origin] ?? IMPORT_NOTES[info.method]}
-      </p>
+      <p>{ORIGIN_NOTES[info.origin] ?? IMPORT_NOTES[info.method]}</p>
+      <p>Import trafia domyślnie do Twojej prywatnej książki kucharskiej. Cudzych zdjęć ani miniatur nie zapisujemy — możesz dodać własne zdjęcie.</p>
       {info.estimatedServings !== undefined && form.servings === String(info.estimatedServings) && (
         <p>
           Liczba porcji ({info.estimatedServings}) to szacunek — źródło jej nie podawało
           {info.servingsBasis ? ` (${info.servingsBasis})` : ''}. Popraw, jeśli się nie zgadza.
         </p>
       )}
-      {info.thumbnail.status === 'failed' && (
-        <p>Nie udało się zapisać miniaturki filmu ({info.thumbnail.reason ?? 'nieznany powód'}). Możesz dodać własne zdjęcie.</p>
-      )}
-      {info.thumbnail.status === 'none' && SOCIAL_ORIGINS.includes(info.origin) && <p>Ten post nie udostępnia miniaturki.</p>}
     </div>
   )
 
@@ -242,7 +251,7 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
                   </div>
                 </Group>
 
-                {importButton(!url.trim(), 'Pobieram…', 'Pobierz przepis', () => runImport(() => parseRecipeFromUrl(url.trim()), url.trim()))}
+                {importButton(!url.trim(), 'Pobieram…', 'Pobierz przepis', () => guardedImport(() => parseRecipeFromUrl(url.trim()), url.trim()))}
                 {errorBlock}
 
                 <p className="px-1 pt-1 text-[13px] text-label-2">
@@ -262,7 +271,7 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
                   />
                 </Group>
 
-                {importButton(pastedText.trim().length < MIN_PASTED_CHARS, 'Odczytuję…', 'Odczytaj przepis', () => runImport(() => parseRecipeFromText(pastedText.trim())))}
+                {importButton(pastedText.trim().length < MIN_PASTED_CHARS, 'Odczytuję…', 'Odczytaj przepis', () => guardedImport(() => parseRecipeFromText(pastedText.trim())))}
                 {errorBlock}
 
                 <p className="px-1 pt-1 text-[13px] text-label-2">
@@ -312,7 +321,7 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
                   </motion.button>
                 )}
 
-                {importButton(picked.length === 0, 'Odczytuję…', 'Odczytaj przepis', () => runImport(() => parseRecipeFromImages(picked.map((p) => p.file))))}
+                {importButton(picked.length === 0, 'Odczytuję…', 'Odczytaj przepis', () => guardedImport(() => parseRecipeFromImages(picked.map((p) => p.file))))}
                 {errorBlock}
 
                 <p className="px-1 pt-1 text-[13px] text-label-2">
@@ -335,6 +344,18 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {pendingImport && (
+        <AiConsentDialog
+          onAccept={async () => {
+            await consent.set(true)
+            const go = pendingImport
+            setPendingImport(null)
+            go()
+          }}
+          onDecline={() => setPendingImport(null)}
+        />
+      )}
     </div>
   )
 }

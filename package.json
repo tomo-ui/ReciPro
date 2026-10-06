@@ -1,5 +1,5 @@
 {
-  "name": "przepisy",
+  "name": "recipro",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -14,7 +14,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
     "framer-motion": "^13.4.0",
-    "jpeg-js": "^0.4.4",
     "node-html-parser": "^9.0.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

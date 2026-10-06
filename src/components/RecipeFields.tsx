@@ -47,6 +47,11 @@ export function RecipeFields({ form, set, imageSrc, imageBusy, imageError, onPic
               ? 'Tylko dla Ciebie: przepis będzie w zakładce Przepisy (Twoim archiwum), bez pokazywania go na profilu i w feedzie.'
               : 'Post: widoczny na Twoim profilu i w feedzie innych osób (gdy profil jest publiczny). Znajdziesz go też w zakładce Przepisy.'}
           </p>
+          {form.is_post !== false && (form.parse_method !== 'manual' || !!form.source_url) && (
+            <p className="mt-1.5 px-4 text-[13px] font-medium text-label-2">
+              Ten przepis pochodzi z importu. Publikuj go tylko, jeśli jest Twój albo masz prawo go udostępniać — cudze opisy i zdjęcia chroni prawo autorskie. Publikując, potwierdzasz to.
+            </p>
+          )}
         </div>
       )}
 

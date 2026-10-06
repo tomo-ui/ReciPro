@@ -1,8 +1,9 @@
 -- ============================================================================
 -- Znaczki weryfikacji: niebieski (zwykła weryfikacja), złoty (twórca aplikacji), różowy (tester aplikacji),
 -- fioletowy (znaczenie do ustalenia). Przyznaje admin z panelu w Ustawieniach, po wyszukaniu użytkownika.
--- Uruchom w Supabase → SQL Editor PO engagement.sql, likers.sql, trending.sql, notifications.sql i comment_likes.sql
--- (ten plik na nowo definiuje kilka ich funkcji, żeby dopisać kolumnę ze znaczkiem). Plik jest idempotentny.
+-- Uruchom w Supabase → SQL Editor PO engagement.sql, likers.sql, trending.sql, notifications.sql, comment_likes.sql
+-- i moderation.sql (ten plik na nowo definiuje kilka ich funkcji, żeby dopisać kolumnę ze znaczkiem; funkcje SECURITY DEFINER
+-- mają tu też filtr blokad z moderation.sql, bo RLS ich nie obejmuje). Plik jest idempotentny.
 -- ============================================================================
 
 alter table public.profiles
@@ -61,6 +62,7 @@ language sql stable security definer set search_path = public as $$
     p.bio, p.allow_avatar_zoom, p.website, p.verified_badge
   from public.profiles p
   where p.username = lower(p_username) and (not p.is_test or public.can_see_test_accounts())
+    and not public.is_blocked_between(auth.uid(), p.id)
 $$;
 
 drop function if exists public.search_profiles(text, int, int);
@@ -83,7 +85,7 @@ language sql stable security definer set search_path = public as $$
     p.id = auth.uid(),
     p.verified_badge
   from public.profiles p cross join q
-  where (not p.is_test or public.can_see_test_accounts()) and not exists (
+  where (not p.is_test or public.can_see_test_accounts()) and not public.is_blocked_between(auth.uid(), p.id) and not exists (
     select 1 from unnest(q.words) as w
     where public.f_unaccent(lower(p.username || ' ' || coalesce(p.full_name, ''))) not like '%' || w || '%' escape '\'
   )
@@ -115,6 +117,7 @@ language sql stable security definer set search_path = public as $$
   join public.profiles p on p.id = f.follower_id
   where target.username = lower(p_username) and (target.is_public or target.id = auth.uid())
     and (not target.is_test or public.can_see_test_accounts()) and (not p.is_test or public.can_see_test_accounts())
+    and not public.is_blocked_between(auth.uid(), target.id) and not public.is_blocked_between(auth.uid(), p.id)
   order by f.created_at desc, p.username
   limit least(greatest(p_limit, 1), 50) offset greatest(p_offset, 0)
 $$;
@@ -139,6 +142,7 @@ language sql stable security definer set search_path = public as $$
   join public.profiles p on p.id = f.followee_id
   where target.username = lower(p_username) and (target.is_public or target.id = auth.uid())
     and (not target.is_test or public.can_see_test_accounts()) and (not p.is_test or public.can_see_test_accounts())
+    and not public.is_blocked_between(auth.uid(), target.id) and not public.is_blocked_between(auth.uid(), p.id)
   order by f.created_at desc, p.username
   limit least(greatest(p_limit, 1), 50) offset greatest(p_offset, 0)
 $$;
@@ -303,6 +307,7 @@ language sql stable security definer set search_path = public as $$
   where r.id = p_recipe_id
     and (r.user_id = auth.uid() or (r.is_post and exists (select 1 from public.profiles owner where owner.id = r.user_id and owner.is_public)))
     and (not p.is_test or public.can_see_test_accounts())
+    and not public.is_blocked_between(auth.uid(), p.id) and not public.is_blocked_between(auth.uid(), r.user_id)
   order by l.created_at desc, p.username
   limit least(greatest(p_limit, 1), 50) offset greatest(p_offset, 0)
 $$;
@@ -349,7 +354,7 @@ language sql stable security definer set search_path = public as $$
   join public.profiles a on a.id = n.actor_id
   left join public.recipes r on r.id = n.recipe_id
   left join public.recipe_comments c on c.id = n.comment_id
-  where n.recipient_id = auth.uid()
+  where n.recipient_id = auth.uid() and not public.is_blocked_between(auth.uid(), a.id)
   order by n.created_at desc, n.id
   limit least(greatest(p_limit, 1), 50) offset greatest(p_offset, 0)
 $$;

@@ -66,12 +66,19 @@ export async function createDb(): Promise<PGlite> {
   const likers = readFileSync('supabase/likers.sql', 'utf8')
   await db.exec(likers)
   await db.exec(likers) // idempotentność
+  // moderation.sql PRZED badges.sql: badges.sql używa is_blocked_between w funkcjach SECURITY DEFINER
+  const moderation = readFileSync('supabase/moderation.sql', 'utf8')
+  await db.exec(moderation)
+  await db.exec(moderation) // idempotentność
   const badges = readFileSync('supabase/badges.sql', 'utf8')
   await db.exec(badges)
   await db.exec(badges) // idempotentność
   const myActivity = readFileSync('supabase/my_activity.sql', 'utf8')
   await db.exec(myActivity)
   await db.exec(myActivity) // idempotentność
+  const consentLimits = readFileSync('supabase/consent_limits.sql', 'utf8')
+  await db.exec(consentLimits)
+  await db.exec(consentLimits) // idempotentność
   return db
 }
 

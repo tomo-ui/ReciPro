@@ -127,7 +127,7 @@ begin
     select distinct p.id
     from regexp_matches(new.body, '@([a-zA-Z0-9_.]+)', 'g') as m(handle)
     join public.profiles p on lower(p.username) = lower(btrim(m.handle[1], '.'))
-    where p.id <> new.user_id
+    where p.id <> new.user_id and not public.is_blocked_between(new.user_id, p.id)
   loop
     insert into public.notifications (recipient_id, actor_id, type, recipe_id, comment_id)
     values (mentioned.id, new.user_id, 'mention', new.recipe_id, new.id);
@@ -186,7 +186,10 @@ revoke all on function public.notify_like(), public.unnotify_like(), public.noti
 -- ---------------------------------------------------------------------------
 
 -- Lista aktywności z danymi osoby i przepisu, od najnowszych. Tylko moje powiadomienia.
-create or replace function public.list_notifications(p_limit int default 30, p_offset int default 0)
+-- (drop: badges.sql rozszerza zwracane kolumny o actor_verified_badge, więc ponowne uruchomienie tego pliku po badges.sql
+-- wywaliłoby się na „cannot change return type”; badges.sql i tak odtwarza wersję ze znaczkiem)
+drop function if exists public.list_notifications(int, int);
+create function public.list_notifications(p_limit int default 30, p_offset int default 0)
 returns table (
   id uuid, type text, created_at timestamptz, is_read boolean,
   actor_id uuid, actor_username text, actor_full_name text, actor_avatar_url text,

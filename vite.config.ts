@@ -73,9 +73,9 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],
         manifest: {
-          name: 'Przepisy',
-          short_name: 'Przepisy',
-          description: 'Twoja kolekcja przepisów kulinarnych',
+          name: 'ReciPro',
+          short_name: 'ReciPro',
+          description: 'Książka kucharska z importem przepisów przez AI i społecznością',
           lang: 'pl',
           start_url: '/',
           scope: '/',
@@ -95,8 +95,9 @@ export default defineConfig(({ mode }) => {
           globIgnores: ['splash/**'], // ekrany startowe czyta system, nie trzeba ich w cache
           // baza składników (~1,8 MB) też ma być dostępna offline
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-          // /api/* zawsze idzie do sieci (serverless functions), nigdy do fallbacku SPA
-          navigateFallbackDenylist: [/^\/api\//],
+          // /api/* zawsze idzie do sieci (serverless functions), a statyczne strony prawne (public/*.html) otwierają się
+          // jako osobne dokumenty — żadna z nich nie może dostać fallbacku SPA
+          navigateFallbackDenylist: [/^\/api\//, /^\/(regulamin|prywatnosc|usun-konto)\.html$/],
         },
         devOptions: { enabled: false },
       }),

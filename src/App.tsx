@@ -8,6 +8,7 @@ import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { isPasswordRecovery } from '@/lib/authRecovery'
 import { draftForSaving } from '@/lib/cookbook'
+import { emit } from '@/lib/events'
 import { isCreator } from '@/lib/verified'
 import { deleteRecipeImage } from '@/lib/images'
 import { markAppReady } from '@/lib/splash'
@@ -19,6 +20,7 @@ import { useRecipes } from '@/hooks/useRecipes'
 import { useSession } from '@/hooks/useSession'
 import { MenuIcon } from '@/components/Icons'
 import { LargeTitleScreen, type LargeTitleScreenHandle } from '@/components/LargeTitleScreen'
+import { ModerationLayer } from '@/components/ModerationLayer'
 import { NotificationToast } from '@/components/NotificationToast'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { PushedScreen } from '@/components/PushedScreen'
@@ -44,10 +46,12 @@ import { LoginScreen } from '@/screens/LoginScreen'
 import { MyActivityScreen } from '@/screens/MyActivityScreen'
 import { DietScreen } from '@/screens/DietScreen'
 import { PeopleListScreen, type ListKind } from '@/screens/PeopleListScreen'
+import { PrivacyScreen } from '@/screens/PrivacyScreen'
 import { ProfileSetupScreen } from '@/screens/ProfileSetupScreen'
 import { ProfileView } from '@/screens/ProfileView'
 import { RecipeDetailScreen } from '@/screens/RecipeDetailScreen'
 import { RecipeListScreen } from '@/screens/RecipeListScreen'
+import { ReportsScreen } from '@/screens/ReportsScreen'
 import { SearchScreen } from '@/screens/SearchScreen'
 import { SetNewPasswordScreen } from '@/screens/SetNewPasswordScreen'
 
@@ -131,6 +135,8 @@ type SheetState =
   | { kind: 'interests' }
   | { kind: 'change-password' }
   | { kind: 'my-activity' }
+  | { kind: 'privacy' }
+  | { kind: 'reports' }
   | { kind: 'admin-panel' }
   | { kind: 'calories' }
   | { kind: 'invites' }
@@ -268,6 +274,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onOpenRecipe={openRecipe}
             onOpenProfile={openProfile}
             onGoSearch={() => changeTab('search')}
+            meId={me.id}
             onOpenActivity={openActivity}
             onOpenComments={(recipe, focus) => setSheet({ kind: 'comments', recipe, focus, expanded: false })}
             onOpenLikers={openLikers}
@@ -408,6 +415,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
             onEditProfile={() => setSheet({ kind: 'edit-profile' })}
             onInterests={() => setSheet({ kind: 'interests' })}
             onMyActivity={() => setSheet({ kind: 'my-activity' })}
+            onPrivacy={() => setSheet({ kind: 'privacy' })}
             onChangePassword={usesSupabase ? () => setSheet({ kind: 'change-password' }) : undefined}
             onAdminPanel={isAdmin ? () => setSheet({ kind: 'admin-panel' }) : undefined}
             onSignOut={onSignOut}
@@ -469,7 +477,18 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               onOpenCalories={() => setSheet({ kind: 'calories' })}
               onOpenInvites={() => setSheet({ kind: 'invites' })}
               onOpenBadges={() => setSheet({ kind: 'badges' })}
+              onOpenReports={() => setSheet({ kind: 'reports' })}
             />
+          </Sheet>
+        )}
+        {sheet?.kind === 'privacy' && (
+          <Sheet key="privacy" onClose={() => setSheet(null)}>
+            <PrivacyScreen me={me} onClose={() => setSheet(null)} />
+          </Sheet>
+        )}
+        {sheet?.kind === 'reports' && isAdmin && (
+          <Sheet key="reports" onClose={() => setSheet({ kind: 'admin-panel' })}>
+            <ReportsScreen onClose={() => setSheet({ kind: 'admin-panel' })} />
           </Sheet>
         )}
         {sheet?.kind === 'badges' && isAdmin && (
@@ -547,6 +566,16 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
           </Sheet>
         )}
       </AnimatePresence>
+      {/* Zgłaszanie i blokowanie z dowolnego miejsca (przycisk „…” na karcie, przepisie, komentarzu, profilu) */}
+      <ModerationLayer
+        onBlocked={(userId, username) => {
+          setSheet(null)
+          // Ekrany zablokowanej osoby zamykamy; reszta stosu zostaje. Feed i wyszukiwarka pobierają dane od nowa.
+          setStack((s) => s.filter((e) => !(e.kind === 'recipe' && e.recipe.user_id === userId) && !(e.kind === 'profile' && e.username === username)))
+          emit('visibility-changed')
+          bump()
+        }}
+      />
       <NotificationToast
         notification={top?.kind === 'activity' ? null : notes.latest}
         onOpen={openActivity}

@@ -6,11 +6,13 @@ interface Props {
   onClose: () => void
   /** `full` (domyślnie): prawie cały ekran. `large`: ok. ¾ ekranu, jak panel komentarzy w Instagramie */
   size?: 'full' | 'large'
+  /** Ponad innymi arkuszami i menu (np. zgłoszenie treści otwierane z otwartego panelu komentarzy) */
+  elevated?: boolean
   children: ReactNode
 }
 
 /** Modalny sheet w stylu iOS: sprężynowy wjazd, przeciągnięcie za uchwyt zamyka */
-export function Sheet({ onClose, size = 'full', children }: Props) {
+export function Sheet({ onClose, size = 'full', elevated, children }: Props) {
   const controls = useDragControls()
   // `interactive-widget=resizes-content` w index.html już każe przeglądarce kurczyć realny viewport
   // pod klawiaturę ekranową — zwykłe `bottom-0`/`vh` same za tym nadążają, bez dodatkowego JS
@@ -20,7 +22,7 @@ export function Sheet({ onClose, size = 'full', children }: Props) {
   return (
     <>
       <motion.div
-        className="fixed inset-0 z-40 bg-black/40"
+        className={`fixed inset-0 bg-black/40 ${elevated ? 'z-[72]' : 'z-40'}`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -30,7 +32,7 @@ export function Sheet({ onClose, size = 'full', children }: Props) {
       <motion.div
         role="dialog"
         aria-modal="true"
-        className="fixed inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-[28px] bg-bg shadow-2xl transition-[top] duration-300 ease-out"
+        className={`fixed inset-x-0 bottom-0 flex flex-col overflow-hidden rounded-t-[28px] bg-bg shadow-2xl transition-[top] duration-300 ease-out ${elevated ? 'z-[75]' : 'z-50'}`}
         style={{ top }}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}

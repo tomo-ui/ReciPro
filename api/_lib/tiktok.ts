@@ -24,8 +24,6 @@ export interface TikTokInfo {
   canonicalUrl: string
   caption: string
   author?: string
-  /** Podpisany adres miniaturki — wygasa po ok. 48 h, trzeba go zapisać u siebie (image.ts) */
-  thumbnailUrl?: string
 }
 
 const UA =
@@ -83,7 +81,7 @@ async function fromOEmbed(canonicalUrl: string, fetchImpl: typeof fetch): Promis
     if (!res.ok) return null
     const j = (await res.json()) as Record<string, unknown>
     const caption = str(j.title)
-    return caption ? { caption, author: str(j.author_name), thumbnailUrl: str(j.thumbnail_url) } : null
+    return caption ? { caption, author: str(j.author_name) } : null
   } catch {
     return null
   }
@@ -97,13 +95,7 @@ export function captionFromPageHtml(html: string): Omit<TikTokInfo, 'canonicalUr
     const data = JSON.parse(m[1]) as any
     const item = data?.__DEFAULT_SCOPE__?.['webapp.video-detail']?.itemInfo?.itemStruct
     const caption = str(item?.desc)
-    return caption
-      ? {
-          caption,
-          author: str(item?.author?.uniqueId),
-          thumbnailUrl: str(item?.video?.originCover) ?? str(item?.video?.cover),
-        }
-      : null
+    return caption ? { caption, author: str(item?.author?.uniqueId) } : null
   } catch {
     return null
   }
@@ -113,18 +105,7 @@ export async function fetchTikTokInfo(rawUrl: string, fetchImpl: typeof fetch = 
   const canonicalUrl = await resolveTikTokUrl(rawUrl, fetchImpl)
 
   const viaOEmbed = await fromOEmbed(canonicalUrl, fetchImpl)
-  if (viaOEmbed) {
-    // oEmbed bywa bez miniaturki (zależnie od regionu serwera) — próbujemy jeszcze danych ze strony filmu
-    if (!viaOEmbed.thumbnailUrl) {
-      try {
-        const { html } = await fetchHtml(canonicalUrl, { fetchImpl, timeoutMs: 5000 })
-        viaOEmbed.thumbnailUrl = captionFromPageHtml(html)?.thumbnailUrl
-      } catch {
-        /* bez miniaturki — przepis i tak się zaimportuje */
-      }
-    }
-    return { canonicalUrl, ...viaOEmbed }
-  }
+  if (viaOEmbed) return { canonicalUrl, ...viaOEmbed }
 
   try {
     const { html } = await fetchHtml(canonicalUrl, { fetchImpl })

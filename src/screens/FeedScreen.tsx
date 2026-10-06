@@ -6,6 +6,7 @@ import { backend } from '@/lib/data'
 import { on } from '@/lib/events'
 import { FEATURES } from '@/lib/features'
 import { spreadAuthors } from '@/lib/feedOrder'
+import { openModeration } from '@/lib/moderationUi'
 import { usePaged } from '@/hooks/usePaged'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { FeedCard } from '@/components/FeedCard'
@@ -29,6 +30,8 @@ interface Props {
   /** Zapisuje przepis w książce (albo usuwa zapis) */
   onToggleSave: (recipe: Recipe) => Promise<void>
   onGoSearch: () => void
+  /** Id zalogowanego użytkownika — własne przepisy nie mają menu „Zgłoś / Zablokuj” */
+  meId: string
   /** Centrum powiadomień i liczba nieprzeczytanych */
   onOpenActivity: () => void
   unread: number
@@ -44,7 +47,7 @@ const newSeed = () => crypto.randomUUID()
  * w obrębie jednego odświeżenia (ziarno), więc doładowywanie nie powtarza pozycji.
  * „Najnowsze” pokazuje chronologicznie tylko obserwowanych.
  */
-export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenComments, onOpenLikers, savedIds, onToggleSave, onGoSearch, onOpenActivity, unread, topRef }: Props) {
+export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenComments, onOpenLikers, savedIds, onToggleSave, onGoSearch, meId, onOpenActivity, unread, topRef }: Props) {
   const [mode, setMode] = useState<FeedMode>('foryou')
   const [seed, setSeed] = useState(newSeed)
   // Przepisy tego samego autora nie idą jeden po drugim (także na granicy stron; wyświetlone karty się nie przestawiają)
@@ -134,6 +137,11 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenC
               onOpenLikers={() => onOpenLikers(r)}
               saved={savedIds.has(r.id)}
               onToggleSave={() => onToggleSave(r)}
+              onMore={
+                r.user_id && r.author && r.user_id !== meId
+                  ? () => openModeration({ target: { type: 'recipe', id: r.id }, userId: r.user_id!, username: r.author!.username, label: `Przepis: ${r.title}` })
+                  : undefined
+              }
             />
           ))}
           <LoadMore loading={feed.loading} done={feed.done} error={feed.error} onLoadMore={feed.loadMore} onRetry={feed.retry} />

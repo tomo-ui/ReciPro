@@ -5,6 +5,7 @@ import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 import { FEATURES } from '@/lib/features'
 import { backend } from '@/lib/data'
 import { on } from '@/lib/events'
+import { openModeration } from '@/lib/moderationUi'
 import { usePaged } from '@/hooks/usePaged'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { Avatar } from '@/components/Avatar'
@@ -12,7 +13,7 @@ import { DietTab } from '@/components/DietTab'
 import { GoalsTab } from '@/components/GoalsTab'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { FollowButton } from '@/components/FollowButton'
-import { ClockIcon, CommentIcon, FlameIcon, GridIcon, HeartIcon, LinkIcon, LockIcon, PlusIcon, RowsIcon, SpinnerIcon, UsersIcon } from '@/components/Icons'
+import { ClockIcon, CommentIcon, FlameIcon, GridIcon, HeartIcon, LinkIcon, LockIcon, MoreIcon, PlusIcon, RowsIcon, SpinnerIcon, UsersIcon } from '@/components/Icons'
 import { formatCount, formatMinutes, totalTime } from '@/lib/ui'
 import { kcalPerServing } from '@/lib/nutrition'
 import { useRecipeNutrition } from '@/hooks/useFoodDb'
@@ -227,9 +228,19 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
               </motion.button>
             </>
           ) : (
-            <div className="flex-1 [&>button]:w-full">
-              <FollowButton userId={profile.id} following={profile.is_following} onChange={setFollowing} />
-            </div>
+            <>
+              <div className="flex-1 [&>button]:w-full">
+                <FollowButton userId={profile.id} following={profile.is_following} onChange={setFollowing} />
+              </div>
+              <motion.button
+                whileTap={{ scale: 0.92 }}
+                onClick={() => openModeration({ target: { type: 'profile', id: profile.id }, userId: profile.id, username: profile.username, label: `Profil @${profile.username}` })}
+                aria-label="Więcej: zgłoś lub zablokuj"
+                className="flex w-11 shrink-0 items-center justify-center rounded-[10px] bg-surface-2 text-label"
+              >
+                <MoreIcon width={20} height={20} />
+              </motion.button>
+            </>
           )}
         </div>
 

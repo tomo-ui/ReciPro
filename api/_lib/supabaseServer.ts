@@ -14,8 +14,13 @@ export interface ServerSupabaseConfig {
 export function makeServerClients({ url, anonKey, serviceRoleKey }: ServerSupabaseConfig) {
   return {
     anon: createClient(url, anonKey, { auth: { persistSession: false } }),
-    admin: createClient(url, serviceRoleKey, { auth: { persistSession: false } }),
+    admin: makeAdminClient({ url, serviceRoleKey }),
   }
+}
+
+/** Sam klient z kluczem service_role (omija RLS): limity zapytań, sprawdzanie zgód, usuwanie kont. Tylko po stronie serwera. */
+export function makeAdminClient({ url, serviceRoleKey }: Pick<ServerSupabaseConfig, 'url' | 'serviceRoleKey'>): SupabaseClient {
+  return createClient(url, serviceRoleKey, { auth: { persistSession: false } })
 }
 
 /**

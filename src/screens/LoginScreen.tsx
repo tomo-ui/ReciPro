@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { LOGO_TARGET_ID, markAppReady, useLogoLanded } from '@/lib/splash'
+import { LEGAL, MIN_AGE } from '@/lib/legal'
 import { normalizeFullName, normalizeUsername } from '@/lib/username'
 import { useUsernameCheck } from '@/hooks/useUsernameCheck'
 import { AppLogo } from '@/components/AppLogo'
@@ -68,6 +69,8 @@ export function LoginScreen() {
   const [username, setUsername] = useState('')
   const [fullName, setFullName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
+  // Rejestracja wymaga świadomej akceptacji regulaminu i polityki prywatności oraz potwierdzenia wieku
+  const [accepted, setAccepted] = useState(false)
 
   // Logowanie odbywa się nazwą użytkownika (nie e-mailem) — osobne pole/stan od `username` rejestracji,
   // bo to pole nie jest sprawdzane pod kątem reguł/dostępności jak przy zakładaniu konta
@@ -84,7 +87,7 @@ export function LoginScreen() {
   // Nazwa użytkownika jest sprawdzana (reguły + dostępność) tylko w trybie rejestracji
   const usernameStatus = useUsernameCheck(signup ? username : '')
   const canSubmit = signup
-    ? email.includes('@') && password.length >= MIN_PASSWORD && password2 === password && usernameStatus.state === 'ok' && inviteCode.trim().length === 5
+    ? email.includes('@') && password.length >= MIN_PASSWORD && password2 === password && usernameStatus.state === 'ok' && inviteCode.trim().length === 5 && accepted
     : loginUsername.trim().length > 0 && password.length > 0
 
   function switchMode(next: Mode) {
@@ -150,6 +153,8 @@ export function LoginScreen() {
             username: normalizeUsername(username),
             full_name: normalizeFullName(fullName) ?? '',
             invite_code: inviteCode.trim().toUpperCase(),
+            accepted_terms_at: new Date().toISOString(),
+            terms_version: '1.0',
           },
         },
       })
@@ -201,7 +206,7 @@ export function LoginScreen() {
             <AppLogo key={wink} size={80} play={wink > 0} />
           </button>
         </div>
-        <h1 className="text-center text-[28px] font-bold tracking-tight">Przepisy</h1>
+        <h1 className="text-center text-[28px] font-bold tracking-tight">ReciPro</h1>
         <p className="mt-1 mb-6 text-center text-[15px] text-label-2">
           {forgot ? 'Ustaw nowe hasło.' : signup ? 'Załóż konto, żeby zapisywać przepisy w chmurze.' : 'Zaloguj się, żeby synchronizować przepisy.'}
         </p>
@@ -380,6 +385,23 @@ export function LoginScreen() {
             )}
           </AnimatePresence>
 
+          {signup && (
+            <label className="mt-3 flex items-start gap-2.5 px-1 text-[13px] text-label-2">
+              <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Mam co najmniej {MIN_AGE} lat i akceptuję{' '}
+                <a href={LEGAL.terms} target="_blank" rel="noopener noreferrer" className="font-medium text-accent">
+                  Regulamin
+                </a>{' '}
+                oraz{' '}
+                <a href={LEGAL.privacy} target="_blank" rel="noopener noreferrer" className="font-medium text-accent">
+                  Politykę prywatności
+                </a>
+                .
+              </span>
+            </label>
+          )}
+
           {!signup && (
             <button type="button" onClick={() => setForgot(true)} className="mt-2 block w-full text-right text-[13px] font-medium text-accent">
               Nie pamiętam hasła
@@ -423,6 +445,16 @@ export function LoginScreen() {
         )}
           </>
         )}
+
+        <p className="mt-6 text-center text-[12px] text-label-3">
+          <a href={LEGAL.terms} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+            Regulamin
+          </a>{' '}
+          ·{' '}
+          <a href={LEGAL.privacy} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+            Polityka prywatności
+          </a>
+        </p>
       </motion.div>
       </div>
     </div>

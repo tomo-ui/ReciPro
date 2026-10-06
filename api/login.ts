@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { allow, clientIp, hashId, LIMITS } from './_lib/rateLimit.js'
 import { emailForUsername, isForeignOrigin, makeServerClients } from './_lib/supabaseServer.js'
 
 const GENERIC_ERROR = 'Nieprawidłowa nazwa użytkownika lub hasło.'
@@ -35,6 +36,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { anon, admin } = makeServerClients({ url, anonKey, serviceRoleKey })
+
+    // Limity prób: osobno na adres IP i na nazwę użytkownika (zgadywanie haseł jednego konta z wielu adresów)
+    const withinLimits =
+      (await allow(admin, `login-ip:${hashId(clientIp(req.headers))}`, LIMITS.loginIp)) &&
+      (await allow(admin, `login-user:${hashId(username)}`, LIMITS.loginUser))
+    if (!withinLimits) {
+      res.setHeader('retry-after', String(LIMITS.loginUser.windowSeconds))
+      return res.status(429).json({ error: 'Zbyt wiele prób logowania. Spróbuj ponownie za kilkanaście minut.', code: 'rate_limited' })
+    }
+
     const email = await emailForUsername(admin, username)
     if (!email) {
       return res.status(401).json({ error: GENERIC_ERROR, code: 'invalid_credentials' })

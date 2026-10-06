@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { motion, useDragControls } from 'framer-motion'
+import { useMemo, useState } from 'react'
+import { AnimatePresence, motion, useDragControls } from 'framer-motion'
 import type { Recipe, RecipeDraft } from '@/types/recipe'
 import { normalizeIngredient } from '@/lib/ingredients'
 import { scaleFactor, scaleIngredient } from '@/lib/scale'
@@ -7,11 +7,13 @@ import { formatMinutes, spring, totalTime } from '@/lib/ui'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { Avatar } from '@/components/Avatar'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
-import { BookmarkIcon, ChevronLeftIcon, ClockIcon, LockIcon, CommentIcon, MinusIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
+import { BookmarkIcon, ChevronLeftIcon, ClockIcon, FlameIcon, LockIcon, CommentIcon, MinusIcon, MoreIcon, PencilIcon, PlusIcon, TrashIcon, UsersIcon } from '@/components/Icons'
 import { LikeButton } from '@/components/LikeButton'
 import { NutritionSection } from '@/components/NutritionSection'
 import { FEATURES } from '@/lib/features'
+import { openModeration } from '@/lib/moderationUi'
 import { Cover } from '@/components/RecipeCard'
+import { CookingMode } from '@/components/CookingMode'
 
 interface Props {
   recipe: Recipe
@@ -47,6 +49,7 @@ const MAX_SERVINGS = 99
 
 export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, onOpenAuthor, onOpenComments, onOpenLikers, onSaveCopy, saved, onToggleSave }: Props) {
   const [savingBook, setSavingBook] = useState(false)
+  const [cooking, setCooking] = useState(false)
   const controls = useDragControls()
   const { stats, set: setStats } = useRecipeStats([recipe])
   const recipeStats = stats[recipe.id]
@@ -57,6 +60,15 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
   const [target, setTarget] = useState(original ?? 0)
   const factor = scaleFactor(original, target) ?? 1
   const scaledView = original !== undefined && target !== original
+  // Składniki dla trybu gotowania: te same ilości, które widać na ekranie (po przeliczeniu porcji)
+  const cookingIngredients = useMemo(
+    () =>
+      recipe.ingredients.map((i) => {
+        const text = normalizeIngredient(i.text)
+        return { text: scaledView ? scaleIngredient(text, factor).text : text, group: i.group }
+      }),
+    [recipe.ingredients, scaledView, factor],
+  )
 
   return (
     <motion.div
@@ -168,6 +180,16 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
             )}
           </div>
 
+          {recipe.steps.length > 0 && (
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setCooking(true)}
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-[16px] bg-accent py-4 text-[18px] font-bold text-white shadow-sm"
+            >
+              <FlameIcon width={22} height={22} /> Zacznij gotować
+            </motion.button>
+          )}
+
           <Section title="Składniki">
             {original !== undefined && (
               <div className="mb-3 rounded-[14px] bg-surface p-3">
@@ -270,6 +292,18 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
         </div>
       </div>
 
+      <AnimatePresence>
+        {cooking && (
+          <CookingMode
+            title={recipe.title}
+            steps={recipe.steps}
+            ingredients={cookingIngredients}
+            servingsNote={scaledView ? `Ilości przeliczone na ${target} ${target === 1 ? 'porcję' : 'porcji'} (w przepisie: ${original}).` : undefined}
+            onClose={() => setCooking(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Pływające przyciski: wstecz i (dla autora) edycja */}
       <div className="absolute inset-x-0 top-0 z-20 pt-safe-top">
         <div className="flex h-11 items-center justify-between px-[max(12px,env(safe-area-inset-left))]">
@@ -281,6 +315,18 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
           >
             <ChevronLeftIcon />
           </motion.button>
+          {!isOwner && recipe.user_id && recipe.author && (
+            <motion.button
+              whileTap={{ scale: 0.88 }}
+              onClick={() =>
+                openModeration({ target: { type: 'recipe', id: recipe.id }, userId: recipe.user_id!, username: recipe.author!.username, label: `Przepis: ${recipe.title}` })
+              }
+              aria-label="Więcej: zgłoś lub zablokuj"
+              className="glass flex h-9 w-9 items-center justify-center rounded-full text-label shadow-sm"
+            >
+              <MoreIcon />
+            </motion.button>
+          )}
           {isOwner && (
             <motion.button
               whileTap={{ scale: 0.88 }}

@@ -2,6 +2,7 @@ import type { Diet, MealTemplate } from '@/types/diet'
 import { newMeals, itemFromRecipe, sanitizeDiet, sanitizeMealTemplate, withPortions } from './diet'
 import type { AppNotification, Comment, MyActivityItem, Profile, ProfileSummary, Recipe, RecipeDraft, RecipeStats } from '@/types/recipe'
 import type { Backend, FeedMode, InviteCode, ProfilePatch, RecipeSort, TopCreator } from './backend'
+import type { BlockedUser, ModerationReport } from '@/types/moderation'
 import type { VerifiedBadgeTier } from './badgeTiers'
 import { emit, on } from './events'
 import { normalizeInterests } from './interests'
@@ -34,6 +35,9 @@ const KEYS = {
   inviteCodes: 'przepisy:v2:inviteCodes',
   verifiedBadges: 'przepisy:v2:verifiedBadges',
   myActivity: 'przepisy:v2:myActivity',
+  blocks: 'przepisy:v2:blocks',
+  reports: 'przepisy:v2:reports',
+  aiConsent: 'przepisy:v2:aiConsent',
 }
 
 /* — magazyn: localStorage, a gdy go brak (testy, tryb prywatny) — pamięć — */
@@ -264,7 +268,13 @@ function randomInviteCode(): string {
   }
   return result
 }
-const visibleDemo = () => (isAdmin() && read<boolean>(KEYS.hideTestAccounts, () => false) ? [] : demo)
+/** Zablokowani przeze mnie (id profili); w trybie demo blokować można przykładowych użytkowników */
+const loadBlocks = () => new Set(read<string[]>(KEYS.blocks, () => []))
+const visibleDemo = () => {
+  if (isAdmin() && read<boolean>(KEYS.hideTestAccounts, () => false)) return []
+  const blocked = loadBlocks()
+  return blocked.size === 0 ? demo : demo.filter((d) => !blocked.has(d.profile.id))
+}
 const publicDemoRecipes = () => visibleDemo().filter((d) => d.profile.is_public).flatMap((d) => d.recipes.map((r) => withAuthor(r, d.profile)))
 
 const withAuthor = (r: Recipe, p: Profile): Recipe => ({
@@ -275,6 +285,7 @@ const withAuthor = (r: Recipe, p: Profile): Recipe => ({
 const defaultProfile = (): Profile => ({ id: LOCAL_USER_ID, username: 'ty', full_name: 'Ty', is_public: true })
 const loadMe = () => read<Profile>(KEYS.profile, defaultProfile)
 const loadFollows = () => new Set(read<string[]>(KEYS.follows, () => []))
+const loadReports = () => read<ModerationReport[]>(KEYS.reports, () => [])
 const saveFollows = (s: Set<string>) => write(KEYS.follows, [...s])
 
 function loadOwn(): Recipe[] {
@@ -651,6 +662,110 @@ export const localBackend: Backend = {
     write(KEYS.verifiedBadges, { ...overrides, [u]: badge })
   },
 
+  async countOpenReports() {
+    if (!isAdmin()) return 0
+    return loadReports().filter((r) => r.status === 'open').length
+  },
+
+  async listReports(status, offset, limit) {
+    if (!isAdmin()) throw new Error('Brak uprawnień.')
+    const list = loadReports().filter((r) => status === 'all' || r.status === status)
+    list.sort((a, b) => (status === 'open' ? a.created_at.localeCompare(b.created_at) : b.created_at.localeCompare(a.created_at)))
+    return page(list, offset, limit)
+  },
+
+  async resolveReport(reportId, action) {
+    if (!isAdmin()) throw new Error('Brak uprawnień.')
+    const reports = loadReports()
+    const rep = reports.find((r) => r.id === reportId)
+    if (!rep) throw new Error('Nie znaleziono zgłoszenia.')
+    if (action === 'remove_content') {
+      if (rep.target_type === 'profile') throw new Error('Profilu nie da się usunąć w ten sposób.')
+      if (rep.target_type === 'recipe') saveOwn(loadOwn().filter((r) => r.id !== rep.target_id))
+      else saveComments(loadComments().filter((c) => c.id !== rep.target_id))
+    }
+    const done: ModerationReport['status'] = action === 'dismiss' ? 'dismissed' : 'resolved'
+    const closes = (r: ModerationReport) =>
+      action === 'dismiss' ? r.id === reportId : r.status === 'open' && r.target_type === rep.target_type && r.target_id === rep.target_id
+    write(KEYS.reports, reports.map((r) => (closes(r) ? { ...r, status: done, action } : r)))
+  },
+
+  async removeUserAccount(userId) {
+    if (!isAdmin()) throw new Error('Brak uprawnień.')
+    write(KEYS.reports, loadReports().map((r) => (r.target_user_id === userId && r.status === 'open' ? { ...r, status: 'resolved' as const, action: 'remove_account' } : r)))
+  },
+
+  async reportContent(target, reason, details) {
+    const reports = loadReports()
+    if (reports.some((r) => r.target_type === target.type && r.target_id === target.id && r.reporter_username === loadMe().username)) return
+    const owner = (() => {
+      if (target.type === 'profile') return allProfiles().find((p) => p.id === target.id)
+      const recipe = [...loadOwn(), ...publicDemoRecipes()].find((r) => r.id === (target.type === 'recipe' ? target.id : loadComments().find((c) => c.id === target.id)?.recipe_id))
+      return recipe ? allProfiles().find((p) => p.id === recipe.user_id) : undefined
+    })()
+    const excerpt =
+      target.type === 'profile'
+        ? owner?.username
+        : target.type === 'comment'
+          ? loadComments().find((c) => c.id === target.id)?.body
+          : [...loadOwn(), ...publicDemoRecipes()].find((r) => r.id === target.id)?.title
+    const rep: ModerationReport = {
+      id: crypto.randomUUID(),
+      target_type: target.type,
+      target_id: target.id,
+      target_user_id: owner?.id,
+      target_username: owner?.username,
+      excerpt: excerpt?.slice(0, 300),
+      reason,
+      details: details?.trim() || undefined,
+      status: 'open',
+      created_at: new Date().toISOString(),
+      reporter_username: loadMe().username,
+      reports_count: 1,
+    }
+    write(KEYS.reports, [rep, ...reports])
+  },
+
+  async blockUser(userId) {
+    if (userId === loadMe().id) throw new Error('Nie możesz zablokować samego siebie.')
+    write(KEYS.blocks, [...new Set([...loadBlocks(), userId])])
+    const f = loadFollows()
+    f.delete(userId)
+    saveFollows(f)
+  },
+
+  async unblockUser(userId) {
+    const b = loadBlocks()
+    b.delete(userId)
+    write(KEYS.blocks, [...b])
+  },
+
+  async listBlockedUsers(offset, limit) {
+    const blocked = loadBlocks()
+    const list = demo
+      .filter((d) => blocked.has(d.profile.id))
+      .map((d): BlockedUser => ({ id: d.profile.id, username: d.profile.username, full_name: d.profile.full_name, avatar_url: d.profile.avatar_url, blocked_at: new Date(0).toISOString() }))
+    return page(list, offset, limit)
+  },
+
+  async getAiConsent() {
+    return read<boolean>(KEYS.aiConsent, () => false)
+  },
+
+  async setAiConsent(granted) {
+    write(KEYS.aiConsent, granted)
+  },
+
+  async deleteAccount() {
+    // Tryb lokalny: kasujemy wszystko, co aplikacja trzyma w przeglądarce
+    for (const key of Object.values(KEYS)) memory.delete(key)
+    try {
+      if (typeof localStorage !== 'undefined') for (const key of Object.values(KEYS)) localStorage.removeItem(key)
+    } catch {
+      /* tryb prywatny — nic do usunięcia */
+    }
+  },
+
   async getInterests() {
     return loadInterests()
   },
@@ -809,7 +924,10 @@ export const localBackend: Backend = {
   },
 
   async listComments(recipeId, offset, limit) {
-    const list = loadComments().filter((c) => c.recipe_id === recipeId).sort((a, b) => b.created_at.localeCompare(a.created_at))
+    const blockedNames = new Set(demo.filter((d) => loadBlocks().has(d.profile.id)).map((d) => d.profile.username))
+    const list = loadComments()
+      .filter((c) => c.recipe_id === recipeId && !blockedNames.has(c.author.username))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
     const likedIds = loadCommentLikes()
     return page(list, offset, limit).map((c) => withCommentLikes(c, likedIds))
   },

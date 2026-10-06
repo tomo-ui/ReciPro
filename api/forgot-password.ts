@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { allow, clientIp, hashId, LIMITS } from './_lib/rateLimit.js'
 import { emailForUsername, isForeignOrigin, makeServerClients } from './_lib/supabaseServer.js'
 
 /**
@@ -29,6 +30,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { anon, admin } = makeServerClients({ url, anonKey, serviceRoleKey })
+
+    // Po przekroczeniu limitu nie wysyłamy maila, ale odpowiadamy tak samo — limit nie może zdradzać, czy konto istnieje
+    const withinLimits =
+      (await allow(admin, `reset-ip:${hashId(clientIp(req.headers))}`, LIMITS.resetIp)) &&
+      (await allow(admin, `reset-user:${hashId(username)}`, LIMITS.resetUser))
+    if (!withinLimits) return res.status(200).json({ ok: true })
+
     const email = await emailForUsername(admin, username)
     if (email) {
       const redirectTo = req.headers.origin ?? `https://${req.headers.host}`

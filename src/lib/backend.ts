@@ -1,5 +1,6 @@
 import type { Diet, DietDraft, MealTemplate, MealTemplateDraft } from '@/types/diet'
 import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
+import type { BlockedUser, ModerationReport, ReportReason, ReportResolution, ReportStatus, ReportTarget } from '@/types/moderation'
 import type {
   AppNotification,
   Comment,
@@ -145,6 +146,31 @@ export interface Backend {
   isAdmin(): Promise<boolean>
   /** Przyznaje/odbiera znaczek weryfikacji danemu użytkownikowi (tylko admin) */
   setVerifiedBadge(username: string, badge: VerifiedBadgeTier | null): Promise<void>
+
+  /* — moderacja (tylko admin) — */
+  /** Liczba otwartych zgłoszeń (0 dla zwykłego użytkownika) */
+  countOpenReports(): Promise<number>
+  /** Zgłoszenia: otwarte od najstarszych (czas reakcji liczy się od zgłoszenia), pozostałe od najnowszych */
+  listReports(status: ReportStatus | 'all', offset: number, limit: number): Promise<ModerationReport[]>
+  /** `dismiss` odrzuca zgłoszenie; `remove_content` usuwa przepis lub komentarz i zamyka wszystkie zgłoszenia tej treści */
+  resolveReport(reportId: string, action: ReportResolution): Promise<void>
+  /** Trwale usuwa cudze konto razem z danymi (serwer, klucz service_role) i zamyka jego otwarte zgłoszenia */
+  removeUserAccount(userId: string): Promise<void>
+
+  /* — blokowanie i zgłaszanie (każdy użytkownik) — */
+  /** Zgłasza przepis, komentarz albo profil do moderacji; ponowne zgłoszenie tej samej treści jest ignorowane */
+  reportContent(target: ReportTarget, reason: ReportReason, details?: string): Promise<void>
+  /** Blokada ukrywa obie strony przed sobą (profil, przepisy, komentarze) i kończy wzajemne obserwowanie */
+  blockUser(userId: string): Promise<void>
+  unblockUser(userId: string): Promise<void>
+  listBlockedUsers(offset: number, limit: number): Promise<BlockedUser[]>
+
+  /* — zgody i konto — */
+  /** Czy użytkownik zgodził się na przetwarzanie importowanych treści przez zewnętrzne AI (wymóg Apple 5.1.2(i)) */
+  getAiConsent(): Promise<boolean>
+  setAiConsent(granted: boolean): Promise<void>
+  /** Trwale usuwa moje konto i wszystkie dane. `confirmUsername` to wpisana na potwierdzenie nazwa użytkownika. */
+  deleteAccount(confirmUsername: string): Promise<void>
 
   /* — zainteresowania (prywatne; kształtują feed Dla Ciebie) — */
   getInterests(): Promise<string[]>

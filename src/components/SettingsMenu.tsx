@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { spring } from '@/lib/ui'
+import { ConfirmDialog } from './ConfirmDialog'
 import { ClockIcon, HeartIcon, LockIcon, PencilIcon, ShieldIcon, SlidersIcon } from './Icons'
 
 interface Props {
@@ -11,6 +12,8 @@ interface Props {
   onInterests: () => void
   /** Moja własna aktywność (polubienia/komentarze, które SAM dodałem) — inne niż powiadomienia pod „Aktywność” */
   onMyActivity: () => void
+  /** Prywatność i bezpieczeństwo: zgoda na AI, zablokowani, regulamin, usunięcie konta */
+  onPrivacy: () => void
   /** Zmiana hasła: tylko przy koncie w Supabase (w trybie lokalnym nie ma prawdziwego uwierzytelniania) */
   onChangePassword?: () => void
   /** Panel admina: tylko dla admina (tabela app_admins), i tylko stąd da się go otworzyć */
@@ -19,7 +22,8 @@ interface Props {
 }
 
 /** Menu z burgera na profilu: aktywność i ustawienia konta (dolny arkusz, jak w Instagramie) */
-export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onMyActivity, onChangePassword, onAdminPanel, onSignOut }: Props) {
+export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onMyActivity, onPrivacy, onChangePassword, onAdminPanel, onSignOut }: Props) {
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
   return (
     <>
       <motion.div
@@ -54,22 +58,20 @@ export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInt
           <Item icon={<PencilIcon width={22} height={22} />} label="Edytuj profil" onClick={onEditProfile} />
           <Item icon={<SlidersIcon width={22} height={22} />} label="Zainteresowania" onClick={onInterests} />
           <Item icon={<ClockIcon width={22} height={22} />} label="Moja aktywność" onClick={onMyActivity} />
+          <Item icon={<LockIcon width={22} height={22} />} label="Prywatność i bezpieczeństwo" onClick={onPrivacy} />
           {onChangePassword && <Item icon={<LockIcon width={22} height={22} />} label="Zmień hasło" onClick={onChangePassword} />}
           {onAdminPanel && <Item icon={<ShieldIcon width={22} height={22} />} label="Panel admina" onClick={onAdminPanel} />}
         </ul>
 
         {onSignOut && (
           <ul className="mt-3 overflow-hidden rounded-[14px] bg-surface">
-            <Item
-              label="Wyloguj się"
-              danger
-              onClick={() => {
-                if (confirm('Wylogować się?')) onSignOut()
-              }}
-            />
+            <Item label="Wyloguj się" danger onClick={() => setConfirmSignOut(true)} />
           </ul>
         )}
       </motion.div>
+      {confirmSignOut && onSignOut && (
+        <ConfirmDialog title="Wylogować się?" confirmLabel="Wyloguj" destructive={false} onConfirm={onSignOut} onCancel={() => setConfirmSignOut(false)} />
+      )}
     </>
   )
 }

@@ -4,6 +4,7 @@ import type { Profile } from '@/types/recipe'
 import { backend } from '@/lib/data'
 import { normalizeFullName } from '@/lib/username'
 import { useUsernameCheck } from '@/hooks/useUsernameCheck'
+import { DeleteAccountPanel } from '@/components/DeleteAccountPanel'
 import { Group } from '@/components/formParts'
 import { SpinnerIcon } from '@/components/Icons'
 import { UsernameInput } from '@/components/UsernameInput'
@@ -22,6 +23,7 @@ export function ProfileSetupScreen({ prefill, initialError, onDone, onSignOut }:
   const [fullName, setFullName] = useState(prefill?.full_name ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(initialError ?? null)
+  const [deleting, setDeleting] = useState(false)
   const status = useUsernameCheck(username)
 
   async function submit(e: FormEvent) {
@@ -35,6 +37,21 @@ export function ProfileSetupScreen({ prefill, initialError, onDone, onSignOut }:
       setError(err instanceof Error ? err.message : 'Nie udało się zapisać profilu.')
       setBusy(false)
     }
+  }
+
+  // Konto bez profilu też da się usunąć (Apple 5.1.1(v): usuwanie dostępne dla każdego konta założonego w aplikacji)
+  if (deleting) {
+    return (
+      <div className="scroll-y fixed inset-0 bg-bg px-6 pt-safe-top pb-safe-bottom">
+        <div className="mx-auto w-full max-w-sm space-y-5 py-10">
+          <h1 className="text-center text-[24px] font-bold tracking-tight">Usuń konto</h1>
+          <DeleteAccountPanel />
+          <button type="button" onClick={() => setDeleting(false)} className="block w-full text-center text-[15px] font-semibold text-accent">
+            Wróć
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -83,6 +100,9 @@ export function ProfileSetupScreen({ prefill, initialError, onDone, onSignOut }:
             Wyloguj się
           </button>
         )}
+        <button type="button" onClick={() => setDeleting(true)} className="block w-full text-center text-[13px] text-label-3">
+          Usuń konto
+        </button>
       </motion.form>
     </div>
   )

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Polityka prywatności — ReciPro</title>
+<meta name="robots" content="index,follow" />
+<style>
+  :root { color-scheme: light dark; --bg:#f2f2f7; --fg:#1c1c1e; --muted:#6b6b72; --card:#fff; --accent:#ff6b35; --line:#d8d8de }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1e1e20; --fg:#f2f2f7; --muted:#a0a0a8; --card:#2a2a2d; --line:#3a3a3e } }
+  * { box-sizing: border-box }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif }
+  main { max-width:720px; margin:0 auto; padding:24px 20px 64px }
+  a { color:var(--accent) }
+  h1 { font-size:28px; margin:8px 0 4px }
+  h2 { font-size:19px; margin:32px 0 8px }
+  p, li { margin:8px 0 }
+  ol, ul { padding-left:22px }
+  table { width:100%; border-collapse:collapse; font-size:14px; background:var(--card); border-radius:10px; overflow:hidden }
+  th, td { text-align:left; vertical-align:top; padding:8px 10px; border-bottom:1px solid var(--line) }
+  th { font-weight:600 }
+  .muted { color:var(--muted); font-size:14px }
+  .back { display:inline-block; margin-bottom:12px; text-decoration:none; font-weight:600 }
+  .todo { background:#fff3cd; color:#664d03; border:1px solid #ffe69c; border-radius:10px; padding:2px 6px; font-weight:600 }
+</style>
+</head>
+<body>
+<main>
+<a class="back" href="/">← ReciPro</a>
+<h1>Polityka prywatności</h1>
+<p class="muted">Obowiązuje od 6 października 2026 · wersja 1.0</p>
+
+<h2>1. Administrator danych</h2>
+<p>Administratorem Twoich danych osobowych jest <span class="todo">[[DO UZUPEŁNIENIA: imię i nazwisko lub firma, adres, NIP]]</span> („my”). Kontakt w sprawach danych osobowych: <span class="todo">[[DO UZUPEŁNIENIA: adres e-mail]]</span>.</p>
+
+<h2>2. Jakie dane przetwarzamy i po co</h2>
+<table>
+  <tr><th>Dane</th><th>Cel</th><th>Podstawa prawna (RODO)</th></tr>
+  <tr><td>Adres e-mail, hasło (przechowywane wyłącznie jako skrót), nazwa użytkownika, imię i nazwisko (opcjonalnie)</td><td>Założenie konta, logowanie, reset hasła</td><td>Art. 6 ust. 1 lit. b — umowa (świadczenie usługi)</td></tr>
+  <tr><td>Zdjęcie profilowe, opis, link w profilu, ustawienie profilu publicznego/prywatnego</td><td>Prezentacja profilu</td><td>Art. 6 ust. 1 lit. b</td></tr>
+  <tr><td>Przepisy (tytuł, składniki, kroki, zdjęcia, tagi), adres źródła, komentarze, polubienia, obserwowani, zainteresowania, zapisane diety i posiłki</td><td>Działanie książki kucharskiej, feedu i funkcji społecznościowych</td><td>Art. 6 ust. 1 lit. b</td></tr>
+  <tr><td>Dane importowane: adres strony, tekst, zrzuty ekranu przesyłane do odczytu</td><td>Import przepisu z pomocą AI (zob. pkt 4)</td><td>Art. 6 ust. 1 lit. a — Twoja zgoda</td></tr>
+  <tr><td>Zgłoszenia, blokady, dane potrzebne do moderacji</td><td>Bezpieczeństwo, reakcja na treści niezgodne z prawem i regulaminem</td><td>Art. 6 ust. 1 lit. f — uzasadniony interes; art. 6 ust. 1 lit. c — obowiązki z DSA</td></tr>
+  <tr><td>Skrót adresu IP i liczniki żądań (nie sam adres IP), dzienniki błędów serwera</td><td>Ochrona przed nadużyciami i atakami, limity logowań i importów, naprawa błędów</td><td>Art. 6 ust. 1 lit. f</td></tr>
+</table>
+<p>Nie sprzedajemy danych, nie wyświetlamy reklam i nie używamy narzędzi analitycznych ani śledzących osób trzecich.</p>
+<p>Dane o dietach i celach żywieniowych, jeśli z nich korzystasz, wpisujesz dobrowolnie i dotyczą wyłącznie Twojego konta. Nie wymagamy ich podawania.</p>
+
+<h2>3. Kto przetwarza dane w naszym imieniu</h2>
+<table>
+  <tr><th>Podmiot</th><th>Rola</th><th>Uwagi</th></tr>
+  <tr><td>Supabase, Inc.</td><td>Baza danych, uwierzytelnianie, przechowywanie plików (zdjęcia)</td><td>Region serwerów: <span class="todo">[[DO UZUPEŁNIENIA: region UE]]</span>; umowa powierzenia (DPA)</td></tr>
+  <tr><td>Vercel Inc.</td><td>Hosting aplikacji i funkcji serwerowych</td><td>Przetwarza dane techniczne żądań; umowa powierzenia (DPA)</td></tr>
+  <tr><td>Google LLC / Google Ireland Ltd.</td><td>Usługa Gemini API — odczyt treści przepisu (tylko po Twojej zgodzie)</td><td>Zob. pkt 4</td></tr>
+</table>
+<p>Część podmiotów ma siedzibę poza Europejskim Obszarem Gospodarczym (USA). Przekazanie danych odbywa się na podstawie standardowych klauzul umownych lub certyfikacji w ramach EU–US Data Privacy Framework.</p>
+
+<h2>4. Import przepisów z użyciem AI</h2>
+<ol>
+  <li>Gdy importujesz przepis, wysyłamy do dostawcy AI (Google Gemini) <strong>tylko to, co do importu przekazujesz</strong>: treść pobraną ze wskazanej strony lub posta, wklejony tekst albo zrzuty ekranu. Zdjęcia do odczytu nie są zapisywane na naszych serwerach.</li>
+  <li>Przed pierwszym importem prosimy o zgodę. Możesz ją <strong>cofnąć w każdej chwili</strong> (Ustawienia → Prywatność i AI); bez zgody import jest niedostępny, a pozostałe funkcje działają.</li>
+  <li>Korzystamy z płatnej usługi Gemini API, w której — zgodnie z warunkami dostawcy — przesłane treści nie są wykorzystywane do ulepszania jego produktów ani trenowania modeli. <span class="todo">[[DO POTWIERDZENIA przed publikacją: włączony płatny poziom API]]</span></li>
+  <li>Nie przesyłaj zdjęć ani tekstów zawierających cudze dane osobowe lub dane wrażliwe — import służy do odczytu przepisów.</li>
+</ol>
+
+<h2>5. Jak długo przechowujemy dane</h2>
+<ul>
+  <li>Dane konta i treści — do czasu usunięcia konta (można to zrobić w aplikacji).</li>
+  <li>Po usunięciu konta wszystkie jego dane i treści są kasowane od razu; kopie zapasowe dostawcy są nadpisywane w ciągu około 30 dni.</li>
+  <li>Zgłoszenia moderacyjne — do 12 miesięcy od rozpatrzenia (dłużej, jeśli wymagają tego przepisy lub toczy się postępowanie).</li>
+  <li>Liczniki żądań i skróty adresów IP — nie dłużej niż 24 godziny; dzienniki błędów — do 30 dni.</li>
+</ul>
+
+<h2>6. Twoje prawa</h2>
+<p>Masz prawo do: dostępu do danych, ich sprostowania, usunięcia (konto usuniesz sam w aplikacji), ograniczenia przetwarzania, przenoszenia danych oraz sprzeciwu wobec przetwarzania opartego na uzasadnionym interesie. Zgodę możesz cofnąć w dowolnym momencie bez wpływu na zgodność z prawem wcześniejszego przetwarzania. Aby skorzystać z praw, napisz na adres z punktu 1. Masz też prawo wnieść skargę do Prezesa Urzędu Ochrony Danych Osobowych (<a href="https://uodo.gov.pl">uodo.gov.pl</a>).</p>
+
+<h2>7. Dzieci</h2>
+<p>Aplikacja jest przeznaczona dla osób, które ukończyły 16 lat. Jeśli dowiemy się, że konto należy do młodszej osoby, usuniemy je.</p>
+
+<h2>8. Pliki cookie i pamięć urządzenia</h2>
+<p>Używamy wyłącznie pamięci przeglądarki/urządzenia niezbędnej do działania aplikacji (sesja logowania, preferencje wyglądu i listy, zapisane ustawienia) oraz pamięci podręcznej umożliwiającej pracę offline. Nie stosujemy cookies reklamowych ani analitycznych, więc nie wyświetlamy banera zgody.</p>
+
+<h2>9. Bezpieczeństwo</h2>
+<p>Dane są przesyłane szyfrowanym połączeniem; dostęp do bazy chroni uwierzytelnianie i reguły dostępu na poziomie wierszy (użytkownik widzi tylko to, co mu wolno). Hasła są przechowywane jedynie w postaci skrótów. Adres e-mail nigdy nie jest widoczny dla innych użytkowników.</p>
+
+<h2>10. Zmiany polityki</h2>
+<p>O istotnych zmianach powiadomimy w aplikacji. Aktualna wersja jest zawsze dostępna pod tym adresem oraz w aplikacji: Ustawienia → Regulamin i prywatność.</p>
+
+<p class="muted" style="margin-top:32px">Dokument przygotowano na potrzeby fazy beta; przed publikacją w sklepach wymaga uzupełnienia danych administratora i przeglądu prawnego.</p>
+</main>
+</body>
+</html>

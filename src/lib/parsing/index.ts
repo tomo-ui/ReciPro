@@ -1,4 +1,4 @@
-import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '@/types/recipe'
+import type { ParseOrigin, RecipeDraft } from '@/types/recipe'
 import { fileToScanImage, type ScanImage } from '@/lib/images'
 import { getAccessToken } from '@/lib/supabase'
 
@@ -21,13 +21,22 @@ export interface ParseResult {
   servingsEstimated: boolean
   /** Uzasadnienie szacunku porcji (do pokazania użytkownikowi) */
   servingsBasis?: string
-  /** Co się stało z miniaturką filmu z TikToka */
-  thumbnail: ThumbnailInfo
 }
 
 /** Ile zdjęć naraz (np. kolejne części długiego przepisu) i jak krótki tekst jest jeszcze sensowny — jak na serwerze */
 export const MAX_SCAN_IMAGES = 4
 export const MIN_PASTED_CHARS = 30
+
+/** Błąd importu z kodem z serwera (np. consent_required, rate_limited), żeby interfejs mógł zareagować inaczej niż komunikatem */
+export class ImportError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+  ) {
+    super(message)
+    this.name = 'ImportError'
+  }
+}
 
 async function postParse(payload: Record<string, unknown>): Promise<ParseResult> {
   // Endpoint wymaga sesji Supabase (chroni limit Gemini); bez Supabase token jest pusty
@@ -52,19 +61,18 @@ async function postParse(payload: Record<string, unknown>): Promise<ParseResult>
     origin?: ParseOrigin
     servingsEstimated?: boolean
     servingsBasis?: string
-    thumbnail?: ThumbnailInfo
     error?: string
+    code?: string
   } | null
   if (!res.ok || !body?.draft) {
     if (res.status === 413) throw new Error('Zdjęcia są zbyt duże. Dodaj mniej zdjęć albo mniejsze.')
-    throw new Error(body?.error ?? 'Nie udało się odczytać przepisu.')
+    throw new ImportError(body?.error ?? 'Nie udało się odczytać przepisu.', body?.code)
   }
   return {
     draft: body.draft,
     origin: body.origin ?? 'page',
     servingsEstimated: body.servingsEstimated ?? false,
     servingsBasis: body.servingsBasis,
-    thumbnail: body.thumbnail ?? { status: 'none' },
   }
 }
 

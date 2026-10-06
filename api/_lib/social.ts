@@ -6,7 +6,7 @@ import { fetchTikTokInfo, isTikTokUrl } from './tiktok.js'
  * Czytamy wyłącznie tekst opisu; nie pobieramy wideo, dźwięku ani napisów.
  *
  *  • YouTube: opis (`shortDescription`) siedzi w danych osadzonych na stronie filmu.
- *  • Instagram: bez logowania dostępne są tylko metadane podglądu linku (og:title / og:description / og:image),
+ *  • Instagram: bez logowania dostępne są tylko metadane podglądu linku (og:title / og:description),
  *    które serwer zwraca robotom podglądów. Zdarza się, że Instagram odmawia serwerom w chmurze — wtedy
  *    zgłaszamy to wprost, a użytkownik może wkleić link do przepisu z opisu.
  */
@@ -21,13 +21,6 @@ export interface SocialInfo {
   /** Tytuł filmu (YouTube); w opisie postów zwykle go nie ma */
   title?: string
   author?: string
-  /** Adres miniaturki na dozwolonym CDN (patrz image.ts) */
-  thumbnailUrl?: string
-  /**
-   * Miniaturka pochodzi z podglądu linku (og:image), który w wideo i rolkach Instagrama ma na środku wypalony przycisk „play”.
-   * Kadrujemy ją tak, żeby środek obrazu nie trafił na okładkę (patrz cropToCover).
-   */
-  thumbnailMayShowPlayButton?: boolean
 }
 
 const INSTAGRAM_HOST = /(^|\.)instagram\.com$|^instagr\.am$/i
@@ -114,8 +107,8 @@ const decodeJsonString = (s: string): string => {
   }
 }
 
-/** Dane filmu z HTML strony: opis, tytuł, autor i miniaturka */
-export function parseYouTubeHtml(html: string, id: string): Omit<SocialInfo, 'platform' | 'canonicalUrl'> | null {
+/** Dane filmu z HTML strony: opis, tytuł i autor */
+export function parseYouTubeHtml(html: string): Omit<SocialInfo, 'platform' | 'canonicalUrl'> | null {
   const grab = (key: string) => {
     const m = html.match(new RegExp(`"${key}":"((?:[^"\\\\]|\\\\.)*)"`))
     return m ? decodeJsonString(m[1]) : undefined
@@ -137,7 +130,6 @@ export function parseYouTubeHtml(html: string, id: string): Omit<SocialInfo, 'pl
     caption,
     title: title ? decodeJsonString(title) : meta('og:title') ?? meta('title') ?? html.match(/<title>([^<]*)<\/title>/i)?.[1]?.replace(/ - YouTube$/, ''),
     author: author ? decodeJsonString(author) : undefined,
-    thumbnailUrl: meta('og:image') ?? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
   }
 }
 
@@ -149,16 +141,10 @@ async function fromYouTubeApi(id: string, apiKey: string, fetchImpl: typeof fetc
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return null
-    const j = (await res.json()) as { items?: { snippet?: { title?: string; description?: string; channelTitle?: string; thumbnails?: Record<string, { url?: string; width?: number }> } }[] }
+    const j = (await res.json()) as { items?: { snippet?: { title?: string; description?: string; channelTitle?: string } }[] }
     const sn = j.items?.[0]?.snippet
     if (!sn) return null
-    const thumbs = Object.values(sn.thumbnails ?? {}).filter((t) => t.url).sort((a, b) => (b.width ?? 0) - (a.width ?? 0))
-    return {
-      caption: (sn.description ?? '').trim(),
-      title: sn.title,
-      author: sn.channelTitle,
-      thumbnailUrl: thumbs[0]?.url ?? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-    }
+    return { caption: (sn.description ?? '').trim(), title: sn.title, author: sn.channelTitle }
   } catch {
     return null
   }
@@ -187,7 +173,7 @@ export async function fetchYouTubeInfo(rawUrl: string, fetchImpl: typeof fetch =
     if (e instanceof FetchError) throw e
     throw new FetchError('network', 'Nie udało się połączyć z YouTube.')
   }
-  const parsed = parseYouTubeHtml(html, id)
+  const parsed = parseYouTubeHtml(html)
   if (!parsed?.caption) {
     throw new FetchError(
       'http_error',
@@ -221,35 +207,7 @@ export function parseInstagramHtml(html: string): Omit<SocialInfo, 'platform' | 
     .filter((c): c is { caption: string; author?: string } => !!c)
   if (candidates.length === 0) return null
   const best = candidates.reduce((a, b) => (b.caption.length > a.caption.length ? b : a))
-  const image = meta('og:image')
-  return { caption: best.caption, author: candidates.find((c) => c.author)?.author, thumbnailUrl: image }
-}
-
-/**
- * Czyste zdjęcie posta ze strony osadzenia (embed): to samo, co widać w poście, bez przycisku „play” wypalonego w podglądzie
- * linku. Strona jest publiczna; przy błędzie zwracamy undefined i zostaje miniaturka z podglądu.
- */
-export function parseInstagramEmbedImage(html: string): string | undefined {
-  const tag = html.match(/<img\b[^>]*\bclass="[^"]*\bEmbeddedMediaImage\b[^"]*"[^>]*>/i)?.[0]
-  const src = tag?.match(/\bsrc="([^"]+)"/i)?.[1]
-  const url = src ? decodeEntities(src).trim() : ''
-  return /^https:\/\//i.test(url) ? url : undefined
-}
-
-async function fetchInstagramEmbedImage(code: string, fetchImpl: typeof fetch): Promise<string | undefined> {
-  try {
-    // Ten sam UA robota podglądów co strona głównego posta: z przeglądarkowym UA Instagram serwuje inną,
-    // dużo cięższą stronę (osadzenie na JS) bez elementu ze zdjęciem, więc parsowanie nic by nie znalazło
-    const { html } = await fetchHtml(`https://www.instagram.com/p/${code}/embed/captioned/`, {
-      fetchImpl,
-      timeoutMs: 6000,
-      maxBytes: 2_000_000,
-      headers: { 'user-agent': PREVIEW_BOT_UA },
-    })
-    return parseInstagramEmbedImage(html)
-  } catch {
-    return undefined
-  }
+  return { caption: best.caption, author: candidates.find((c) => c.author)?.author }
 }
 
 export async function fetchInstagramInfo(rawUrl: string, fetchImpl: typeof fetch = fetch): Promise<SocialInfo> {
@@ -271,10 +229,7 @@ export async function fetchInstagramInfo(rawUrl: string, fetchImpl: typeof fetch
       'Instagram nie udostępnił opisu tego posta. Może być prywatny, usunięty albo Instagram zablokował odczyt z serwera. Wklej link do przepisu z opisu posta albo dodaj przepis ręcznie.',
     )
   }
-  const embedImage = await fetchInstagramEmbedImage(code, fetchImpl)
-  if (embedImage) return { platform: 'instagram', canonicalUrl, ...parsed, thumbnailUrl: embedImage }
-  // tylko podgląd linku: w wideo ma na środku przycisk „play”, więc oznaczamy, żeby okładka go ominęła
-  return { platform: 'instagram', canonicalUrl, ...parsed, ...(parsed.thumbnailUrl ? { thumbnailMayShowPlayButton: true } : {}) }
+  return { platform: 'instagram', canonicalUrl, ...parsed }
 }
 
 /** Opis posta lub filmu z dowolnego z obsługiwanych serwisów */
@@ -284,7 +239,7 @@ export async function fetchSocialInfo(rawUrl: string, fetchImpl: typeof fetch = 
   if (platform === 'instagram') return fetchInstagramInfo(rawUrl, fetchImpl)
   if (platform === 'tiktok') {
     const t = await fetchTikTokInfo(rawUrl, fetchImpl)
-    return { platform, canonicalUrl: t.canonicalUrl, caption: t.caption, author: t.author, thumbnailUrl: t.thumbnailUrl }
+    return { platform, canonicalUrl: t.canonicalUrl, caption: t.caption, author: t.author }
   }
   throw new FetchError('invalid_url', 'To nie jest link do posta ani filmu.')
 }

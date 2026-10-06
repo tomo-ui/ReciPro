@@ -189,3 +189,44 @@ export const ShieldIcon = (p: P) => (
     <path d="m9 12 2 2 4-4.5" />
   </svg>
 )
+export const MoreIcon = (p: P) => (
+  <svg {...base({ fill: 'currentColor', stroke: 'none', ...p })}>
+    <circle cx="5" cy="12" r="1.8" />
+    <circle cx="12" cy="12" r="1.8" />
+    <circle cx="19" cy="12" r="1.8" />
+  </svg>
+)
+export const FlagIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M5 21V4M5 4h11l-2 4 2 4H5" />
+  </svg>
+)
+export const BanIcon = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m5.7 5.7 12.6 12.6" />
+  </svg>
+)
+export const SparkleIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5l-1.9-5.7L4.5 10.9 10.1 9z" />
+    <path d="M19 3v4M17 5h4" />
+  </svg>
+)
+export const VolumeIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M11 5 6 9H3v6h3l5 4z" />
+    <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+  </svg>
+)
+export const ChevronRightIcon = (p: P) => (
+  <svg {...base({ strokeWidth: 2.5, ...p })}>
+    <path d="m9 5 7 7-7 7" />
+  </svg>
+)
+export const FileTextIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5M9 13h6M9 17h4" />
+  </svg>
+)

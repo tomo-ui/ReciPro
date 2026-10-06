@@ -9,7 +9,7 @@ import { useOnVisible } from '@/hooks/useOnVisible'
 import { Avatar } from './Avatar'
 import { VerifiedBadge } from './VerifiedBadge'
 import { FollowButton } from './FollowButton'
-import { BookmarkIcon, ClockIcon, CommentIcon, FlameIcon, HeartIcon, SpinnerIcon, UsersIcon } from './Icons'
+import { BookmarkIcon, ClockIcon, CommentIcon, FlameIcon, HeartIcon, MoreIcon, SpinnerIcon, UsersIcon } from './Icons'
 import { LikeButton } from './LikeButton'
 import { Cover } from './RecipeCard'
 
@@ -39,10 +39,12 @@ interface Props {
   onToggleSave: () => Promise<void>
   /** Karta stała się widoczna na ekranie — do liczenia wyświetleń (ranking popularności) */
   onView?: () => void
+  /** Menu „Zgłoś / Zablokuj” (brak przy własnych przepisach) */
+  onMore?: () => void
 }
 
 /** Duża karta do feedu: autor (z przyciskiem obserwowania), zdjęcie 4:3 (podwójny tap = polub), tytuł, czas, porcje, tagi */
-export function FeedCard({ recipe, stats, showFollow, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments, onOpenLikers, saved, onToggleSave, onView }: Props) {
+export function FeedCard({ recipe, stats, showFollow, following, onFollowChange, onStatsChange, onOpen, onOpenAuthor, onOpenComments, onOpenLikers, saved, onToggleSave, onView, onMore }: Props) {
   const [saving, setSaving] = useState(false)
   const visibleRef = useOnVisible<HTMLElement>(() => onView?.())
   const author = recipe.author
@@ -127,6 +129,11 @@ export function FeedCard({ recipe, stats, showFollow, following, onFollowChange,
             </span>
           </button>
           {showFollow && recipe.user_id && <FollowButton userId={recipe.user_id} following={following} onChange={onFollowChange} compact silent />}
+          {onMore && (
+            <button onClick={onMore} aria-label="Więcej: zgłoś lub zablokuj" className="-mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-label-2 active:bg-surface-2">
+              <MoreIcon width={20} height={20} />
+            </button>
+          )}
         </div>
       )}
 
