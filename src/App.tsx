@@ -7,7 +7,7 @@ import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 import { backend, usesSupabase } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { isPasswordRecovery } from '@/lib/authRecovery'
-import { draftForSaving } from '@/lib/cookbook'
+import { canPublishAsPost, draftForSaving, recipeToDraft } from '@/lib/cookbook'
 import { emit } from '@/lib/events'
 import { isCreator } from '@/lib/verified'
 import { deleteRecipeImage } from '@/lib/images'
@@ -352,6 +352,16 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
                 }
               }}
               onOpenAuthor={openProfile}
+              onPublish={
+                entry.recipe.user_id === me.id && canPublishAsPost(entry.recipe)
+                  ? async () => {
+                      // Wpis z książki → post na profilu. Zapisanych cudzych przepisów nie da się opublikować (też w bazie: recipes_saved_not_post)
+                      const updated = await mine.update(entry.recipe.id, recipeToDraft(entry.recipe, { is_post: true }))
+                      bump()
+                      setStack((s) => s.map((e) => (e.kind === 'recipe' && e.recipe.id === updated.id ? { kind: 'recipe', recipe: updated } : e)))
+                    }
+                  : undefined
+              }
               onOpenComments={() => setSheet({ kind: 'comments', recipe: entry.recipe, focus: false, expanded: false })}
               onOpenLikers={() => openLikers(entry.recipe)}
               saved={savedIds.has(entry.recipe.id)}

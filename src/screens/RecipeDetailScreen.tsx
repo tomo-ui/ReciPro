@@ -13,6 +13,7 @@ import { NutritionSection } from '@/components/NutritionSection'
 import { FEATURES } from '@/lib/features'
 import { openModeration } from '@/lib/moderationUi'
 import { Cover } from '@/components/RecipeCard'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { CookingMode } from '@/components/CookingMode'
 
 interface Props {
@@ -32,6 +33,8 @@ interface Props {
   /** Cudzy przepis: czy jest już w mojej książce kucharskiej; dotknięcie zapisuje albo usuwa zapis */
   saved?: boolean
   onToggleSave?: () => Promise<void>
+  /** Tylko mój wpis z książki (nie zapisany od kogoś): publikuje go jako post na profilu */
+  onPublish?: () => Promise<void>
 }
 
 /** Grupuje linie po polu `group`, zachowując kolejność */
@@ -47,9 +50,12 @@ function groupLines<T extends { group?: string }>(lines: T[]) {
 
 const MAX_SERVINGS = 99
 
-export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, onOpenAuthor, onOpenComments, onOpenLikers, onSaveCopy, saved, onToggleSave }: Props) {
+export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, onOpenAuthor, onOpenComments, onOpenLikers, onSaveCopy, saved, onToggleSave, onPublish }: Props) {
   const [savingBook, setSavingBook] = useState(false)
   const [cooking, setCooking] = useState(false)
+  const [confirmPublish, setConfirmPublish] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [publishError, setPublishError] = useState<string | null>(null)
   const controls = useDragControls()
   const { stats, set: setStats } = useRecipeStats([recipe])
   const recipeStats = stats[recipe.id]
@@ -123,10 +129,26 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
             </button>
           )}
           {isOwner && !recipe.saved_from && recipe.is_post === false && (
-            <p className="mt-3 flex w-fit items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-[14px] text-label-2">
-              <LockIcon width={14} height={14} /> Tylko w Twojej książce kucharskiej
-            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <p className="flex w-fit items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-[14px] text-label-2">
+                <LockIcon width={14} height={14} /> Tylko w Twojej książce kucharskiej
+              </p>
+              {onPublish && (
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  disabled={publishing}
+                  onClick={() => {
+                    setPublishError(null)
+                    setConfirmPublish(true)
+                  }}
+                  className="flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-[14px] font-semibold text-white disabled:opacity-50"
+                >
+                  <UsersIcon width={15} height={15} /> Opublikuj na profilu
+                </motion.button>
+              )}
+            </div>
           )}
+          {publishError && <p className="mt-2 text-[13px] text-red-500">{publishError}</p>}
 
           {recipe.description && (
             <p className="mt-3 text-[16px] text-label-2" data-selectable>
@@ -291,6 +313,29 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
           )}
         </div>
       </div>
+
+      {confirmPublish && onPublish && (
+        <ConfirmDialog
+          title="Opublikować na profilu?"
+          message={`Przepis będzie widoczny dla innych osób na Twoim profilu i w feedzie (gdy profil jest publiczny). ${
+            recipe.parse_method !== 'manual' || recipe.source_url ? 'To przepis z importu — publikuj go tylko, jeśli masz do niego prawa. ' : ''
+          }Zawsze możesz zmienić go z powrotem na prywatny w edycji.`}
+          confirmLabel="Opublikuj"
+          destructive={false}
+          onCancel={() => setConfirmPublish(false)}
+          onConfirm={async () => {
+            setConfirmPublish(false)
+            setPublishing(true)
+            try {
+              await onPublish()
+            } catch (e) {
+              setPublishError(e instanceof Error ? e.message : 'Nie udało się opublikować przepisu.')
+            } finally {
+              setPublishing(false)
+            }
+          }}
+        />
+      )}
 
       <AnimatePresence>
         {cooking && (

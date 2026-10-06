@@ -8,6 +8,16 @@ export const isPostRecipe = (r: Pick<Recipe, 'is_post'>): boolean => r.is_post !
 /** Zapisany cudzy przepis (ma oznaczenie autora oryginału) */
 export const isSavedRecipe = (r: Pick<Recipe, 'saved_from'>): boolean => !!r.saved_from
 
+/** Własny wpis z książki, który można opublikować jako post na profilu: mój, jeszcze nie post i nie zapisany od kogoś */
+export const canPublishAsPost = (r: Pick<Recipe, 'is_post' | 'saved_from'>): boolean => r.is_post === false && !r.saved_from
+
+/** Szkic z istniejącego przepisu (do zapisania zmiany jednego pola, np. publikacji); `overrides` nadpisuje wskazane pola */
+export function recipeToDraft(r: Recipe, overrides: Partial<RecipeDraft> = {}): RecipeDraft {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id, created_at, updated_at, user_id, author, ...rest } = r
+  return { ...rest, ...overrides }
+}
+
 /**
  * Szkic kopii cudzego przepisu do mojej książki kucharskiej, z oznaczeniem autora oryginału.
  * Zdjęcie kopiujemy do własnego folderu, żeby kopia nie straciła obrazka, gdy autor usunie swój przepis;
