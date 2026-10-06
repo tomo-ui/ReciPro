@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { instagramCode, linksFromCaption, parseInstagramHtml, parseYouTubeHtml, socialPlatform, youtubeId } from '../api/_lib/social'
+import { fetchInstagramInfo, instagramCode, linksFromCaption, parseInstagramEmbedImage, parseInstagramHtml, parseYouTubeHtml, socialPlatform, youtubeId } from '../api/_lib/social'
 import { ParseError, parseRecipeUrl } from '../api/_lib/pipeline'
+import { downloadThumbnail } from '../api/_lib/image'
 
 const YT_URL = 'https://www.youtube.com/watch?v=abcdefghijk'
 const IG_URL = 'https://www.instagram.com/reel/Cabc123XYZ/?igsh=tracking'
@@ -86,18 +87,20 @@ describe('rozpoznawanie linków', () => {
 })
 
 describe('odczyt stron', () => {
-  it('YouTube: opis ze znakami specjalnymi, tytuł i autor', () => {
-    const d = parseYouTubeHtml(player('Składniki:\n- 1 kg sera\nPrzepis: https://blog.example/x #sernik', 'Sernik "babci" 🍰'))!
+  it('YouTube: opis ze znakami specjalnymi, tytuł, autor i miniaturka', () => {
+    const d = parseYouTubeHtml(player('Składniki:\n- 1 kg sera\nPrzepis: https://blog.example/x #sernik', 'Sernik "babci" 🍰'), 'abcdefghijk')!
     expect(d.caption).toBe('Składniki:\n- 1 kg sera\nPrzepis: https://blog.example/x #sernik')
     expect(d.title).toBe('Sernik "babci" 🍰')
     expect(d.author).toBe('Kuchnia Zosi')
-    expect(parseYouTubeHtml('<html>ekran zgody</html>')).toBeNull()
+    expect(d.thumbnailUrl).toBe('https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg')
+    expect(parseYouTubeHtml('<html>ekran zgody</html>', 'abcdefghijk')).toBeNull()
   })
 
-  it('Instagram: opis z og:title i autor; bez meta-tagów (ekran logowania) brak wyniku', () => {
+  it('Instagram: opis z og:title, autor i miniaturka; bez meta-tagów (ekran logowania) brak wyniku', () => {
     const d = parseInstagramHtml(instagram('Placki 🥔 Składniki: 1 kg ziemniaków, 2 jajka. Pełny przepis: https://blog.example/placki'))!
     expect(d.caption).toBe('Placki 🥔 Składniki: 1 kg ziemniaków, 2 jajka. Pełny przepis: https://blog.example/placki')
     expect(d.author).toBe('Zosia')
+    expect(d.thumbnailUrl).toContain('cdninstagram.com')
     expect(parseInstagramHtml('<html><title>Instagram</title></html>')).toBeNull()
   })
 
@@ -135,7 +138,7 @@ describe('import z YouTube', () => {
     expect(out.origin).toBe('youtube-caption')
     expect(out.draft.title).toBe('Sernik babci')
     expect(out.draft.source_url).toBe(YT_URL)
-    expect(out.draft.image_url).toBeUndefined() // cudzej miniatury nie przenosimy
+    expect(out.draft.image_url).toBe('https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg') // tryb lokalny: adres tymczasowy
     expect(calls.some((c) => c.url.startsWith(RECIPE_LINK))).toBe(false)
   })
 
@@ -146,7 +149,7 @@ describe('import z YouTube', () => {
     expect(out.draft.title).toBe('Sernik z linku')
     expect(out.draft.source_url).toBe(RECIPE_LINK)
     expect(out.draft.ingredients).toHaveLength(3)
-    expect(out.draft.image_url).toBeUndefined() // zdjęcia ze strony przepisu też nie przenosimy
+    expect(out.draft.image_url).toBe('https://cdn.example/sernik.jpg') // zdjęcie ze strony przepisu ma pierwszeństwo
     expect(calls.some((c) => c.url.startsWith(RECIPE_LINK))).toBe(true)
   })
 
@@ -196,13 +199,52 @@ describe('import z YouTube', () => {
   })
 })
 
+const EMBED_IMG = 'https://scontent.cdninstagram.com/v/t51/clean_n.jpg?stp=dst-jpg_e15&_nc_ht=scontent.cdninstagram.com&oh=abc'
+const embed = (src = EMBED_IMG) => `<html><body><div class="Embed"><img class="EmbeddedMediaImage" alt="" src="${src.replace(/&/g, '&amp;')}"></div></body></html>`
+
+describe('miniatura z Instagrama bez przycisku play', () => {
+  it('parseInstagramEmbedImage: czyste zdjęcie ze strony osadzenia (encje w adresie), inaczej undefined', () => {
+    expect(parseInstagramEmbedImage(embed())).toBe(EMBED_IMG)
+    expect(parseInstagramEmbedImage('<img src="https://x/y.jpg" class="foo EmbeddedMediaImage bar">')).toBe('https://x/y.jpg')
+    expect(parseInstagramEmbedImage('<html><img class="Avatar" src="https://x/a.jpg"></html>')).toBeUndefined()
+    expect(parseInstagramEmbedImage('<img class="EmbeddedMediaImage" src="http://x/y.jpg">')).toBeUndefined() // tylko https
+    expect(parseInstagramEmbedImage('<html></html>')).toBeUndefined()
+  })
+
+  it('używa zdjęcia z embed zamiast og:image i nie oznacza go jako podglądu z przyciskiem', async () => {
+    const { fetchImpl, calls } = network({ instagram: instagram('Sernik: 1 kg sera, 6 jaj. Utrzyj i piecz godzinę.'), instagramEmbed: embed() })
+    const info = await fetchInstagramInfo(IG_URL, fetchImpl)
+    expect(info.thumbnailUrl).toBe(EMBED_IMG)
+    expect(info.thumbnailUrl).not.toContain('abc_n.jpg') // nie miniatura z podglądu linku
+    expect(info.thumbnailMayShowPlayButton).toBeUndefined()
+    expect(calls.some((c) => c.url === 'https://www.instagram.com/p/Cabc123XYZ/embed/captioned/')).toBe(true)
+  })
+
+  it('bez strony embed zostaje og:image, oznaczony jako podgląd z przyciskiem play (okładka go ominie)', async () => {
+    const { fetchImpl } = network({ instagram: instagram('Sernik: 1 kg sera, 6 jaj. Utrzyj i piecz godzinę.') }) // embed 404
+    const info = await fetchInstagramInfo(IG_URL, fetchImpl)
+    expect(info.thumbnailUrl).toContain('abc_n.jpg')
+    expect(info.thumbnailMayShowPlayButton).toBe(true)
+    // strona embed bez zdjęcia — to samo
+    const { fetchImpl: f2 } = network({ instagram: instagram('Sernik: 1 kg sera, 6 jaj. Utrzyj i piecz godzinę.'), instagramEmbed: '<html>nic</html>' })
+    expect((await fetchInstagramInfo(IG_URL, f2)).thumbnailMayShowPlayButton).toBe(true)
+  })
+
+  it('post bez żadnej miniatury: brak flagi', async () => {
+    const page = '<html><head><meta property="og:title" content="Zosia on Instagram: &quot;Sernik: 1 kg sera, 6 jaj. Utrzyj.&quot;"></head></html>'
+    const info = await fetchInstagramInfo(IG_URL, network({ instagram: page }).fetchImpl)
+    expect(info.thumbnailUrl).toBeUndefined()
+    expect(info.thumbnailMayShowPlayButton).toBeUndefined()
+  })
+})
+
 describe('import z Instagrama', () => {
-  it('odczytuje przepis z opisu posta', async () => {
+  it('odczytuje przepis z opisu i miniaturkę z CDN Instagrama', async () => {
     const { fetchImpl, calls } = network({ instagram: instagram('Sernik: 1 kg sera, 6 jaj. Utrzyj i piecz godzinę. #sernik'), gemini: FULL })
     const out = await parseRecipeUrl(IG_URL, { ...opts, fetchImpl })
     expect(out.origin).toBe('instagram-caption')
     expect(out.draft.source_url).toBe('https://www.instagram.com/p/Cabc123XYZ/')
-    expect(out.draft.image_url).toBeUndefined()
+    expect(out.draft.image_url).toContain('cdninstagram.com')
     // Instagram dostaje user-agent robota podglądów linków, a adres bez parametrów śledzących
     const page = calls.find((c) => c.url.includes('instagram.com/p/'))!
     expect(page.url).not.toContain('igsh')
@@ -224,19 +266,32 @@ describe('import z Instagrama', () => {
   })
 })
 
+describe('miniaturki z CDN YouTube i Instagrama', () => {
+  it('dopuszcza ich CDN, odrzuca pozostałe domeny', async () => {
+    const bad = vi.fn() as unknown as typeof fetch
+    expect((await downloadThumbnail('https://evil.example/a.jpg', bad)).reason).toMatch(/poza CDN/)
+    expect((await downloadThumbnail('https://ytimg.com.evil.example/a.jpg', bad)).reason).toMatch(/poza CDN/)
+    const notImage = vi.fn(async () => new Response('<html>', { status: 200 })) as unknown as typeof fetch
+    for (const host of ['i.ytimg.com', 'scontent.cdninstagram.com', 'scontent.xx.fbcdn.net']) {
+      expect((await downloadThumbnail(`https://${host}/x.jpg`, notImage)).reason, host).toMatch(/formacie/) // przeszło walidację hosta, dopiero treść odpadła
+    }
+  })
+})
+
 describe('YouTube: odczyt, gdy dane odtwarzacza są ucięte (blokada serwerów w chmurze)', () => {
   const blocked = (description: string) =>
     `<html><head><meta property="og:title" content="Sernik babci - YouTube"><meta property="og:image" content="https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg"></head><body><script>var ytInitialPlayerResponse = {"playabilityStatus":{"status":"LOGIN_REQUIRED","reason":"Sign in to confirm you're not a bot"}};var ytInitialData = {"attributedDescription":{"content":${JSON.stringify(description)},"commandRuns":[]}};</script></body></html>`
 
   it('bierze opis z panelu opisu pod filmem (attributedDescription)', () => {
-    const d = parseYouTubeHtml(blocked('Składniki:\n- 1 kg sera\nPrzepis: https://blog.example/sernik'))!
+    const d = parseYouTubeHtml(blocked('Składniki:\n- 1 kg sera\nPrzepis: https://blog.example/sernik'), 'abcdefghijk')!
     expect(d.caption).toBe('Składniki:\n- 1 kg sera\nPrzepis: https://blog.example/sernik')
     expect(d.title).toBe('Sernik babci - YouTube')
+    expect(d.thumbnailUrl).toContain('maxresdefault')
   })
 
   it('a gdy nie ma nic więcej, choćby uciętym opisem z og:description', () => {
     const page = `<meta property="og:title" content="Sernik"><meta property="og:description" content="Zaczynamy od składników: 1 kg sera, 6 jaj…">`
-    expect(parseYouTubeHtml(page)?.caption).toBe('Zaczynamy od składników: 1 kg sera, 6 jaj…')
+    expect(parseYouTubeHtml(page, 'abcdefghijk')?.caption).toBe('Zaczynamy od składników: 1 kg sera, 6 jaj…')
   })
 
   it('import działa na takiej stronie, a bez żadnego opisu daje czytelny błąd', async () => {
@@ -264,7 +319,7 @@ describe('YouTube: odczyt, gdy dane odtwarzacza są ucięte (blokada serwerów w
     }) as unknown as typeof fetch
     const out = await parseRecipeUrl(YT_URL, { ...opts, fetchImpl: api, youtubeApiKey: 'YT-KEY' })
     expect(out.origin).toBe('youtube-caption')
-    expect(out.draft.image_url).toBeUndefined()
+    expect(out.draft.image_url).toBe('https://i.ytimg.com/vi/a/maxresdefault.jpg')
     expect((api as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((c) => String(c[0]).includes('youtube.com/watch'))).toBe(false) // strona filmu nie była potrzebna
   })
 })

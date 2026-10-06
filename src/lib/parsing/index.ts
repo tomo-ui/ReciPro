@@ -1,4 +1,4 @@
-import type { ParseOrigin, RecipeDraft } from '@/types/recipe'
+import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '@/types/recipe'
 import { fileToScanImage, type ScanImage } from '@/lib/images'
 import { getAccessToken } from '@/lib/supabase'
 
@@ -21,6 +21,8 @@ export interface ParseResult {
   servingsEstimated: boolean
   /** Uzasadnienie szacunku porcji (do pokazania użytkownikowi) */
   servingsBasis?: string
+  /** Co się stało z miniaturką posta/filmu */
+  thumbnail: ThumbnailInfo
 }
 
 /** Ile zdjęć naraz (np. kolejne części długiego przepisu) i jak krótki tekst jest jeszcze sensowny — jak na serwerze */
@@ -61,6 +63,7 @@ async function postParse(payload: Record<string, unknown>): Promise<ParseResult>
     origin?: ParseOrigin
     servingsEstimated?: boolean
     servingsBasis?: string
+    thumbnail?: ThumbnailInfo
     error?: string
     code?: string
   } | null
@@ -73,6 +76,7 @@ async function postParse(payload: Record<string, unknown>): Promise<ParseResult>
     origin: body.origin ?? 'page',
     servingsEstimated: body.servingsEstimated ?? false,
     servingsBasis: body.servingsBasis,
+    thumbnail: body.thumbnail ?? { status: 'none' },
   }
 }
 

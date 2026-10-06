@@ -1,4 +1,4 @@
-import type { ParseOrigin, RecipeDraft } from '../../src/types/recipe.js'
+import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '../../src/types/recipe.js'
 import { fetchHtml, type FetchHtmlOptions } from './fetchHtml.js'
 import {
   estimateDish,
@@ -12,6 +12,7 @@ import { chooseServings, kindFromTitle, totalWeight, type DishKind } from './ser
 import { parseHeuristic } from './heuristic.js'
 import { parseJsonLd } from './jsonld.js'
 import { hasAnyContent, isComplete, normalizeTags, servingsFromText, totalMinutesFromText } from './normalize.js'
+import { downloadThumbnail, prepareCover, uploadRecipeImage, type StorageConfig } from './image.js'
 import { hashtagsFromCaption, withoutGenericTags } from './tiktok.js'
 import { fetchSocialInfo, linksFromCaption, PLATFORM_NAME, socialPlatform, type SocialInfo, type SocialPlatform } from './social.js'
 
@@ -37,6 +38,8 @@ export interface PipelineOptions {
   geminiRetryDelayMs?: number
   /** Bezwzględny termin całej operacji (ms od epoki); chroni przed limitem czasu funkcji */
   deadlineAt?: number
+  /** Dane do zapisu miniaturek w Supabase Storage (jako zalogowany użytkownik). Brak = tryb lokalny. */
+  storage?: StorageConfig
   fetchImpl?: typeof fetch
   /** Klucz YouTube Data API v3 (opcjonalny): pewniejszy odczyt opisów filmów z serwera w chmurze */
   youtubeApiKey?: string
@@ -49,6 +52,8 @@ export interface ParseOutcome {
   servingsEstimated: boolean
   /** Skąd wzięła się liczba porcji, np. „ok. 1,6 kg składników; danie główne to zwykle ok. 400 g na porcję” */
   servingsBasis?: string
+  /** Wynik zapisu miniaturki filmu (dla stron WWW zawsze status „none”) */
+  thumbnail: ThumbnailInfo
 }
 
 /** Czytelny dla użytkownika powód, dla którego AI nie odpowiedziało */
@@ -136,9 +141,9 @@ const ORIGIN: Record<SocialPlatform, ParseOrigin> = {
  */
 export async function parseSocialCaption(
   info: SocialInfo,
-  { geminiApiKey, geminiModel, geminiRetryDelayMs, deadlineAt, fetchImpl }: PipelineOptions = {},
-): Promise<{ draft: RecipeDraft; origin: ParseOrigin }> {
-  const opts: PipelineOptions = { geminiApiKey, geminiModel, geminiRetryDelayMs, deadlineAt, fetchImpl }
+  { geminiApiKey, geminiModel, geminiRetryDelayMs, deadlineAt, storage, fetchImpl }: PipelineOptions = {},
+): Promise<{ draft: RecipeDraft; thumbnail: ThumbnailInfo; origin: ParseOrigin }> {
+  const opts: PipelineOptions = { geminiApiKey, geminiModel, geminiRetryDelayMs, deadlineAt, storage, fetchImpl }
   const name = PLATFORM_NAME[info.platform]
   const links = linksFromCaption(info.caption, info.canonicalUrl)
   const long = info.caption.trim().length >= MIN_CAPTION_CHARS
@@ -180,6 +185,8 @@ export async function parseSocialCaption(
   if (fromCaption && !hasAnyContent(fromCaption)) fromCaption = null
 
   const finishCaption = async (draft: RecipeDraft) => {
+    // Miniaturka dopiero po znalezieniu przepisu, żeby nie zostawiać w Storage obrazów bez przepisu
+    const { image_url, thumbnail } = await persistThumbnail(info.thumbnailUrl, { storage, deadlineAt, fetchImpl, avoidCenter: info.thumbnailMayShowPlayButton })
     // Siatka bezpieczeństwa: dane podane wprost w opisie („PORCJE: 6”, „CZAS: 40 MIN”) mają pierwszeństwo
     // przed szacunkiem AI, nawet jeśli model ich nie odczytał
     const total = draft.total_minutes ?? (draft.prep_minutes || draft.cook_minutes ? undefined : totalMinutesFromText(info.caption))
@@ -188,10 +195,11 @@ export async function parseSocialCaption(
         ...draft,
         servings: draft.servings ?? servingsFromText(info.caption),
         total_minutes: total,
-        image_url: undefined, // cudzej miniatury nie zapisujemy ani nie podlinkowujemy (prawa autorskie)
+        image_url,
         // Autor filmu/postu trafia do tagów niezależnie od tego, która warstwa sparsowała treść
         tags: withoutGenericTags(normalizeTags(draft.tags, info.author ? [info.author] : [])),
       },
+      thumbnail,
       origin: ORIGIN[info.platform],
     }
   }
@@ -209,12 +217,16 @@ export async function parseSocialCaption(
       if (!hasAnyContent(page)) continue
       // Niepełny przepis ze strony nie zastępuje niepełnego z opisu, ale zastępuje brak
       if (!isComplete(page) && fromCaption) continue
+      const cover = page.image_url
+        ? { image_url: page.image_url, thumbnail: { status: 'none' } as ThumbnailInfo }
+        : await persistThumbnail(info.thumbnailUrl, { storage, deadlineAt, fetchImpl, avoidCenter: info.thumbnailMayShowPlayButton })
       return {
         draft: {
           ...page,
-          image_url: undefined,
+          image_url: cover.image_url,
           tags: normalizeTags([...page.tags, ...hashtagsFromCaption(info.caption)], info.author ? [info.author] : []),
         },
+        thumbnail: cover.thumbnail,
         origin: 'post-link' as const,
       }
     } catch (e) {
@@ -239,9 +251,43 @@ export async function parseSocialCaption(
 }
 
 /** Zgodność wsteczna: import z TikToka (dawniej jedyny obsługiwany serwis) */
-export async function parseTikTokCaption(url: string, opts: PipelineOptions = {}): Promise<{ draft: RecipeDraft }> {
-  const { draft } = await parseSocialCaption(await fetchSocialInfo(url, opts.fetchImpl), opts)
-  return { draft }
+export async function parseTikTokCaption(
+  url: string,
+  opts: PipelineOptions = {},
+): Promise<{ draft: RecipeDraft; thumbnail: ThumbnailInfo }> {
+  const { draft, thumbnail } = await parseSocialCaption(await fetchSocialInfo(url, opts.fetchImpl), opts)
+  return { draft, thumbnail }
+}
+
+/**
+ * Pobiera miniaturkę filmu, kadruje ją do okładki 4:3 i zapisuje w Supabase Storage.
+ * Nigdy nie rzuca — porażka daje status „failed” z powodem, a import przepisu trwa dalej.
+ */
+async function persistThumbnail(
+  thumbnailUrl: string | undefined,
+  { storage, deadlineAt, fetchImpl, avoidCenter }: Pick<PipelineOptions, 'storage' | 'deadlineAt' | 'fetchImpl'> & { avoidCenter?: boolean },
+): Promise<{ image_url?: string; thumbnail: ThumbnailInfo }> {
+  if (!thumbnailUrl) return { thumbnail: { status: 'none' } }
+  if (!storage) {
+    // Tryb lokalny bez Supabase: adres tymczasowy (ok. 48 h) — dane i tak żyją tylko w przeglądarce
+    return { image_url: thumbnailUrl, thumbnail: { status: 'temporary' } }
+  }
+
+  const fail = (reason: string) => {
+    console.warn('[parse] miniaturka:', reason)
+    return { thumbnail: { status: 'failed' as const, reason } }
+  }
+  if (deadlineAt !== undefined && deadlineAt - Date.now() < 6000) return fail('za mało czasu na pobranie miniaturki')
+
+  const { image, reason } = await downloadThumbnail(thumbnailUrl, fetchImpl)
+  if (!image) return fail(reason ?? 'nie udało się pobrać miniaturki')
+
+  try {
+    const image_url = await uploadRecipeImage(prepareCover(image, { avoidCenter }), storage, fetchImpl)
+    return { image_url, thumbnail: { status: 'saved' } }
+  } catch (e) {
+    return fail(`zapis w Storage: ${e instanceof Error ? e.message : String(e)}`.slice(0, 160))
+  }
 }
 
 /**
@@ -320,6 +366,7 @@ async function parseWithAiOnly(
     origin: kind,
     servingsEstimated: withServings.estimated,
     servingsBasis: withServings.basis,
+    thumbnail: { status: 'none' },
   }
 }
 
@@ -348,21 +395,21 @@ export async function parseRecipeUrl(
   const options = { ...opts, deadlineAt: opts.deadlineAt ?? Date.now() + TOTAL_BUDGET_MS }
 
   if (socialPlatform(url)) {
-    const { draft, origin } = await parseSocialCaption(
+    const { draft, thumbnail, origin } = await parseSocialCaption(
       await fetchSocialInfo(url, options.fetchImpl, { youtubeApiKey: options.youtubeApiKey }),
       options,
     )
     const withServings = await withEstimatedServings(draft, options)
-    return { draft: withServings.draft, origin, servingsEstimated: withServings.estimated, servingsBasis: withServings.basis }
+    return { draft: withServings.draft, origin, servingsEstimated: withServings.estimated, servingsBasis: withServings.basis, thumbnail }
   }
 
   const { html, finalUrl } = await fetchHtml(url, { fetchImpl: opts.fetchImpl, ...opts.fetch })
   const withServings = await withEstimatedServings(await parseRecipeHtml(html, finalUrl, options), options)
   return {
-    // Zdjęcia ze stron i miniatury filmów są cudzą własnością — import ich nie przenosi (użytkownik może dodać własne)
-    draft: { ...withServings.draft, image_url: undefined },
+    draft: withServings.draft,
     origin: 'page',
     servingsEstimated: withServings.estimated,
     servingsBasis: withServings.basis,
+    thumbnail: { status: 'none' },
   }
 }

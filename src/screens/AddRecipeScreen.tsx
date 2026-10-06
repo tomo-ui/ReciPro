@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { ParseOrigin, RecipeDraft } from '@/types/recipe'
+import type { ParseOrigin, RecipeDraft, ThumbnailInfo } from '@/types/recipe'
 import {
   ImportError,
   MAX_SCAN_IMAGES,
@@ -27,6 +27,9 @@ interface PickedImage {
   url: string
 }
 
+/** Pozostałe źródła mają miniaturkę posta — tylko te dostają komunikat o jej braku/błędzie */
+const SOCIAL_ORIGINS: ParseOrigin[] = ['tiktok-caption', 'instagram-caption', 'youtube-caption']
+
 const IMPORT_NOTES: Record<RecipeDraft['parse_method'], string> = {
   manual: '',
   'json-ld': 'Zaimportowano z danych strukturalnych strony. Sprawdź i zapisz.',
@@ -52,6 +55,7 @@ interface ImportInfo {
   estimatedServings?: number
   /** Skąd wzięła się liczba porcji */
   servingsBasis?: string
+  thumbnail: ThumbnailInfo
 }
 
 interface Props {
@@ -103,7 +107,7 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
     setError(null)
     setFetching(true)
     try {
-      const { draft, origin, servingsEstimated, servingsBasis } = await read()
+      const { draft, origin, servingsEstimated, servingsBasis, thumbnail } = await read()
       // Import jest domyślnie prywatny (tylko Twoja książka): publikacja cudzego przepisu wymaga świadomej decyzji (RecipeFields)
       rf.load({ ...draftToForm({ ...draft, source_url: draft.source_url ?? sourceUrl }), is_post: false })
       setInfo({
@@ -111,6 +115,7 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
         method: draft.parse_method,
         estimatedServings: servingsEstimated ? draft.servings : undefined,
         servingsBasis: servingsEstimated ? servingsBasis : undefined,
+        thumbnail,
       })
       setMode('manual') // użytkownik weryfikuje wynik parsowania przed zapisem
     } catch (e) {
@@ -155,13 +160,17 @@ export function AddRecipeScreen({ onClose, onSave }: Props) {
   const notes = info && (
     <div className="space-y-1.5 rounded-[12px] bg-surface px-4 py-3 text-[14px] text-label-2">
       <p>{ORIGIN_NOTES[info.origin] ?? IMPORT_NOTES[info.method]}</p>
-      <p>Import trafia domyślnie do Twojej prywatnej książki kucharskiej. Cudzych zdjęć ani miniatur nie zapisujemy — możesz dodać własne zdjęcie.</p>
+      <p>Import trafia domyślnie do Twojej prywatnej książki kucharskiej. Okładka pochodzi z oryginalnego posta lub strony — zanim opublikujesz przepis, upewnij się, że możesz jej użyć, albo zmień ją na własne zdjęcie.</p>
       {info.estimatedServings !== undefined && form.servings === String(info.estimatedServings) && (
         <p>
           Liczba porcji ({info.estimatedServings}) to szacunek — źródło jej nie podawało
           {info.servingsBasis ? ` (${info.servingsBasis})` : ''}. Popraw, jeśli się nie zgadza.
         </p>
       )}
+      {info.thumbnail.status === 'failed' && (
+        <p>Nie udało się zapisać miniaturki filmu ({info.thumbnail.reason ?? 'nieznany powód'}). Możesz dodać własne zdjęcie.</p>
+      )}
+      {info.thumbnail.status === 'none' && SOCIAL_ORIGINS.includes(info.origin) && <p>Ten post nie udostępnia miniaturki.</p>}
     </div>
   )
 

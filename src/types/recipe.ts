@@ -8,8 +8,19 @@ import type { VerifiedBadgeTier } from '@/lib/badgeTiers'
 
 export type ParseMethod = 'manual' | 'json-ld' | 'heuristic' | 'gemini'
 
+/** Skąd pochodzi zaimportowany przepis (tylko informacja dla UI, nie trafia do bazy) */
 /** Skąd pochodzi import: strona z przepisem, opis posta/filmu albo strona z linku znalezionego w opisie */
 export type ParseOrigin = 'page' | 'tiktok-caption' | 'instagram-caption' | 'youtube-caption' | 'post-link' | 'text' | 'image'
+
+/**
+ * Co się stało z miniaturką filmu (tylko informacja dla UI):
+ * saved = zapisana u nas, temporary = adres tymczasowy (tryb lokalny), none = film jej nie ma,
+ * failed = miała, ale nie udało się jej zapisać (powód w `reason`).
+ */
+export interface ThumbnailInfo {
+  status: 'saved' | 'temporary' | 'none' | 'failed'
+  reason?: string
+}
 
 export interface IngredientLine {
   /** Pełny tekst linii, np. "2 łyżki oliwy z oliwek" — źródło prawdy dla UI */
