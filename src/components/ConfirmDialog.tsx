@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 
@@ -17,6 +18,12 @@ interface Props {
  * false bez pokazania okna, więc każde potwierdzenie usunięcia budujemy sami.
  */
 export function ConfirmDialog({ title, message, confirmLabel = 'Usuń', destructive = true, onConfirm, onCancel }: Props) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCancel()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center px-10">
       <motion.div className="absolute inset-0 bg-black/40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={onCancel} />

@@ -74,7 +74,7 @@ export function RecipeListScreen({ recipes, loading, error, onRetry, onOpen, onA
       ) : !loading && filtered.length === 0 ? (
         <EmptyState hasQuery={query.trim().length > 0} onAdd={onAdd} />
       ) : (
-        <motion.div layout className="grid grid-cols-2 gap-3">
+        <motion.div layout className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5 min-[1500px]:grid-cols-5">
           <AnimatePresence mode="popLayout">
             {filtered.map((r) => (
               <RecipeCard key={r.id} recipe={r} onOpen={() => onOpen(r)} />

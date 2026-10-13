@@ -110,7 +110,7 @@ export function SearchScreen({ onOpenRecipe, onOpenProfile, topRef }: Props) {
             {searching ? 'Nic nie znaleziono. Spróbuj innego słowa albo tagu.' : 'Nic tu jeszcze nie ma.'}
           </p>
         ) : scope === 'recipes' ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5 min-[1500px]:grid-cols-5">
             {recipes.items.map((r) => (
               <RecipeCard key={r.id} recipe={r} showAuthor onOpen={() => onOpenRecipe(r)} />
             ))}

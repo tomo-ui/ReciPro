@@ -14,6 +14,7 @@ import { deleteRecipeImage } from '@/lib/images'
 import { markAppReady } from '@/lib/splash'
 import { spring } from '@/lib/ui'
 import { useIsAdmin } from '@/hooks/useIsAdmin'
+import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { useMe } from '@/hooks/useMe'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useRecipes } from '@/hooks/useRecipes'
@@ -21,6 +22,7 @@ import { useSession } from '@/hooks/useSession'
 import { MenuIcon } from '@/components/Icons'
 import { LargeTitleScreen, type LargeTitleScreenHandle } from '@/components/LargeTitleScreen'
 import { BadgeInfoPanel } from '@/components/BadgeInfoPanel'
+import { DesktopNav } from '@/components/DesktopNav'
 import { ModerationLayer } from '@/components/ModerationLayer'
 import { NotificationToast } from '@/components/NotificationToast'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
@@ -59,7 +61,10 @@ import { SetNewPasswordScreen } from '@/screens/SetNewPasswordScreen'
 export default function App() {
   return (
     <>
-      <AppRoutes />
+      {/* Kolumna aplikacji: na telefonie przezroczysta, na komputerze wyśrodkowana (index.css, .app-frame) */}
+      <div className="app-frame">
+        <AppRoutes />
+      </div>
       {/* Logo z ekranu startowego, które wskakuje na miejsce logo na ekranie logowania */}
       <Splash />
     </>
@@ -150,6 +155,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
   const mine = useRecipes()
   const notes = useNotifications(me.id)
   const isAdmin = useIsAdmin()
+  const desktop = useIsDesktop()
   const [tab, setTab] = useState<Tab>('feed')
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(['feed']))
   const [stack, setStack] = useState<Entry[]>([])
@@ -243,6 +249,24 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
       alert(e instanceof Error ? e.message : 'Nie udało się zapisać przepisu.')
     }
   }
+  // Po zalogowaniu na komputerze: układ z bocznym paskiem (index.css, html.has-sidebar)
+  useEffect(() => {
+    document.documentElement.classList.add('has-sidebar')
+    return () => document.documentElement.classList.remove('has-sidebar')
+  }, [])
+
+  // Klawisz Esc (komputer): cofa ostatni ekran ze stosu. Arkusze, menu i okna dialogowe (portale w <body>) oraz zgłoszenie
+  // obsługują Esc same, więc gdy któreś jest otwarte, tu nic nie robimy.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      if (document.querySelector('body > [role=dialog], body > div > [role=dialog], body > div > [role=alertdialog], [data-esc-handled]')) return
+      if (stack.length > 0) pop()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   const { markRead } = notes
   const onSeen = useCallback(() => void markRead(), [markRead])
 
@@ -341,6 +365,15 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
         )}
       </motion.div>
 
+      <DesktopNav
+        tab={tab}
+        covered={stack.length > 0}
+        onChange={changeTab}
+        onAdd={() => setSheet({ kind: 'add' })}
+        onActivity={openActivity}
+        onSettings={() => setSheet({ kind: 'menu' })}
+        unread={notes.unread}
+      />
       <TabBar tab={tab} onChange={changeTab} onAdd={() => setSheet({ kind: 'add' })} badges={{ profile: notes.unread }} rainbow={tab === 'profile' && !top} />
 
       <AnimatePresence>
@@ -554,7 +587,7 @@ function Shell({ me, onMeChange, onSignOut }: { me: Profile; onMeChange: (p: Pro
               onComposerFocusChange={(focused) => {
                 // Bez zwężania przy odjęciu fokusu (np. dotknięcie przycisku wysyłania) — panel wraca do
                 // rozmiaru „large” dopiero gdy się w ogóle zamknie (naturalny reset stanu sheetu)
-                if (focused) setSheet((s) => (s?.kind === 'comments' ? { ...s, expanded: true } : s))
+                if (focused && !desktop) setSheet((s) => (s?.kind === 'comments' ? { ...s, expanded: true } : s))
               }}
               onClose={() => setSheet(null)}
               onOpenAuthor={(username) => {

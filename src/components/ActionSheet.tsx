@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { spring } from '@/lib/ui'
@@ -17,8 +18,14 @@ interface Props {
 
 /** Lista działań wysuwana od dołu, w stylu iOS (UIAlertController.actionSheet) — ponad arkuszami i ekranami aplikacji */
 export function ActionSheet({ title, actions, onClose }: Props) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return createPortal(
-    <div className="fixed inset-0 z-[70]">
+    <div className="fixed inset-0 z-[70] lg:flex lg:items-center lg:justify-center">
       <motion.div
         className="absolute inset-0 bg-black/40"
         initial={{ opacity: 0 }}
@@ -31,7 +38,7 @@ export function ActionSheet({ title, actions, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label={title ?? 'Działania'}
-        className="absolute inset-x-0 bottom-0 px-2.5 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]"
+        className="absolute inset-x-0 bottom-0 mx-auto max-w-[480px] px-2.5 pb-[calc(env(safe-area-inset-bottom,0px)+10px)] lg:relative lg:inset-x-auto lg:bottom-auto lg:w-full lg:px-0 lg:pb-0"
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}

@@ -95,10 +95,10 @@ export function RecipeDetailScreen({ recipe, isOwner, onBack, onEdit, onDelete, 
     >
       <div className="absolute inset-y-0 left-0 z-40 w-5 touch-pan-y" onPointerDown={(e) => controls.start(e)} />
 
-      <div className="scroll-y h-full">
-        <Cover recipe={recipe} className="aspect-[4/3] max-h-80 w-full" />
+      <div className="scroll-y h-full lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:content-start lg:gap-x-12 lg:px-[max(40px,calc((100%-1120px)/2))] lg:pt-20">
+        <Cover recipe={recipe} className="aspect-[4/3] max-h-80 w-full lg:sticky lg:top-6 lg:max-h-none lg:self-start lg:rounded-[24px] lg:shadow-lg" />
 
-        <div className="relative -mt-6 rounded-t-[28px] bg-bg px-[max(20px,env(safe-area-inset-left))] pt-6 pb-[calc(env(safe-area-inset-bottom,0px)+40px)]">
+        <div className="relative -mt-6 rounded-t-[28px] bg-bg px-[max(20px,env(safe-area-inset-left))] pt-6 pb-[calc(env(safe-area-inset-bottom,0px)+40px)] lg:mt-0 lg:rounded-none lg:bg-transparent lg:px-0 lg:pt-0">
           <h1 className="text-[28px] leading-tight font-bold tracking-tight" data-selectable>
             {recipe.title}
           </h1>

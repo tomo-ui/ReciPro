@@ -6,6 +6,7 @@ import { FEATURES } from '@/lib/features'
 import { backend } from '@/lib/data'
 import { on } from '@/lib/events'
 import { openModeration } from '@/lib/moderationUi'
+import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { usePaged } from '@/hooks/usePaged'
 import { useRecipeStats } from '@/hooks/useRecipeStats'
 import { Avatar } from '@/components/Avatar'
@@ -55,6 +56,7 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
   const [profile, setProfile] = useState<ProfileSummary | null | undefined>(undefined) // undefined = ładowanie
   const [error, setError] = useState<string | null>(null)
   const [zoomed, setZoomed] = useState(false)
+  const avatarSize = useIsDesktop() ? 124 : 86 // na komputerze zdjęcie jest większe i stoi nad liczbami
   const [shared, setShared] = useState(false)
 
   function changeViewMode(next: ViewMode) {
@@ -171,15 +173,15 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
 
   return (
     <div>
-      <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pt-4 pb-5">
-        <div className="flex items-center gap-5">
+      <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pt-4 pb-5 lg:mx-auto lg:flex lg:max-w-[560px] lg:flex-col lg:items-center lg:pt-8 lg:pb-8 lg:text-center">
+        <div className="flex items-center gap-5 lg:w-full lg:flex-col lg:gap-5">
           <div className="relative shrink-0">
             {canZoom ? (
               <motion.button whileTap={{ scale: 0.96 }} onClick={() => setZoomed(true)} aria-label="Powiększ zdjęcie profilowe" className="block rounded-full">
-                <Avatar name={profile.username} src={profile.avatar_url} size={86} />
+                <Avatar name={profile.username} src={profile.avatar_url} size={avatarSize} />
               </motion.button>
             ) : (
-              <Avatar name={profile.username} src={profile.avatar_url} size={86} />
+              <Avatar name={profile.username} src={profile.avatar_url} size={avatarSize} />
             )}
             {profile.is_me && onAddRecipe && (
               <motion.button
@@ -192,9 +194,9 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
               </motion.button>
             )}
           </div>
-          <div className="min-w-0 flex-1">
-            {profile.full_name && <p className="mb-1.5 truncate text-[15px] leading-tight font-semibold">{profile.full_name}</p>}
-            <div className="grid grid-cols-3 gap-1">
+          <div className="min-w-0 flex-1 lg:w-full lg:flex-none">
+            {profile.full_name && <p className="mb-1.5 truncate text-[15px] leading-tight font-semibold lg:mb-4 lg:text-[20px]">{profile.full_name}</p>}
+            <div className="grid grid-cols-3 gap-1 lg:mx-auto lg:max-w-[400px] lg:gap-4">
               <Stat value={visible ? formatCount(profile.recipe_count) : '–'} label="przepisy" />
               <Stat value={formatCount(profile.followers_count)} label="obserwatorzy" onClick={visible && onOpenList ? () => onOpenList('followers') : undefined} />
               <Stat value={formatCount(profile.following_count)} label="obserwowani" onClick={visible && onOpenList ? () => onOpenList('following') : undefined} />
@@ -202,20 +204,20 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
           </div>
         </div>
 
-        {profile.bio && <p className="mt-3 text-[14px] leading-snug break-words whitespace-pre-line">{profile.bio}</p>}
+        {profile.bio && <p className="mt-3 text-[14px] leading-snug break-words whitespace-pre-line lg:mt-5 lg:max-w-[460px] lg:text-[15px]">{profile.bio}</p>}
         {profile.website && (
           <a
             href={profile.website}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-1.5 flex items-center gap-1 text-[14px] font-medium text-accent"
+            className="mt-1.5 flex items-center gap-1 text-[14px] font-medium text-accent lg:mt-3 lg:justify-center"
           >
             <LinkIcon width={13} height={13} className="shrink-0" />
             <span className="truncate">{profile.website.replace(/^https?:\/\//, '')}</span>
           </a>
         )}
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex gap-2 lg:mt-6 lg:w-full lg:max-w-[440px]">
           {profile.is_me ? (
             <>
               {onEdit && (
@@ -245,7 +247,7 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
         </div>
 
         {profile.is_me && !profile.is_public && (
-          <p className="mt-3 flex items-start gap-2 rounded-[12px] bg-surface px-3.5 py-2.5 text-[13px] text-label-2">
+          <p className="mt-3 flex items-start gap-2 rounded-[12px] bg-surface px-3.5 py-2.5 text-left text-[13px] text-label-2 lg:mt-5 lg:max-w-[440px]">
             <LockIcon width={15} height={15} className="mt-0.5 shrink-0" />
             Profil prywatny: Twoich przepisów nie zobaczą inni użytkownicy, nie pojawią się też w wyszukiwarce ani w ich feedzie.
           </p>
@@ -311,7 +313,7 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
           ) : (
             <div className="pt-3">
               {viewMode === 'grid' ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5 min-[1500px]:grid-cols-5">
                   {recipes.items.map((r) => (
                     <RecipeCard key={r.id} recipe={r} onOpen={() => onOpenRecipe(r)} />
                   ))}
@@ -335,18 +337,18 @@ export function ProfileView({ username, onOpenRecipe, onEdit, onAddRecipe, onOpe
 function Stat({ value, label, onClick }: { value: number | string; label: string; onClick?: () => void }) {
   const body = (
     <>
-      <motion.p key={String(value)} initial={{ opacity: 0.4, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-[17px] leading-tight font-bold tabular-nums">
+      <motion.p key={String(value)} initial={{ opacity: 0.4, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-[17px] leading-tight font-bold tabular-nums lg:text-[22px]">
         {value}
       </motion.p>
-      <p className="text-[12px] whitespace-nowrap">{label}</p>
+      <p className="text-[12px] whitespace-nowrap lg:text-[14px] lg:text-label-2">{label}</p>
     </>
   )
   return onClick ? (
-    <button onClick={onClick} className="rounded-lg py-0.5 text-left select-none active:bg-surface-2" aria-label={`${label}: ${value}`}>
+    <button onClick={onClick} className="rounded-lg py-0.5 text-left select-none active:bg-surface-2 lg:py-1.5 lg:text-center lg:hover:bg-surface" aria-label={`${label}: ${value}`}>
       {body}
     </button>
   ) : (
-    <div className="py-0.5">{body}</div>
+    <div className="py-0.5 lg:py-1.5 lg:text-center">{body}</div>
   )
 }
 

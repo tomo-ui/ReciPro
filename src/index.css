@@ -362,3 +362,92 @@
     ),
     var(--glass-rim);
 }
+
+/*
+ * Układ desktopowy (od 1024 px, jak `lg:` w Tailwindzie). Na telefonie `.app-frame` nie tworzy pudełka (display: contents),
+ * więc nic się nie zmienia. Na komputerze po zalogowaniu (html.has-sidebar) po lewej jest boczny pasek nawigacji
+ * (components/DesktopNav.tsx), a reszta to „karta” z zawartością; `transform` robi z niej blok zawierający dla elementów
+ * `fixed` (zakładki, ekrany wepchnięte na stos), więc istniejące ekrany „na cały ekran” wypełniają kartę bez przepisywania.
+ * Arkusze, menu i okna dialogowe są w portalach i zasłaniają całe okno przeglądarki.
+ */
+.app-frame {
+  display: contents;
+}
+@media (min-width: 1024px) {
+  :root {
+    --desk-bg: #e6e6ec;
+    --sidebar-w: 260px;
+    --frame-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 12px 40px rgba(0, 0, 0, 0.1);
+  }
+  html,
+  body,
+  #root {
+    background: var(--desk-bg);
+  }
+  .app-frame {
+    display: block;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    transform: translateZ(0);
+  }
+  html.has-sidebar .app-frame {
+    margin: 12px 12px 12px var(--sidebar-w);
+    width: calc(100% - var(--sidebar-w) - 12px);
+    height: calc(100% - 24px);
+    border-radius: 24px;
+    box-shadow: var(--frame-shadow);
+  }
+}
+@media (min-width: 1024px) and (prefers-color-scheme: dark) {
+  :root {
+    --desk-bg: #121214;
+    --frame-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Mysz i klawiatura: widoczny fokus, cienkie paski przewijania */
+@media (hover: hover) and (pointer: fine) {
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .scroll-y {
+    scrollbar-width: thin;
+    scrollbar-color: var(--label-3) transparent;
+  }
+  .scroll-y::-webkit-scrollbar {
+    display: block;
+    width: 8px;
+  }
+  .scroll-y::-webkit-scrollbar-thumb {
+    background: var(--label-3);
+    border-radius: 8px;
+  }
+}
+
+/* Mysz: elementy ze stanem „active” (dotyk) dostają ten sam efekt po najechaniu */
+@media (hover: hover) and (pointer: fine) {
+  [class*='active:bg-surface-2']:not(:disabled):hover {
+    background-color: var(--surface-2);
+  }
+  [class*='active:opacity-']:not(:disabled):hover {
+    opacity: 0.75;
+  }
+  .glass button:hover,
+  [class*='rounded-full']:is(button):not(:disabled):hover {
+    filter: brightness(1.06);
+  }
+}
+
+/* Poziome paski (tagi, top twórcy) przewija się kółkiem/gestem — bez widocznego paska przewijania */
+@media (hover: hover) and (pointer: fine) {
+  .scroll-y.overflow-x-auto {
+    scrollbar-width: none;
+  }
+  .scroll-y.overflow-x-auto::-webkit-scrollbar {
+    display: none;
+  }
+}

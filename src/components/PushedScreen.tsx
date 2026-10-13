@@ -52,7 +52,7 @@ export function PushedScreen({ title, titleBadge, titleStart, onBack, children }
       </div>
 
       <div className="scroll-y h-full">
-        <div className="pt-[calc(env(safe-area-inset-top,0px)+44px)] pb-[calc(env(safe-area-inset-bottom,0px)+32px)]">{children}</div>
+        <div className="pt-[calc(env(safe-area-inset-top,0px)+44px)] pb-[calc(env(safe-area-inset-bottom,0px)+32px)] lg:mx-auto lg:max-w-[880px] lg:px-4 lg:pt-[68px]">{children}</div>
       </div>
     </motion.div>
   )

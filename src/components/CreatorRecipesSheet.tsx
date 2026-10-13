@@ -49,7 +49,7 @@ export function CreatorRecipesSheet({ creator, onClose, onOpenRecipe, onOpenProf
           </span>
         </button>
         <h3 className="mb-2 text-[13px] font-semibold text-label-2">Najlepsze przepisy</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
           {recipes === null
             ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="aspect-[4/3] animate-pulse rounded-[20px] bg-surface-2" />)
             : recipes.length === 0

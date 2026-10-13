@@ -150,7 +150,7 @@ export const LargeTitleScreen = forwardRef<LargeTitleScreenHandle, Props>(functi
     <div className="relative h-full">
       <div ref={barRef} className="absolute inset-x-0 top-0 z-10 pt-safe-top">
         <motion.div className="glass absolute inset-0" style={{ opacity: barBgOpacity }} />
-        <div className="relative flex h-11 items-center justify-between pr-[max(16px,env(safe-area-inset-right))] pl-[max(16px,env(safe-area-inset-left))]">
+        <div className="relative flex h-11 items-center justify-between pr-[max(16px,env(safe-area-inset-right))] pl-[max(16px,env(safe-area-inset-left))] lg:mx-auto lg:h-14 lg:max-w-[1180px] lg:px-8">
           {(left || variant === 'large' || bare) && <div className="flex min-w-9 items-center">{left}</div>}
           {bare ? (
             <div className="flex min-w-0 flex-1 items-center justify-center">{center}</div>
@@ -179,7 +179,7 @@ export const LargeTitleScreen = forwardRef<LargeTitleScreenHandle, Props>(functi
         )}
         <div
           style={{ transform: pull ? `translateY(${pull}px)` : undefined, transition: dragging ? 'none' : 'transform 0.25s ease-out' }}
-          className="px-[max(16px,env(safe-area-inset-left))] pt-[calc(env(safe-area-inset-top,0px)+44px)]"
+          className="px-[max(16px,env(safe-area-inset-left))] pt-[calc(env(safe-area-inset-top,0px)+44px)] lg:mx-auto lg:max-w-[1180px] lg:px-8 lg:pt-[64px]"
         >
           <div style={{ paddingBottom: TAB_BAR_PADDING }}>
             {variant === 'large' && !noLargeTitle && <h1 ref={bigTitleRef} className="pt-1 pb-3 text-[34px] leading-tight font-bold tracking-tight">{title}</h1>}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { backend } from '@/lib/data'
 import { REPORT_REASONS, type ReportReason } from '@/types/moderation'
@@ -23,6 +23,13 @@ export function ReportSheet({ request, onClose, onBlock }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
 
+  // Esc zamyka okno zgłoszenia (data-esc-handled mówi Shellowi, żeby nie zamykał przy okazji arkusza pod spodem)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const canSend = !!reason && !busy && (reason !== 'other' || details.trim().length > 0)
 
   async function send() {
@@ -40,7 +47,7 @@ export function ReportSheet({ request, onClose, onBlock }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col" data-esc-handled>
       <header className="flex h-11 shrink-0 items-center justify-between px-4">
         {sent ? (
           <span className="w-16" />

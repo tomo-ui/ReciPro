@@ -1,5 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
+import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { spring } from '@/lib/ui'
 import { ConfirmDialog } from './ConfirmDialog'
 import { ClockIcon, HeartIcon, LockIcon, PencilIcon, ShieldIcon, SlidersIcon } from './Icons'
@@ -24,33 +26,37 @@ interface Props {
 /** Menu z burgera na profilu: aktywność i ustawienia konta (dolny arkusz, jak w Instagramie) */
 export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInterests, onMyActivity, onPrivacy, onChangePassword, onAdminPanel, onSignOut }: Props) {
   const [confirmSignOut, setConfirmSignOut] = useState(false)
-  return (
-    <>
-      <motion.div
-        className="fixed inset-0 z-40 bg-black/40"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.25 }}
-        onClick={onClose}
-      />
-      <motion.div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Ustawienia i aktywność"
-        className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-bg px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] shadow-2xl"
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={spring}
-        drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0.04, bottom: 0.7 }}
-        onDragEnd={(_, info) => {
-          if (info.offset.y > 80 || info.velocity.y > 500) onClose()
-        }}
-      >
-        <div className="mx-auto mb-3 h-[5px] w-9 rounded-full bg-label-3" />
+  const desktop = useIsDesktop()
+
+  // Esc zamyka menu (nie, gdy otwarte jest potwierdzenie wylogowania — to okno zamyka się samo)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !confirmSignOut && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [confirmSignOut, onClose])
+
+  const panel = (
+    <motion.div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ustawienia i aktywność"
+      className={
+        desktop
+          ? 'pointer-events-auto relative w-full max-w-[440px] rounded-[24px] bg-bg px-4 pt-5 pb-5 shadow-2xl'
+          : 'fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-bg px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] shadow-2xl'
+      }
+      initial={desktop ? { opacity: 0, scale: 0.96, y: 12 } : { y: '100%' }}
+      animate={desktop ? { opacity: 1, scale: 1, y: 0 } : { y: 0 }}
+      exit={desktop ? { opacity: 0, scale: 0.96, y: 12 } : { y: '100%' }}
+      transition={desktop ? { duration: 0.18, ease: 'easeOut' } : spring}
+      drag={desktop ? false : 'y'}
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={{ top: 0.04, bottom: 0.7 }}
+      onDragEnd={(_, info) => {
+        if (info.offset.y > 80 || info.velocity.y > 500) onClose()
+      }}
+    >
+      {!desktop && <div className="mx-auto mb-3 h-[5px] w-9 rounded-full bg-label-3" />}
         <h2 className="mb-3 text-center text-[17px] font-semibold">Ustawienia i aktywność</h2>
 
         <ul className="divide-y divide-separator overflow-hidden rounded-[14px] bg-surface">
@@ -68,11 +74,25 @@ export function SettingsMenu({ unread, onClose, onActivity, onEditProfile, onInt
             <Item label="Wyloguj się" danger onClick={() => setConfirmSignOut(true)} />
           </ul>
         )}
-      </motion.div>
+    </motion.div>
+  )
+
+  return createPortal(
+    <>
+      <motion.div
+        className="fixed inset-0 z-40 bg-black/45"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.25 }}
+        onClick={onClose}
+      />
+      {desktop ? <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6">{panel}</div> : panel}
       {confirmSignOut && onSignOut && (
         <ConfirmDialog title="Wylogować się?" confirmLabel="Wyloguj" destructive={false} onConfirm={onSignOut} onCancel={() => setConfirmSignOut(false)} />
       )}
-    </>
+    </>,
+    document.body,
   )
 }
 

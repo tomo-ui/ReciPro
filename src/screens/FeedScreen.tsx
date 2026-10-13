@@ -120,7 +120,7 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenC
           </motion.button>
         </motion.div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0 min-[1500px]:grid-cols-3">
           {feed.items.map((r) => (
             <FeedCard
               key={r.id}
@@ -144,7 +144,9 @@ export function FeedScreen({ onOpenRecipe, onOpenProfile, onOpenCreator, onOpenC
               }
             />
           ))}
-          <LoadMore loading={feed.loading} done={feed.done} error={feed.error} onLoadMore={feed.loadMore} onRetry={feed.retry} />
+          <div className="lg:col-span-full">
+            <LoadMore loading={feed.loading} done={feed.done} error={feed.error} onLoadMore={feed.loadMore} onRetry={feed.retry} />
+          </div>
         </div>
       )}
     </LargeTitleScreen>

@@ -197,10 +197,10 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="scroll-y fixed inset-0 bg-bg px-8 pt-safe-top pb-safe-bottom">
+    <div className="scroll-y fixed inset-0 bg-bg px-8 pt-safe-top pb-safe-bottom lg:bg-[var(--desk-bg)]">
       <div className="flex min-h-full flex-col items-center justify-center py-8">
       {/* Bez przesunięcia przy wejściu: ekran startowy mierzy położenie logo i wskakuje dokładnie tutaj */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-sm">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-sm lg:max-w-[440px] lg:rounded-[28px] lg:bg-bg lg:p-10 lg:shadow-[0_12px_40px_rgba(0,0,0,0.12)]">
         <div id={LOGO_TARGET_ID} className="mx-auto mb-6 h-20 w-20" style={{ visibility: landed ? 'visible' : 'hidden' }}>
           <button type="button" onClick={() => setWink((n) => n + 1)} tabIndex={-1} aria-hidden className="block rounded-[22.37%]">
             <AppLogo key={wink} size={80} play={wink > 0} />

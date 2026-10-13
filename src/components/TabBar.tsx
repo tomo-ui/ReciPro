@@ -189,7 +189,7 @@ export function TabBar({ tab, onChange, onAdd, badges = {}, rainbow = false }: P
   const metric = scrub?.metrics[scrub.index]
 
   return (
-    <nav aria-label="Nawigacja" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-9" style={{ paddingBottom: TAB_BAR_BOTTOM }}>
+    <nav aria-label="Nawigacja" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-9 lg:hidden" style={{ paddingBottom: TAB_BAR_BOTTOM }}>
       <div
         ref={barRef}
         onPointerDown={onPointerDown}
