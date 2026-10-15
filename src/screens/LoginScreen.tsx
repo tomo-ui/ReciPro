@@ -171,7 +171,7 @@ export function LoginScreen() {
       return
     }
 
-    // Logowanie nazwą użytkownika: tłumaczenie na e-mail i samo logowanie robi serwer
+    // Logowanie nazwą użytkownika albo e-mailem: rozpoznanie, tłumaczenie nazwy na e-mail i samo logowanie robi serwer
     // (api/login.ts, klucz service_role) — e-mail nigdy nie trafia do przeglądarki.
     let loginRes: Response
     try {
@@ -188,7 +188,7 @@ export function LoginScreen() {
     if (!loginRes.ok || !body?.access_token || !body.refresh_token) {
       setBusy(false)
       setUnconfirmed(body?.code === 'email_not_confirmed')
-      return setError(body?.code === 'email_not_confirmed' ? friendlyError(body.error ?? '') : (body?.error ?? 'Nieprawidłowa nazwa użytkownika lub hasło.'))
+      return setError(body?.code === 'email_not_confirmed' ? friendlyError(body.error ?? '') : (body?.error ?? 'Nieprawidłowy login lub hasło.'))
     }
 
     const { error } = await supabase.auth.setSession({ access_token: body.access_token, refresh_token: body.refresh_token })
@@ -215,18 +215,18 @@ export function LoginScreen() {
           <div>
             {forgotSent ? (
               <p className="text-center text-[14px] text-label-2">
-                Jeśli konto o tej nazwie istnieje, wysłaliśmy link na powiązany adres e-mail. Otwórz go, ustaw nowe hasło, a potem wróć tu i zaloguj się.
+                Jeśli takie konto istnieje, wysłaliśmy link na powiązany adres e-mail. Otwórz go, ustaw nowe hasło, a potem wróć tu i zaloguj się.
               </p>
             ) : (
               <form onSubmit={submitForgot}>
                 <p className="mb-3 text-center text-[13px] text-label-2">
-                  Podaj nazwę użytkownika — jeśli konto istnieje, wyślemy link do ustawienia nowego hasła.
+                  Podaj nazwę użytkownika albo adres e-mail — jeśli konto istnieje, wyślemy link do ustawienia nowego hasła.
                 </p>
                 <div className="overflow-hidden rounded-[14px] bg-surface">
                   <input
                     value={forgotUsername}
                     onChange={(e) => setForgotUsername(e.target.value)}
-                    placeholder="nazwa użytkownika"
+                    placeholder="nazwa użytkownika lub e-mail"
                     autoCapitalize="none"
                     autoCorrect="off"
                     autoComplete="username"
@@ -332,7 +332,7 @@ export function LoginScreen() {
                 autoComplete="username"
                 autoCapitalize="none"
                 autoCorrect="off"
-                placeholder="nazwa użytkownika"
+                placeholder="nazwa użytkownika lub e-mail"
                 value={loginUsername}
                 onChange={(e) => setLoginUsername(e.target.value)}
                 className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-label-3"

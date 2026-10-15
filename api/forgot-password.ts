@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { allow, clientIp, hashId, LIMITS } from './_lib/rateLimit.js'
-import { emailForUsername, isForeignOrigin, makeServerClients } from './_lib/supabaseServer.js'
+import { emailForUsername, isForeignOrigin, looksLikeEmail, makeServerClients, normalizeEmail } from './_lib/supabaseServer.js'
 
 /**
  * POST /api/forgot-password  { username }  →  { ok: true } (zawsze, niezależnie od wyniku)
- * Tłumaczy nazwę użytkownika na e-mail po stronie serwera i wysyła link resetu hasła —
+ * `username` to nazwa użytkownika albo adres e-mail. Nazwę tłumaczy na e-mail po stronie serwera i wysyła link resetu hasła —
  * e-mail nigdy nie trafia do przeglądarki. Odpowiedź jest zawsze taka sama, żeby nie zdradzać,
  * czy dana nazwa użytkownika w ogóle istnieje.
  */
@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Serwer nie jest poprawnie skonfigurowany.', code: 'misconfigured' })
   }
 
-  const username = typeof req.body?.username === 'string' ? req.body.username.trim().slice(0, 60) : ''
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim().slice(0, 254) : ''
   if (!username) return res.status(200).json({ ok: true })
 
   try {
@@ -37,7 +37,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (await allow(admin, `reset-user:${hashId(username)}`, LIMITS.resetUser))
     if (!withinLimits) return res.status(200).json({ ok: true })
 
-    const email = await emailForUsername(admin, username)
+    // Dla adresu e-mail Supabase sam nic nie wyśle, jeśli konta nie ma — odpowiedź i tak jest zawsze taka sama
+    const email = looksLikeEmail(username) ? normalizeEmail(username) : await emailForUsername(admin, username)
     if (email) {
       const redirectTo = req.headers.origin ?? `https://${req.headers.host}`
       await anon.auth.resetPasswordForEmail(email, { redirectTo })

@@ -347,3 +347,30 @@ describe('limity logowania i resetu hasła', () => {
     expect(fakeAnon.auth.resetPasswordForEmail).not.toHaveBeenCalled()
   })
 })
+
+describe('logowanie e-mailem (api/login, api/forgot-password)', () => {
+  it('login: adres e-mail jest używany wprost (bez szukania nazwy), limit liczy się na ten adres', async () => {
+    current = fakeAdmin({})
+    const ok = await call(loginHandler, { headers: { host: 'recipro.app' }, body: { username: ' Anna@Example.com ', password: 'dobre-haslo' } })
+    expect(ok.status).toBe(200)
+    expect(ok.body).toMatchObject({ access_token: 'AT' })
+    const keys = current.calls.filter((c) => c.what === 'rpc:consume_rate_limit').map((c) => String(c.args))
+    expect(keys[1]).toBe(`login-user:${hashId('Anna@Example.com')}`)
+  })
+
+  it('login: niepoprawny adres to ten sam ogólny błąd co złe hasło', async () => {
+    current = fakeAdmin({})
+    const bad = await call(loginHandler, { headers: { host: 'recipro.app' }, body: { username: 'anna@', password: 'dobre-haslo' } })
+    const wrong = await call(loginHandler, { headers: { host: 'recipro.app' }, body: { username: 'anna', password: 'zle' } })
+    expect(bad.status).toBe(401)
+    expect(bad.body).toEqual(wrong.body)
+  })
+
+  it('reset hasła: link idzie na podany adres e-mail, odpowiedź zawsze ta sama', async () => {
+    current = fakeAdmin({})
+    fakeAnon.auth.resetPasswordForEmail.mockClear()
+    const res = await call(forgotHandler, { headers: { host: 'recipro.app', origin: 'https://recipro.app' }, body: { username: 'Ktos@Example.com' } })
+    expect(res.body).toEqual({ ok: true })
+    expect(fakeAnon.auth.resetPasswordForEmail).toHaveBeenCalledWith('ktos@example.com', { redirectTo: 'https://recipro.app' })
+  })
+})

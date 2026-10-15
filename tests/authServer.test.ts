@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { emailForUsername, isForeignOrigin } from '../api/_lib/supabaseServer'
+import { emailForUsername, isForeignOrigin, looksLikeEmail, normalizeEmail } from '../api/_lib/supabaseServer'
 
 /** Atrapa klienta service_role: tylko to, czego używa emailForUsername (from().select().eq().maybeSingle() + auth.admin.getUserById) */
 function fakeAdmin(profileId: string | null, email: string | null): SupabaseClient {
@@ -58,5 +58,20 @@ describe('isForeignOrigin (ochrona endpointów /api/login, /api/forgot-password 
 
   it('nieprawidłowy Origin jest odrzucany', () => {
     expect(isForeignOrigin('nie-adres-url', 'recipro.app')).toBe(true)
+  })
+})
+
+describe('logowanie e-mailem (normalizeEmail, looksLikeEmail)', () => {
+  it('rozpoznaje e-mail po „@”, nazwa użytkownika nie może go zawierać', () => {
+    expect(looksLikeEmail('anna@example.com')).toBe(true)
+    expect(looksLikeEmail('anna_gotuje')).toBe(false)
+  })
+
+  it('normalizuje adres (spacje, wielkość liter), odrzuca niepoprawne', () => {
+    expect(normalizeEmail('  Anna@Example.COM ')).toBe('anna@example.com')
+    expect(normalizeEmail('anna@localhost')).toBeNull()
+    expect(normalizeEmail('anna @example.com')).toBeNull()
+    expect(normalizeEmail('@example.com')).toBeNull()
+    expect(normalizeEmail(`${'a'.repeat(250)}@x.pl`)).toBeNull()
   })
 })

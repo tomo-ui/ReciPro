@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { allow, clientIp, hashId, LIMITS } from './_lib/rateLimit.js'
-import { emailForUsername, isForeignOrigin, makeServerClients } from './_lib/supabaseServer.js'
+import { emailForUsername, isForeignOrigin, looksLikeEmail, makeServerClients, normalizeEmail } from './_lib/supabaseServer.js'
 
-const GENERIC_ERROR = 'Nieprawidłowa nazwa użytkownika lub hasło.'
+const GENERIC_ERROR = 'Nieprawidłowy login lub hasło.'
 
 /**
  * POST /api/login  { username, password }  →  { access_token, refresh_token }
- * Tłumaczy nazwę użytkownika na e-mail i loguje po stronie serwera (klucz service_role) —
- * e-mail NIGDY nie trafia do przeglądarki. Zastępuje dawne wywołanie RPC `email_for_username`
+ * `username` to nazwa użytkownika ALBO adres e-mail (rozpoznawany po „@”). Nazwę tłumaczymy na e-mail po stronie
+ * serwera (klucz service_role) i logujemy tutaj — e-mail powiązany z nazwą NIGDY nie trafia do przeglądarki. Zastępuje dawne wywołanie RPC `email_for_username`
  * z klienta, które wyciekało e-maile każdemu, kto znał czyjąś nazwę użytkownika.
  * Nieznana nazwa dostaje ten sam komunikat co złe hasło — bez ujawniania, czy konto istnieje.
  */
@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Serwer nie jest poprawnie skonfigurowany.', code: 'misconfigured' })
   }
 
-  const username = typeof req.body?.username === 'string' ? req.body.username.trim().slice(0, 60) : ''
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim().slice(0, 254) : ''
   const password = typeof req.body?.password === 'string' ? req.body.password : ''
   if (!username || !password) {
     return res.status(401).json({ error: GENERIC_ERROR, code: 'invalid_credentials' })
@@ -46,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(429).json({ error: 'Zbyt wiele prób logowania. Spróbuj ponownie za kilkanaście minut.', code: 'rate_limited' })
     }
 
-    const email = await emailForUsername(admin, username)
+    const email = looksLikeEmail(username) ? normalizeEmail(username) : await emailForUsername(admin, username)
     if (!email) {
       return res.status(401).json({ error: GENERIC_ERROR, code: 'invalid_credentials' })
     }

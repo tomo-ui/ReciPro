@@ -38,6 +38,17 @@ export async function emailForUsername(admin: SupabaseClient, username: string):
   return data.user.email
 }
 
+/**
+ * Login może być nazwą użytkownika albo adresem e-mail. Gdy jest w nim „@”, traktujemy go jako e-mail (po normalizacji);
+ * niepoprawny adres daje null — ten sam ogólny komunikat co złe hasło, bez zdradzania, czy konto istnieje.
+ */
+export function normalizeEmail(value: string): string | null {
+  const email = value.trim().toLowerCase()
+  return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null
+}
+
+export const looksLikeEmail = (value: string) => value.includes('@')
+
 /** Odrzuca żądania z obcych stron (jak w parse-recipe.ts) — to nie jest uwierzytelnianie, tylko higiena */
 export function isForeignOrigin(origin: string | undefined, host: string | undefined): boolean {
   if (!origin) return false
